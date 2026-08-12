@@ -7,14 +7,13 @@ DOMAIN: Final = "elkm1"
 MANUFACTURER: Final = "Elk Products"
 MODEL: Final = "M1 Control Panel"
 
-# Config flow keys
+# Remove the local redefinitions - use imported ones
 CONF_URL: Final = "url"
-CONF_USERNAME: Final = "username"
-CONF_PASSWORD: Final = "password"
 CONF_SERIAL_PORT: Final = "serial_port"
-CONF_CONNECTION_TYPE = "connection_type"
-CONF_VERIFY_DEVICE = "verify_device"
-CONF_PIN = "pin"  # ELK-M1 PIN for command authorization
+CONF_CONNECTION_TYPE: Final = "connection_type"
+CONF_PIN: Final = "pin"
+CONF_VERIFY_DEVICE: Final = "verify_device"
+# Note: Use CONF_USERNAME, CONF_PASSWORD from homeassistant.const
 
 # Connection types
 CONNECTION_SERIAL = "serial"
