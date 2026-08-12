@@ -107,47 +107,50 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator):
             return f"elk://{host}:{port}"
 
     async def async_connect(self) -> None:
-    """Establish connection to ELK-M1 panel."""
-    from .helpers.panel_settings import check_panel_version, verify_panel_configuration
+        """Establish connection to ELK-M1 panel."""
+        from .helpers.panel_settings import (
+            check_panel_version,
+            verify_panel_configuration,
+        )
 
-    try:
-        _LOGGER.info(f"Connecting to ELK-M1 at {self._obfuscated_url()}")
+        try:
+            _LOGGER.info(f"Connecting to ELK-M1 at {self._obfuscated_url()}")
 
-        if self._connection_type == CONNECTION_SERIAL:
-            self._elk = ElkM1Connection(
-                url=self._url,
-                timeout=5.0,
-                baudrate=ELKM1_BAUDRATE,
-            )
-        else:
-            username = self._config_data.get(CONF_USERNAME, "")
-            password = self._config_data.get(CONF_PASSWORD, "")
-            self._elk = ElkM1Connection(
-                url=self._url,
-                username=username,
-                password=password,
-                timeout=5.0,
-            )
+            if self._connection_type == CONNECTION_SERIAL:
+                self._elk = ElkM1Connection(
+                    url=self._url,
+                    timeout=5.0,
+                    baudrate=ELKM1_BAUDRATE,
+                )
+            else:
+                username = self._config_data.get(CONF_USERNAME, "")
+                password = self._config_data.get(CONF_PASSWORD, "")
+                self._elk = ElkM1Connection(
+                    url=self._url,
+                    username=username,
+                    password=password,
+                    timeout=5.0,
+                )
 
-        await self._elk.connect()
-        _LOGGER.info(f"Connected to ELK-M1 at {self._obfuscated_url()}")
+            await self._elk.connect()
+            _LOGGER.info(f"Connected to ELK-M1 at {self._obfuscated_url()}")
 
-        await check_panel_version(self._elk)
+            await check_panel_version(self._elk)
 
-        if self._connection_type == CONNECTION_SERIAL:
-            _LOGGER.info("Serial connection detected - checking panel settings...")
-            configured, details = await verify_panel_configuration(self._elk)
-            if not configured:
-                for setting_num, status in details["settings"].items():
-                    if status["enabled"] is False:
-                        _LOGGER.warning(
-                            f"  - Global Setting {setting_num} "
-                            f"({status['name']}) is disabled"
-                        )
+            if self._connection_type == CONNECTION_SERIAL:
+                _LOGGER.info("Serial connection detected - checking panel settings...")
+                configured, details = await verify_panel_configuration(self._elk)
+                if not configured:
+                    for setting_num, status in details["settings"].items():
+                        if status["enabled"] is False:
+                            _LOGGER.warning(
+                                f"  - Global Setting {setting_num} "
+                                f"({status['name']}) is disabled"
+                            )
 
-    except (OSError, TimeoutError, ValueError) as err:
-        _LOGGER.error(f"Failed to connect to ELK-M1: {err}")
-        raise UpdateFailed(f"Connection failed: {err}") from err
+        except (OSError, TimeoutError, ValueError) as err:
+            _LOGGER.error(f"Failed to connect to ELK-M1: {err}")
+            raise UpdateFailed(f"Connection failed: {err}") from err
 
     async def async_disconnect(self) -> None:
         """Disconnect from ELK-M1 panel."""
