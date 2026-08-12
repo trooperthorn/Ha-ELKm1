@@ -1,6 +1,7 @@
 """Constants for Elk-M1 integration."""
 from typing import Final
-from homeassistant.const import CONF_HOST, CONF_PORT, CONF_USERNAME, CONF_PASSWORD
+
+from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 
 DOMAIN: Final = "elkm1"
 MANUFACTURER: Final = "Elk Products"
