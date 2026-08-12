@@ -18,7 +18,7 @@ CONNECTION_NETWORK: Final = "network"
 DEFAULT_UPDATE_INTERVAL: Final = timedelta(seconds=60)
 
 # USB detection timeout
-...
+
 
 # Watchdog settings (detect silent connection loss)
 LIVENESS_CHECK_INTERVAL: Final = timedelta(seconds=30)
