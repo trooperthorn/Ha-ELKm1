@@ -50,7 +50,7 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator):
         
         self._config_data = config_entry_data
         self._elk: ElkM1Connection | None = None
-        self._connection_type = config_entry_data.get(CONF_CONNECTION_TYPE)
+        self._connection_type: str = config_entry_data[CONF_CONNECTION_TYPE]
         self._pin = config_entry_data.get(CONF_PIN, "")
         
         # Build connection URL based on connection type
