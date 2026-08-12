@@ -38,10 +38,9 @@ class ElkSerialQueue:
         self, encoder_name: str, **kwargs: Any
     ) -> Any:
         """Queue a command for sending."""
-        # Put item in queue and wait for result
         future: asyncio.Future[Any] = asyncio.Future()
         await self._queue.put((encoder_name, kwargs, future))
-        
+
         try:
             result = await asyncio.wait_for(future, timeout=5.0)
             return result
@@ -54,30 +53,23 @@ class ElkSerialQueue:
         while True:
             try:
                 encoder_name, kwargs, future = await self._queue.get()
-                
+
                 try:
-                    # Send command via elkm1_lib
-                    # Get the encoder function
-                    encoder = getattr(
-                        self._elk,
-                        encoder_name,
-                        None,
-                    )
-                    
+                    encoder = getattr(self._elk, encoder_name, None)
+
                     if not encoder:
                         raise AttributeError(f"Unknown encoder: {encoder_name}")
-                    
+
                     result = await encoder(**kwargs)
                     future.set_result(result)
-                    
-                except Exception as err:
+                except (OSError, TimeoutError, ValueError, AttributeError) as err:
                     future.set_exception(err)
-                
+
                 # Rate limit: wait before processing next command
                 await asyncio.sleep(self._interval)
-                
+
             except asyncio.CancelledError:
                 break
-            except Exception as err:
+            except (OSError, TimeoutError, ValueError) as err:
                 _LOGGER.error(f"Queue worker error: {err}")
                 await asyncio.sleep(1)
