@@ -10,7 +10,6 @@ Since Alarmo auto-discovers binary_sensor entities, the workflow is:
 from __future__ import annotations
 
 import logging
-from typing import Any
 
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.helpers import entity_registry as er
