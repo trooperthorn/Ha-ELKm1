@@ -18,46 +18,29 @@ KNOWN_ADAPTERS = {
 
 
 async def discover_elk_ports() -> dict[str, str]:
-    """
-    Discover available ELK-M1 compatible serial ports.
-    
-    Returns:
-        Dictionary of {port_path: friendly_name}
-        
-    Example:
-        {
-            "/dev/serial/by-id/usb-FTDI_FT232R_USB_UART_A10LKDHO-if00-port0": "FTDI FT232R (ttyUSB0)",
-            "/dev/ttyUSB1": "Unknown Device (ttyUSB1)",
-        }
-    """
-    ports = {}
-    
-    # Run port detection in thread pool (serial.tools.list_ports blocks)
+    """Discover available ELK-M1 compatible serial ports."""
     loop = asyncio.get_event_loop()
-    
+
     def _list_ports():
         available_ports = {}
         for port_info in list_ports.comports():
-            # Prefer persistent by-id paths (Linux)
             if port_info.name.startswith("/dev/serial/by-id/"):
                 port_path = port_info.name
             else:
                 port_path = port_info.device
-            
-            # Get friendly name
+
             friendly = _get_friendly_name(port_info)
             available_ports[port_path] = friendly
-            
-            _LOGGER.debug(f"Found port: {port_path} → {friendly}")
-        
+            _LOGGER.debug(f"Found port: {port_path} -> {friendly}")
+
         return available_ports
 
     try:
         ports = await loop.run_in_executor(None, _list_ports)
-except OSError as e:
+    except OSError as e:
         _LOGGER.error(f"Error discovering ports: {e}")
         return {}
-    
+
     return ports
 
 
