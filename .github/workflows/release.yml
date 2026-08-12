@@ -1,20 +1,50 @@
-name: Release
+name: Auto-Release
 
 on:
   push:
-    tags:
-      - "v*"
+    branches: [main]
 
 jobs:
   release:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    
     steps:
       - uses: actions/checkout@v3
-      - uses: actions/setup-python@v4
-      - run: pip install -r requirements-dev.txt
-      - run: ruff check custom_components/elkm1 && black --check && mypy
-      - run: mkdir -p build/elkm1 && cp -r custom_components/elkm1 build/
-      - run: cd build && zip -r ../elkm1.zip elkm1/
-      - uses: softprops/action-gh-release@v1
+      
+      - name: Generate version from date
+        id: version
+        run: |
+          VERSION=$(date +%Y.%m.%d)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+      
+      - name: Update manifest.json
+        run: |
+          python3 << 'EOF'
+          import json
+          with open('custom_components/elkm1/manifest.json', 'r') as f:
+              manifest = json.load(f)
+          manifest['version'] = "${{ steps.version.outputs.version }}"
+          with open('custom_components/elkm1/manifest.json', 'w') as f:
+              json.dump(manifest, f, indent=2)
+          EOF
+      
+      - name: Commit updated manifest
+        run: |
+          git config user.email "action@github.com"
+          git config user.name "GitHub Action"
+          git add custom_components/elkm1/manifest.json
+          git commit -m "Auto-update version" || true
+          git push || true
+      
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
         with:
-          files: elkm1.zip
+          tag_name: v${{ steps.version.outputs.version }}
+          name: Elk-M1 v${{ steps.version.outputs.version }}
+          body: |
+            Automatic release from latest commit
+            Commit: ${{ github.sha }}
+          draft: false
+          prerelease: false
