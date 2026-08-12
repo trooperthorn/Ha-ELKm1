@@ -10,9 +10,9 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from ..helpers.troublestatus import get_trouble_status_string
 from ..data import ElkRuntimeData
 from ..entity import ElkEntity
+from ..helpers.troublestatus import get_trouble_status_string
 
 _LOGGER: logging.Logger = logging.getLogger(__name__)
 
