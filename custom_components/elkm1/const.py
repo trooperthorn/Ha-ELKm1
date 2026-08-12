@@ -13,6 +13,7 @@ CONF_PASSWORD: Final = "password"
 CONF_SERIAL_PORT: Final = "serial_port"
 CONF_CONNECTION_TYPE = "connection_type"
 CONF_VERIFY_DEVICE = "verify_device"
+CONF_PIN = "pin"  # ELK-M1 PIN for command authorization
 
 # Connection types
 CONNECTION_SERIAL = "serial"
