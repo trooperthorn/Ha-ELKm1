@@ -22,7 +22,7 @@ from .helpers.usb_discovery import discover_elk_ports, probe_serial_port
 _LOGGER = logging.getLogger(__name__)
 
 
-class ElkM1ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
+class ElkM1ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: ignore[call-arg]
     """Handle a config flow for Elk-M1 Control."""
 
     VERSION = 1
