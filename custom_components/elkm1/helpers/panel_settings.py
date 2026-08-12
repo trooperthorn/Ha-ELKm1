@@ -1,5 +1,6 @@
 """Panel settings configuration and verification."""
 import logging
+from typing import Any
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -176,7 +177,8 @@ async def enable_required_settings(elk_connection) -> dict[int, bool]:
     return results
 
 
-async def verify_panel_configuration(elk_connection) -> tuple[bool, dict]:
+# Optional, but good practice: update the return hint to match the dictionary type
+async def verify_panel_configuration(elk_connection) -> tuple[bool, dict[str, Any]]:
     """
     Verify panel is properly configured for Home Assistant.
     
@@ -188,7 +190,8 @@ async def verify_panel_configuration(elk_connection) -> tuple[bool, dict]:
     """
     _LOGGER.info("Verifying ELK-M1 panel configuration...")
     
-    details = {}
+    # FIX: explicitly tell mypy this dictionary can hold anything
+    details: dict[str, Any] = {}
     
     # Check version
     version = await check_panel_version(elk_connection)
