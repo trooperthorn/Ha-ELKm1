@@ -1,0 +1,32 @@
+automation:
+  - id: "elkm1_alarmo_auto_setup"
+    alias: "ELK-M1: Auto-setup Alarmo on startup"
+    description: "Automatically discover ELK-M1 zones in Alarmo when HA starts"
+    
+    trigger:
+      platform: homeassistant
+      event: start
+    
+    condition:
+      # Wait for ELK-M1 to be available
+      - condition: state
+        entity_id: alarm_control_panel.elk_m1
+        state: unavailable
+        for:
+          seconds: 0
+        invert: true  # NOT unavailable
+    
+    action:
+      # Wait for everything to stabilize
+      - delay:
+          seconds: 15
+      
+      # Run auto-setup
+      - service: elkm1.alarmo_auto_setup
+        data: {}
+      
+      # Optional: Auto-load the Alarmo panel
+      - service: frontend.set_sidebar_order
+        data:
+          sidebar_order:
+            - alarmo
