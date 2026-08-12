@@ -1,7 +1,6 @@
 """Parse and handle system trouble status from ELK-M1."""
 
 import logging
-from typing import List
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -42,7 +41,7 @@ ZONE_TROUBLES = {
 }
 
 
-def parse_trouble_status(panel_object) -> List[str]:
+def parse_trouble_status(panel_object) -> list[str]:
     """
     Parse trouble status from panel object.
     
@@ -88,7 +87,7 @@ def parse_trouble_status(panel_object) -> List[str]:
         
         return troubles
         
-    except Exception as err:
+    except (AttributeError, KeyError, TypeError) as err:
         _LOGGER.error(f"Error parsing trouble status: {err}")
         return []
 
@@ -118,7 +117,7 @@ def has_troubles(panel_object) -> bool:
     return len(troubles) > 0
 
 
-def get_critical_troubles(panel_object) -> List[str]:
+def get_critical_troubles(panel_object) -> list[str]:
     """Get only critical trouble statuses."""
     critical = {"AC Fail", "Box Tamper", "Fire", "Security Alert"}
     
