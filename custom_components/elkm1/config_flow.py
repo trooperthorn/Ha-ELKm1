@@ -1,22 +1,21 @@
 """Config flow for Elk-M1 Control integration."""
 
 import logging
-from typing import Any, Dict, Optional
+from typing import Any
 
 import voluptuous as vol
 from homeassistant import config_entries
-from homeassistant.const import CONF_HOST, CONF_PORT, CONF_USERNAME, CONF_PASSWORD
-from homeassistant.core import HomeAssistant
+from homeassistant.const import CONF_PASSWORD, CONF_PORT, CONF_USERNAME
 from homeassistant.data_entry_flow import FlowResult
 
 from .const import (
-    DOMAIN,
-    CONF_SERIAL_PORT,
     CONF_CONNECTION_TYPE,
-    CONF_VERIFY_DEVICE,
     CONF_PIN,
-    CONNECTION_SERIAL,
+    CONF_SERIAL_PORT,
+    CONF_VERIFY_DEVICE,
     CONNECTION_NETWORK,
+    CONNECTION_SERIAL,
+    DOMAIN,
 )
 from .helpers.usb_discovery import discover_elk_ports, probe_serial_port
 
@@ -31,7 +30,7 @@ class ElkM1ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     _connection_type: str = None
 
     async def async_step_user(
-        self, user_input: Optional[Dict[str, Any]] = None
+        self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
         """Step 1: Ask user how to connect (Serial or Network)."""
         
@@ -61,7 +60,7 @@ class ElkM1ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         )
 
     async def async_step_serial(
-        self, user_input: Optional[Dict[str, Any]] = None
+        self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
         """Step 2a: Serial/USB configuration with PIN."""
         errors = {}
@@ -78,7 +77,7 @@ class ElkM1ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 try:
                     if not await probe_serial_port(port, timeout=5):
                         errors["base"] = "no_elk_device"
-                except Exception as e:
+                except (OSError, TimeoutError, ValueError) as e:
                     _LOGGER.error(f"Error probing port: {e}")
                     errors["base"] = "cannot_connect"
             
@@ -97,8 +96,8 @@ class ElkM1ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         try:
             ports = await discover_elk_ports()
             description_placeholders = {"discovered": str(len(ports))}
-        except Exception as e:
-            _LOGGER.error(f"Error discovering ports: {e}")
+        except (OSError, ValueError) as e:
+            _LOGGER.error(f"Error probing port: {e}")
             ports = {}
             description_placeholders = {"discovered": "0"}
 
@@ -122,7 +121,7 @@ class ElkM1ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         )
 
     async def async_step_network(
-        self, user_input: Optional[Dict[str, Any]] = None
+        self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
         """Step 2b: Network (Elk M1XEP) configuration with username/password."""
         errors = {}
@@ -145,8 +144,8 @@ class ElkM1ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     timeout=5
                 ):
                     errors["base"] = "cannot_connect"
-            except Exception as e:
-                _LOGGER.error(f"Error testing network connection: {e}")
+            except (OSError, TimeoutError, ValueError) as e:
+                _LOGGER.error(f"Error probing port: {e}")
                 errors["base"] = "cannot_connect"
             
             if not errors:
@@ -181,7 +180,7 @@ class ElkM1ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         )
 
     async def async_step_reconfigure(
-        self, user_input: Optional[Dict[str, Any]] = None
+        self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
         """Handle reconfiguration."""
         config_entry = self.hass.config_entries.async_get_entry(
@@ -202,8 +201,8 @@ class ElkM1ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if connection_type == CONNECTION_SERIAL:
             try:
                 ports = await discover_elk_ports()
-            except Exception as e:
-                _LOGGER.error(f"Error discovering ports: {e}")
+            except (OSError, ValueError) as e:
+                _LOGGER.error(f"Error probing port: {e}")
                 ports = {}
 
             if not ports:
@@ -258,8 +257,9 @@ async def probe_network_device(
     timeout: float = 5.0,
 ) -> bool:
     """Test network connection to Elk M1XEP."""
-    from elkm1_lib.connection import ElkM1Connection
     import asyncio
+    
+    from elkm1_lib.connection import ElkM1Connection
     
     try:
         url = f"elk://{host}:{port}"
@@ -284,6 +284,6 @@ async def probe_network_device(
     except asyncio.TimeoutError:
         _LOGGER.debug(f"Network device {host}: Connection timeout")
         return False
-    except Exception as e:
+    except (OSError, TimeoutError, ValueError) as e:
         _LOGGER.debug(f"Network device {host}: Error - {e}")
         return False
