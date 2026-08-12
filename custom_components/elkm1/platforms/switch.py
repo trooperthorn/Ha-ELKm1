@@ -4,19 +4,16 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from homeassistant.components.switch import SwitchEntity, SwitchDeviceClass
+from homeassistant.components.switch import SwitchDeviceClass, SwitchEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DOMAIN
 from .coordinator import ElkDataUpdateCoordinator
 from .data import ElkRuntimeData
 from .entity import ElkEntity
 
 _LOGGER: logging.Logger = logging.getLogger(__name__)
-
 
 async def async_setup_entry(
     hass: HomeAssistant,
@@ -87,7 +84,7 @@ class ElkOutputSwitch(ElkEntity, SwitchEntity):
                 output=self._output_index,
             )
             await self.coordinator.async_request_refresh()
-        except Exception as err:
+        except (OSError, TimeoutError, ValueError, AttributeError) as err:
             _LOGGER.error(f"Error turning on output {self._output_index}: {err}")
 
     async def async_turn_off(self, **kwargs: Any) -> None:
@@ -98,7 +95,7 @@ class ElkOutputSwitch(ElkEntity, SwitchEntity):
                 output=self._output_index,
             )
             await self.coordinator.async_request_refresh()
-        except (OSError, ValueError, AttributeError) as err:
+        except (OSError, TimeoutError, ValueError, AttributeError) as err:
             _LOGGER.error(f"Error turning on output {self._output_index}: {err}")
 
     @callback
