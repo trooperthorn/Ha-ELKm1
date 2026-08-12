@@ -13,19 +13,19 @@
         "description": "Found {discovered} serial ports. Select your Elk-M1 panel's port.",
         "data": {
           "serial_port": "Serial Port",
-          "username": "Username (optional)",
-          "password": "Password (optional)",
+          "pin": "PIN (for command authorization, e.g., 1234)",
           "verify_device": "Verify device is Elk-M1 (recommended)"
         }
       },
       "network": {
         "title": "Network Connection",
-        "description": "Connect to Elk-M1 via Elk M1XEP or network gateway",
+        "description": "Connect to Elk-M1 via Elk M1XEP gateway or network device",
         "data": {
           "host": "IP Address or Hostname",
           "port": "Port (default 2101)",
-          "username": "Username",
-          "password": "Password"
+          "username": "M1XEP Username",
+          "password": "M1XEP Password",
+          "pin": "PIN (optional override for commands)"
         }
       },
       "reconfigure": {
