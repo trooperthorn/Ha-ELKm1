@@ -1,0 +1,26 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect to Elk M1",
+        "description": "Found {discovered_count} serial ports. Select or enter the port where your ELK-M1 is connected.",
+        "data": {
+          "serial_port": "Serial Port",
+          "username": "Username (optional)",
+          "password": "Password (optional)"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Failed to connect to the Elk-M1 panel",
+      "invalid_auth": "Invalid credentials"
+    }
+  },
+  "entity": {
+    "alarm_control_panel": {
+      "alarm_panel": {
+        "name": "Alarm Panel"
+      }
+    }
+  }
+}
