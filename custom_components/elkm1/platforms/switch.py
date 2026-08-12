@@ -9,9 +9,9 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .coordinator import ElkDataUpdateCoordinator
-from .data import ElkRuntimeData
-from .entity import ElkEntity
+from ..coordinator import ElkDataUpdateCoordinator
+from ..data import ElkRuntimeData
+from ..entity import ElkEntity
 
 _LOGGER: logging.Logger = logging.getLogger(__name__)
 
