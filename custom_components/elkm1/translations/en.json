@@ -34,168 +34,305 @@
       }
     },
     "error": {
-      "cannot_connect": "Failed to connect to device",
-      "no_elk_device": "No Elk-M1 device detected on this port",
+      "cannot_connect": "Failed to connect to device. Check port, IP address, and credentials.",
+      "no_elk_device": "No Elk-M1 device detected on this port. Verify the serial connection.",
       "already_configured": "Elk-M1 integration is already configured",
-      "invalid_host": "Invalid IP address or hostname"
+      "invalid_host": "Invalid IP address or hostname",
+      "invalid_port": "Invalid port number",
+      "invalid_credentials": "Invalid M1XEP username or password",
+      "connection_timeout": "Connection timeout. Check if device is powered on.",
+      "device_offline": "Device is not responding. Check network/serial connection."
     },
     "abort": {
       "already_configured": "Elk-M1 integration is already configured",
       "reconfigure_failed": "Reconfiguration failed",
-      "reconfigure_successful": "Connection updated successfully"
+      "reconfigure_successful": "Connection updated successfully",
+      "user_action_required": "Please complete the configuration flow"
     }
   },
   "options": {
     "step": {
       "init": {
-        "title": "Elk M1 Options",
-        "description": "Configure polling intervals and advanced settings",
+        "title": "Elk-M1 Options",
+        "description": "Configure Elk-M1 integration options",
         "data": {
-          "poll_interval": "Status update interval (seconds)",
-          "command_delay": "Delay between serial commands (milliseconds)",
-          "entry_delay": "Entry delay countdown (seconds)",
-          "exit_delay": "Exit delay countdown (seconds)"
+          "poll_interval": "Poll Interval (seconds)",
+          "command_delay": "Command Delay (milliseconds)",
+          "scan_interval": "Scan Interval (seconds)"
         }
       }
     }
   },
   "entity": {
     "alarm_control_panel": {
-      "elk_m1": {
-        "name": "Alarm Panel"
+      "elkm1": {
+        "name": "Elk-M1",
+        "state_attributes": {
+          "armed": "Armed",
+          "armed_mode": "Armed Mode",
+          "entry_delay_active": "Entry Delay Active",
+          "exit_delay_active": "Exit Delay Active",
+          "last_user": "Last User",
+          "last_user_name": "Last User Name",
+          "zones_faulted": "Faulted Zones",
+          "zones_faulted_count": "Faulted Zone Count",
+          "faulted_zone_names": "Faulted Zone Names",
+          "outputs_active": "Active Outputs",
+          "outputs_active_count": "Active Output Count",
+          "panel_temperature": "Panel Temperature",
+          "battery_status": "Battery Status",
+          "trouble_status": "Trouble Status",
+          "fire_alarm": "Fire Alarm",
+          "panic_alarm": "Panic Alarm",
+          "bypassed_zones": "Bypassed Zones",
+          "connection_status": "Connection Status",
+          "system_trouble_status": "System Trouble Status"
+        }
       }
     },
     "binary_sensor": {
-      "zone": {
-        "name": "{name}"
-      },
-      "zone_battery": {
-        "name": "{name} Battery"
-      }
-    },
-    "switch": {
-      "output": {
-        "name": "{name}"
-      }
-    },
-    "sensor": {
-      "panel_temperature": {
-        "name": "Panel Temperature"
-      },
-      "panel_status": {
-        "name": "Panel Status"
-      },
-      "last_user": {
-        "name": "Last User"
-      },
-      "faulted_zones": {
-        "name": "Faulted Zones"
+      "elkm1_zone": {
+        "name": "Zone"
       }
     },
     "climate": {
-      "thermostat": {
+      "elkm1_thermostat": {
         "name": "Thermostat"
+      }
+    },
+    "light": {
+      "elkm1_light": {
+        "name": "Light"
+      }
+    },
+    "number": {
+      "elkm1_doors_open": {
+        "name": "Doors Open"
+      }
+    },
+    "scene": {
+      "elkm1_task": {
+        "name": "Task"
+      }
+    },
+    "sensor": {
+      "elkm1_panel": {
+        "name": "Elk-M1 Panel",
+        "state_attributes": {
+          "armed": "Armed",
+          "mode": "Mode",
+          "system_trouble_status": "System Trouble Status",
+          "temperature": "Temperature",
+          "battery": "Battery Voltage"
+        }
+      },
+      "elkm1_door_counter": {
+        "name": "Door Counter"
+      },
+      "elkm1_media": {
+        "name": "Media"
+      }
+    },
+    "switch": {
+      "elkm1_output": {
+        "name": "Output"
+      }
+    },
+    "time": {
+      "elkm1_schedule": {
+        "name": "Schedule"
       }
     }
   },
   "services": {
+    "disarm": {
+      "name": "Disarm",
+      "description": "Disarm the Elk-M1 panel"
+    },
+    "arm_stay": {
+      "name": "Arm Stay",
+      "description": "Arm the panel in stay mode"
+    },
+    "arm_away": {
+      "name": "Arm Away",
+      "description": "Arm the panel in away mode"
+    },
+    "arm_night": {
+      "name": "Arm Night",
+      "description": "Arm the panel in night mode"
+    },
     "bypass_zone": {
       "name": "Bypass Zone",
-      "description": "Bypass a zone from triggering the alarm",
+      "description": "Bypass a zone to prevent triggering the alarm",
       "fields": {
         "zone": {
-          "name": "Zone Number",
-          "description": "Zone number to bypass (1-208)"
+          "name": "Zone",
+          "description": "Zone number (1-208)"
         }
       }
     },
     "unbypass_zone": {
       "name": "Unbypass Zone",
-      "description": "Remove bypass from a zone",
+      "description": "Unbypass a zone",
       "fields": {
         "zone": {
-          "name": "Zone Number",
-          "description": "Zone number to unbypass (1-208)"
+          "name": "Zone",
+          "description": "Zone number (1-208)"
         }
       }
     },
     "panic_alarm": {
-      "name": "Trigger Panic Alarm",
-      "description": "Trigger a panic alarm on the panel",
-      "fields": {
-        "panic_type": {
-          "name": "Panic Type",
-          "description": "Type of panic: police, fire, or ambulance"
-        }
-      }
-    },
-    "arm_stay": {
-      "name": "Arm Stay",
-      "description": "Arm the panel in stay/home mode",
-      "fields": {
-        "user_code": {
-          "name": "User Code",
-          "description": "Optional user code for logging"
-        }
-      }
-    },
-    "arm_away": {
-      "name": "Arm Away",
-      "description": "Arm the panel in away mode",
-      "fields": {
-        "user_code": {
-          "name": "User Code",
-          "description": "Optional user code for logging"
-        }
-      }
-    },
-    "arm_night": {
-      "name": "Arm Night",
-      "description": "Arm the panel in night mode",
-      "fields": {
-        "user_code": {
-          "name": "User Code",
-          "description": "Optional user code for logging"
-        }
-      }
-    },
-    "disarm": {
-      "name": "Disarm",
-      "description": "Disarm the alarm panel",
-      "fields": {
-        "user_code": {
-          "name": "User Code",
-          "description": "User code required to disarm"
-        }
-      }
+      "name": "Panic Alarm",
+      "description": "Trigger a panic alarm on the panel"
     },
     "set_temperature": {
       "name": "Set Temperature",
-      "description": "Set the thermostat to a target temperature",
+      "description": "Set thermostat temperature",
       "fields": {
+        "thermostat_id": {
+          "name": "Thermostat ID",
+          "description": "Thermostat ID number"
+        },
         "temperature": {
           "name": "Temperature",
-          "description": "Target temperature in degrees"
+          "description": "Temperature in degrees"
+        }
+      }
+    },
+    "activate_task": {
+      "name": "Activate Task",
+      "description": "Activate an automation task",
+      "fields": {
+        "task_number": {
+          "name": "Task Number",
+          "description": "Task number (1-32)"
         }
       }
     },
     "alarmo_auto_setup": {
-      "name": "Auto-Setup Alarmo",
-      "description": "Automatically configure Alarmo with discovered ELK-M1 zones"
+      "name": "Auto Setup Alarmo",
+      "description": "Automatically create Alarmo entities from Elk-M1 zones"
     }
   },
   "issues": {
-    "connection_lost": {
-      "title": "Elk M1 Connection Lost",
-      "description": "The connection to the Elk M1 panel was lost. Check your serial connection and try reconfiguring the integration."
+    "settings_not_configured": {
+      "title": "ELK-M1 Global Settings Not Configured",
+      "description": "Global Settings 35-40 are not fully enabled on your ELK-M1 panel. This may affect feature functionality. Enable these settings in your panel's configuration menu:\n\n- Setting 35: Transmit Event Log (required for user tracking)\n- Setting 36: Transmit Zone Changes (required for zone updates)\n- Setting 37: Transmit Output Changes (required for output updates)\n- Setting 38: Transmit Automation Task Changes (required for task updates)\n- Setting 39: Transmit Light Changes (required for light updates)\n- Setting 40: Transmit Keypad Changes (required for alarm state tracking)\n\nSee the Elk-M1 manual for instructions on enabling these settings."
     },
-    "invalid_port": {
+    "version_not_supported": {
+      "title": "ELK-M1 Version Not Fully Supported",
+      "description": "Your ELK-M1 panel version {version} may have limited feature support. Recommended versions are:\n\n- Version 4.6.8\n- Version 5.2.0 or higher\n\nForce arm/away/stay are available in 5.3.0 or higher.\n\nCheck the ELK-M1 RS232 Protocol manual for version-specific feature support."
+    },
+    "connection_lost": {
+      "title": "ELK-M1 Connection Lost",
+      "description": "The connection to your ELK-M1 panel has been lost. Check:\n\n- Serial: USB cable is connected and device is powered on\n- Network: IP address is correct and device is online\n- Credentials: Username/password are correct"
+    },
+    "invalid_serial_port": {
       "title": "Invalid Serial Port",
-      "description": "The configured serial port '{port}' is no longer available. Please reconfigure the integration."
+      "description": "The configured serial port is no longer available. Reconfigure the integration with a valid port."
     },
     "zones_not_found": {
-      "title": "No Zones Detected",
-      "description": "No zones were found in the Elk M1 panel. Check panel configuration."
+      "title": "No Zones Found",
+      "description": "No zones were detected on your ELK-M1 panel. Configure zones in your panel settings."
     }
-  }
+  },
+  "exceptions": {
+    "cannot_connect": {
+      "message": "Cannot connect to ELK-M1: {error}"
+    },
+    "no_device": {
+      "message": "No ELK-M1 device found on {port}"
+    },
+    "timeout": {
+      "message": "Connection timeout: {error}"
+    }
+  },
+  "state_attributes": {
+    "alarm_control_panel": {
+      "armed_mode": {
+        "state": {
+          "disarmed": "Disarmed",
+          "armed_away": "Armed Away",
+          "armed_stay": "Armed Stay",
+          "armed_night": "Armed Night",
+          "armed_vacation": "Armed Vacation"
+        }
+      },
+      "connection_status": {
+        "state": {
+          "connected": "Connected",
+          "disconnected": "Disconnected",
+          "connecting": "Connecting",
+          "error": "Error"
+        }
+      }
+    },
+    "binary_sensor": {
+      "zone_type": {
+        "state": {
+          "contact": "Contact",
+          "motion": "Motion",
+          "smoke": "Smoke",
+          "co": "Carbon Monoxide",
+          "water": "Water",
+          "fire": "Fire",
+          "temperature": "Temperature",
+          "glass_break": "Glass Break",
+          "vibration": "Vibration",
+          "door": "Door",
+          "window": "Window",
+          "other": "Other"
+        }
+      }
+    }
+  },
+  "device_automation": {
+    "trigger_type": {
+      "zone_opened": "Zone opened",
+      "zone_closed": "Zone closed",
+      "panel_armed": "Panel armed",
+      "panel_disarmed": "Panel disarmed",
+      "panel_alarm": "Alarm triggered",
+      "output_activated": "Output activated",
+      "output_deactivated": "Output deactivated"
+    },
+    "action_type": {
+      "arm_stay": "Arm stay",
+      "arm_away": "Arm away",
+      "arm_night": "Arm night",
+      "disarm": "Disarm",
+      "bypass_zone": "Bypass zone",
+      "unbypass_zone": "Unbypass zone",
+      "activate_task": "Activate task"
+    }
+  },
+  "system_health": {
+    "trouble_status": {
+      "ac_fail": "AC Power Failure",
+      "box_tamper": "Enclosure Tamper",
+      "fail_to_communicate": "Failed to Communicate",
+      "eeprom_error": "EEPROM Memory Error",
+      "low_battery": "Low Battery (Control Panel)",
+      "transmitter_low_battery": "Low Battery (Transmitter)",
+      "over_current": "Over Current",
+      "telephone_fault": "Telephone Fault",
+      "output_2": "Output 2 Fault",
+      "missing_keypad": "Missing Keypad",
+      "zone_expander": "Zone Expander Fault",
+      "output_expander": "Output Expander Fault",
+      "elkrp_remote_access": "ELKRP Remote Access Fault",
+      "common_area_not_armed": "Common Area Not Armed",
+      "flash_memory_error": "Flash Memory Error",
+      "security_alert": "Security Alert",
+      "serial_port_expander": "Serial Port Expander Fault",
+      "lost_transmitter": "Lost Transmitter",
+      "ge_smoke_cleanme": "GE Smoke Clean Required",
+      "ethernet": "Ethernet Fault",
+      "display_message_keypad_1": "Display Message (Keypad Line 1)",
+      "display_message_keypad_2": "Display Message (Keypad Line 2)",
+      "fire": "Fire Alarm"
+    }
+  },
+  "title": "Elk-M1 Control",
+  "description": "Platinum-tier Home Assistant integration for Elk-M1 security panels. Supports both direct serial/USB connections and network connections via Elk M1XEP gateway."
 }
