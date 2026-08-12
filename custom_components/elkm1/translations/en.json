@@ -2,34 +2,47 @@
   "config": {
     "step": {
       "user": {
-        "title": "Connect to Elk M1",
-        "description": "Found {discovered_count} serial ports. Select or enter the port where your ELK-M1 is connected.",
+        "title": "Connect to Elk-M1",
+        "description": "How would you like to connect to your Elk-M1 panel?",
+        "data": {
+          "connection_type": "Connection Type"
+        }
+      },
+      "serial": {
+        "title": "Serial/USB Connection",
+        "description": "Found {discovered} serial ports. Select your Elk-M1 panel's port.",
         "data": {
           "serial_port": "Serial Port",
           "username": "Username (optional)",
-          "password": "Password (optional)"
+          "password": "Password (optional)",
+          "verify_device": "Verify device is Elk-M1 (recommended)"
         }
       },
-      "reconfigure": {
-        "title": "Reconfigure Elk M1 Connection",
-        "description": "Update your ELK-M1 connection settings",
+      "network": {
+        "title": "Network Connection",
+        "description": "Connect to Elk-M1 via Elk M1XEP or network gateway",
         "data": {
-          "serial_port": "Serial Port",
+          "host": "IP Address or Hostname",
+          "port": "Port (default 2101)",
           "username": "Username",
           "password": "Password"
         }
+      },
+      "reconfigure": {
+        "title": "Reconfigure Elk-M1 Connection",
+        "description": "Update connection settings"
       }
     },
     "error": {
-      "cannot_connect": "Failed to connect to Elk M1 panel. Check serial port and cable connection.",
-      "invalid_auth": "Invalid username or password",
-      "timeout": "Connection timeout. Panel did not respond within 10 seconds.",
-      "already_configured": "Elk M1 integration is already configured"
+      "cannot_connect": "Failed to connect to device",
+      "no_elk_device": "No Elk-M1 device detected on this port",
+      "already_configured": "Elk-M1 integration is already configured",
+      "invalid_host": "Invalid IP address or hostname"
     },
     "abort": {
-      "already_configured": "Elk M1 integration is already configured",
-      "cannot_connect": "Failed to connect to the Elk M1 panel",
-      "reconfigure_failed": "Reconfiguration failed"
+      "already_configured": "Elk-M1 integration is already configured",
+      "reconfigure_failed": "Reconfiguration failed",
+      "reconfigure_successful": "Connection updated successfully"
     }
   },
   "options": {
