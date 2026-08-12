@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+build/
+.pytest_cache/
+.coverage
+.mypy_cache/
+dist/
+*.egg-info/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Home Assistant
+secrets.yaml
+*.db
+*.db-journal
+
+# Temp
+*.tmp
+temp/
