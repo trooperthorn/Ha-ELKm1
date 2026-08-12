@@ -1,5 +1,6 @@
 """Constants for Elk-M1 integration."""
 from typing import Final
+from homeassistant.const import CONF_HOST, CONF_PORT, CONF_USERNAME, CONF_PASSWORD
 
 DOMAIN: Final = "elkm1"
 MANUFACTURER: Final = "Elk Products"
@@ -10,6 +11,13 @@ CONF_URL: Final = "url"
 CONF_USERNAME: Final = "username"
 CONF_PASSWORD: Final = "password"
 CONF_SERIAL_PORT: Final = "serial_port"
+CONF_CONNECTION_TYPE = "connection_type"
+CONF_VERIFY_DEVICE = "verify_device"
+
+# Connection types
+CONNECTION_SERIAL = "serial"
+CONNECTION_NETWORK = "network"
+
 
 # Polling interval (for status updates)
 DEFAULT_UPDATE_INTERVAL: Final = timedelta(seconds=60)
@@ -34,3 +42,7 @@ MAX_RECONNECT_ATTEMPTS: Final = 10
 # Watchdog settings (detect silent connection loss)
 LIVENESS_CHECK_INTERVAL: Final = timedelta(seconds=30)
 LIVENESS_TIMEOUT: Final = 60  # seconds without traffic = reconnect
+
+# Coordinator settings
+COORDINATOR_UPDATE_INTERVAL = 5  # seconds
+COORDINATOR_MAX_RETRIES = 10
