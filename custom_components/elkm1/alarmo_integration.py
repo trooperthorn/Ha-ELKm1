@@ -128,7 +128,7 @@ Zones are automatically detected by Alarmo. No manual configuration needed!
     _LOGGER.info("Alarmo auto-setup service registered")
 
 
-async def async_setup_alarmo_event_automation(hass: HomeAssistant) -> None:
+async def async_setup_alarmo_event_automation(hass: HomeAssistant) -> str:
     """Create an automation that runs on startup to setup Alarmo.
     
     This automation:
