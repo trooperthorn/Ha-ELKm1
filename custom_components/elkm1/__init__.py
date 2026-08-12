@@ -7,7 +7,8 @@ from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.helpers.update_coordinator import UpdateFailed
 
-from .const import DOMAIN
+# FIX: Removed PLATFORMS from this import line so it doesn't conflict
+from .const import CONF_SERIAL_PORT, DOMAIN
 from .coordinator import ElkDataUpdateCoordinator
 from .data import ElkRuntimeData
 
@@ -25,10 +26,10 @@ PLATFORMS: Final[list[Platform]] = [
     Platform.TIME,
 ]
 
-
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Elk-M1 Control from a config entry."""
-    _LOGGER.info(f"Setting up Elk-M1 at {entry.data.get('serial_port', entry.data.get('host'))}")
+    # It's good practice to use your constant here too if possible!
+    _LOGGER.info(f"Setting up Elk-M1 at {entry.data.get(CONF_SERIAL_PORT, entry.data.get('host'))}")
 
     coordinator = ElkDataUpdateCoordinator(
         hass=hass,
@@ -44,7 +45,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     # Store coordinator in hass.data
     hass.data.setdefault(DOMAIN, {})
-    hass.data[DOMAIN][entry.entry_id] = ElkRuntimeData(coordinator=coordinator)
+    
+    # FIX: Extract the serial port and pass it to ElkRuntimeData
+    # We use .get(..., "") or similar fallback if your dataclass strictly requires a string
+    serial_port_value = entry.data.get(CONF_SERIAL_PORT)
+    
+    hass.data[DOMAIN][entry.entry_id] = ElkRuntimeData(
+        coordinator=coordinator,
+        serial_port=serial_port_value
+    )
 
     # Set up all platforms
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
