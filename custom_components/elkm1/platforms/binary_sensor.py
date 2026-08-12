@@ -116,7 +116,7 @@ class ElkZoneBinarySensor(ElkEntity, BinarySensorEntity):
                     f"to {self._zone.status}"
                 )
         except (IndexError, AttributeError) as e:
-            _LOGGER.exception(f"Failed to update zone {self._zone_index}: {e}")
+            _LOGGER.exception(f"Failed to update zone {self._zone_index}")
 
         
         # Notify Home Assistant of state change
