@@ -1,18 +1,15 @@
 """Setup wizard to check and configure panel on first connection."""
-
 import logging
-from typing import Dict
+
 from .panel_settings import (
     check_panel_version,
     check_required_settings,
     enable_required_settings,
-    verify_panel_configuration,
 )
 
 _LOGGER = logging.getLogger(__name__)
 
-
-async def run_panel_setup_wizard(elk_connection, connection_type: str) -> Dict:
+async def run_panel_setup_wizard(elk_connection, connection_type: str) -> dict:
     """
     Run setup wizard to check and optionally configure panel.
     
