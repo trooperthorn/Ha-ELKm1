@@ -1,7 +1,7 @@
 {
   "domain": "elkm1",
   "name": "Elk-M1 Control",
-  "version": "v2026.08.12.4",
+  "version": "2026.08.12",
   "codeowners": [
     "@trooperthorn"
   ],
