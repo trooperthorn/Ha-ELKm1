@@ -53,7 +53,7 @@ async def check_panel_version(elk_connection) -> str | None:
             _LOGGER.warning("Could not determine panel version")
             return None
             
-    except Exception as err:
+    except (OSError, TimeoutError, ValueError, AttributeError) as err:
         _LOGGER.error(f"Error checking panel version: {err}")
         return None
 
@@ -75,7 +75,7 @@ async def read_global_setting(elk_connection, setting_number: int) -> int | None
         value = await elk_connection.get_setting(setting_number)
         return value
         
-    except Exception as err:
+    except (OSError, TimeoutError, ValueError, AttributeError) as err:
         _LOGGER.error(f"Error reading global setting {setting_number}: {err}")
         return None
 
@@ -100,12 +100,12 @@ async def write_global_setting(
         _LOGGER.info(f"Set global setting {setting_number} to {value}")
         return True
         
-    except Exception as err:
+    except (OSError, TimeoutError, ValueError, AttributeError) as err:
         _LOGGER.error(f"Error writing global setting {setting_number}: {err}")
         return False
 
 
-async def check_required_settings(elk_connection) -> Dict[int, Dict]:
+async def check_required_settings(elk_connection) -> dict[int, dict]:
     """
     Check all required global settings.
     
@@ -113,7 +113,7 @@ async def check_required_settings(elk_connection) -> Dict[int, Dict]:
         elk_connection: ElkM1Connection instance
         
     Returns:
-        Dictionary with setting status:
+        dictionary with setting status:
         {
             35: {"name": "Transmit Event Log", "enabled": True},
             36: {"name": "Transmit Zone Changes", "enabled": False},
@@ -138,7 +138,7 @@ async def check_required_settings(elk_connection) -> Dict[int, Dict]:
     return settings_status
 
 
-async def enable_required_settings(elk_connection) -> Dict[int, bool]:
+async def enable_required_settings(elk_connection) -> dict[int, bool]:
     """
     Enable all required global settings.
     
@@ -148,7 +148,7 @@ async def enable_required_settings(elk_connection) -> Dict[int, bool]:
         elk_connection: ElkM1Connection instance
         
     Returns:
-        Dictionary with results:
+        dictionary with results:
         {
             35: True,  # Successfully set
             36: False, # Failed to set
@@ -178,7 +178,7 @@ async def enable_required_settings(elk_connection) -> Dict[int, bool]:
     return results
 
 
-async def verify_panel_configuration(elk_connection) -> Tuple[bool, Dict]:
+async def verify_panel_configuration(elk_connection) -> tuple[bool, dict]:
     """
     Verify panel is properly configured for Home Assistant.
     
@@ -186,7 +186,7 @@ async def verify_panel_configuration(elk_connection) -> Tuple[bool, Dict]:
         elk_connection: ElkM1Connection instance
         
     Returns:
-        Tuple of (is_configured: bool, details: dict)
+        tuple of (is_configured: bool, details: dict)
     """
     _LOGGER.info("Verifying ELK-M1 panel configuration...")
     
