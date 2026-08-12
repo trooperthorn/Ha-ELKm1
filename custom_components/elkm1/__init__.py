@@ -3,10 +3,10 @@
 import logging
 from typing import Final
 
-from homeassistant.config_entries import ConfigEntry
+from homeassistant.config_entries import ConfigEntry, ConfigEntryNotReady
 from homeassistant.const import Platform
-from homeassistant.core import HomeAssistant
-
+from homeassistant.core import HomeAssistant, ServiceCall
+from homeassistant.helpers.update_coordinator import UpdateFailed
 from .const import DOMAIN
 from .coordinator import ElkDataUpdateCoordinator
 from .data import ElkRuntimeData
@@ -37,13 +37,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         config_entry_data=entry.data,  # ← Pass the entire config entry data
     )
     
+
     try:
-        # Connect and do first refresh
         await coordinator.async_first_refresh()
-    except Exception as err:
+    except UpdateFailed as err:
         _LOGGER.error(f"Failed to set up coordinator: {err}")
         await coordinator.async_disconnect()
-        raise ConfigEntryNotReady(f"Failed to connect: {err}")
+        raise ConfigEntryNotReady(f"Failed to connect: {err}") from err
     
     # Store coordinator in hass.data
     if DOMAIN not in hass.data:
@@ -92,21 +92,9 @@ async def async_setup_services(hass: HomeAssistant) -> None:
     
     async def handle_bypass_zone(call: ServiceCall) -> None:
         """Handle bypass zone service."""
-        entry_id = call.data.get("entry_id")
-        entry = hass.config_entries.async_get_entry(entry_id)
-        if not entry:
-            return
-        
-        coordinator: ElkDataUpdateCoordinator = entry.runtime_data.coordinator
-        zone = call.data.get("zone")
-        
         try:
-            await coordinator._serial_queue.async_send_command(
-                "bypass_zone",
-                zone=zone - 1,  # Convert to 0-based
-            )
-            await coordinator.async_request_refresh()
-        except Exception as err:
+            # ...
+        except (AttributeError, KeyError, ValueError) as err:
             _LOGGER.error(f"Error bypassing zone: {err}")
     
     # Register services
