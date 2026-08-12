@@ -17,7 +17,7 @@ async def run_panel_setup_wizard(elk_connection: Elk, connection_type: str) -> d
     Run setup wizard to check and optionally configure panel.
     
     Args:
-        elk_connection: ElkM1Connection instance
+        elk_connection: Elk instance
         connection_type: "serial" or "network"
         
     Returns:
@@ -34,7 +34,7 @@ async def run_panel_setup_wizard(elk_connection: Elk, connection_type: str) -> d
     _LOGGER.info("Running ELK-M1 panel setup wizard...")
     
     # Check version
-    version = await check_panel_version(elk_connection: Elk)
+    version = await check_panel_version(elk_connection)
     results["version"] = version
     
     # Only check settings for serial connections
@@ -42,7 +42,7 @@ async def run_panel_setup_wizard(elk_connection: Elk, connection_type: str) -> d
         _LOGGER.info("Serial connection - checking global settings...")
         
         # Check current settings
-        settings = await check_required_settings(elk_connection: Elk)
+        enable_results = await enable_required_settings(elk_connection)
         results["settings_checked"] = True
         results["details"]["initial_settings"] = settings
         
@@ -56,7 +56,7 @@ async def run_panel_setup_wizard(elk_connection: Elk, connection_type: str) -> d
             results["details"]["enable_results"] = enable_results
             
             # Re-check settings
-            settings = await check_required_settings(elk_connection: Elk)
+            settings = await check_required_settings(elk_connection)
             results["details"]["final_settings"] = settings
     
     return results
