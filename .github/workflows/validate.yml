@@ -1,10 +1,6 @@
 name: Validate
 
-on:
-  push:
-    branches: [main, dev]
-  pull_request:
-    branches: [main, dev]
+on: [push, pull_request]
 
 jobs:
   validate:
@@ -12,8 +8,6 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - uses: actions/setup-python@v4
-        with:
-          python-version: "3.11"
       - run: pip install -r requirements-dev.txt
       - run: ruff check custom_components/elkm1
       - run: black --check custom_components/elkm1
