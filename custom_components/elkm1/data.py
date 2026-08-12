@@ -5,7 +5,6 @@ from dataclasses import dataclass
 from typing import TypedDict
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
 
 from .coordinator import ElkDataUpdateCoordinator
 
