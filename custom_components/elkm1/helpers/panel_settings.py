@@ -1,6 +1,7 @@
 """Panel settings configuration and verification."""
 import logging
 from typing import Any
+from elkm1_lib import Elk
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -15,7 +16,7 @@ REQUIRED_SETTINGS = {
 }
 
 
-async def check_panel_version(elk_connection) -> str | None:
+async def check_panel_version(elk_connection: Elk) -> str | None:
     """
     Check ELK-M1 panel version.
     
@@ -27,7 +28,7 @@ async def check_panel_version(elk_connection) -> str | None:
     """
     try:
         # Get version from panel
-        version = getattr(elk_connection, 'panel_version', None)
+        version = getattr(elk_connection: Elk, 'panel_version', None)
         
         if version:
             _LOGGER.info(f"ELK-M1 Panel Version: {version}")
@@ -57,7 +58,7 @@ async def check_panel_version(elk_connection) -> str | None:
         return None
 
 
-async def read_global_setting(elk_connection, setting_number: int) -> int | None:
+async def read_global_setting(elk_connection: Elk, setting_number: int) -> int | None:
     """
     Read a global setting from the panel.
     
@@ -104,7 +105,7 @@ async def write_global_setting(
         return False
 
 
-async def check_required_settings(elk_connection) -> dict[int, dict]:
+async def check_required_settings(elk_connection: Elk) -> dict[int, dict]:
     """
     Check all required global settings.
     
@@ -122,7 +123,7 @@ async def check_required_settings(elk_connection) -> dict[int, dict]:
     settings_status = {}
     
     for setting_num, setting_name in REQUIRED_SETTINGS.items():
-        value = await read_global_setting(elk_connection, setting_num)
+        value = await read_global_setting(elk_connection: Elk, setting_num)
         is_enabled = value == 1 if value is not None else None
         
         settings_status[setting_num] = {
@@ -137,7 +138,7 @@ async def check_required_settings(elk_connection) -> dict[int, dict]:
     return settings_status
 
 
-async def enable_required_settings(elk_connection) -> dict[int, bool]:
+async def enable_required_settings(elk_connection: Elk) -> dict[int, bool]:
     """
     Enable all required global settings.
     
@@ -160,7 +161,7 @@ async def enable_required_settings(elk_connection) -> dict[int, bool]:
     
     for setting_num, setting_name in REQUIRED_SETTINGS.items():
         # Check current value
-        current_value = await read_global_setting(elk_connection, setting_num)
+        current_value = await read_global_setting(elk_connection: Elk, setting_num)
         
         if current_value == 1:
             _LOGGER.info(f"Setting {setting_num} ({setting_name}) is already enabled")
@@ -168,7 +169,7 @@ async def enable_required_settings(elk_connection) -> dict[int, bool]:
         elif current_value == 0:
             # Try to enable it
             _LOGGER.info(f"Enabling setting {setting_num} ({setting_name})...")
-            success = await write_global_setting(elk_connection, setting_num, 1)
+            success = await write_global_setting(elk_connection: Elk, setting_num, 1)
             results[setting_num] = success
         else:
             _LOGGER.error(f"Could not read setting {setting_num}")
@@ -178,7 +179,7 @@ async def enable_required_settings(elk_connection) -> dict[int, bool]:
 
 
 # Optional, but good practice: update the return hint to match the dictionary type
-async def verify_panel_configuration(elk_connection) -> tuple[bool, dict[str, Any]]:
+async def verify_panel_configuration(elk_connection: Elk) -> tuple[bool, dict[str, Any]]:
     """
     Verify panel is properly configured for Home Assistant.
     
@@ -194,11 +195,11 @@ async def verify_panel_configuration(elk_connection) -> tuple[bool, dict[str, An
     details: dict[str, Any] = {}
     
     # Check version
-    version = await check_panel_version(elk_connection)
+    version = await check_panel_version(elk_connection: Elk)
     details["version"] = version
     
     # Check settings
-    settings_status = await check_required_settings(elk_connection)
+    settings_status = await check_required_settings(elk_connection: Elk)
     details["settings"] = settings_status
     
     # Determine if all required settings are enabled
