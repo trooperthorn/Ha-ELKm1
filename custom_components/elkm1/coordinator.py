@@ -107,44 +107,61 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator):
             return f"elk://{host}:{port}"
 
     async def async_connect(self) -> None:
-        """Establish connection to ELK-M1 panel.
-        
-        Creates the appropriate connection based on connection type
-        and authentication method.
-        
-        Raises:
-            UpdateFailed: If connection fails
-        """
+    """Add to coordinator.py after connection is established"""
+
+    async def async_connect(self) -> None:
+        """Establish connection to ELK-M1 panel."""
+        from .helpers.panel_settings import (
+            check_panel_version,
+            verify_panel_configuration,
+        )
+    
         try:
             _LOGGER.info(f"Connecting to ELK-M1 at {self._obfuscated_url()}")
-            
-            # Create connection with appropriate parameters
+        
+            # Create connection
             if self._connection_type == CONNECTION_SERIAL:
-                # Serial connection - no credentials needed
                 self._elk = ElkM1Connection(
                     url=self._url,
                     timeout=5.0,
                     baudrate=ELKM1_BAUDRATE,
                 )
-                _LOGGER.debug("Serial connection created")
-            
-            elif self._connection_type == CONNECTION_NETWORK:
-                # Network connection - requires credentials
+            else:
                 username = self._config_data.get(CONF_USERNAME, "")
                 password = self._config_data.get(CONF_PASSWORD, "")
-                
                 self._elk = ElkM1Connection(
                     url=self._url,
                     username=username,
                     password=password,
                     timeout=5.0,
                 )
-                _LOGGER.debug(f"Network connection created for {username}@{self._url}")
-            
-            # Connect to the panel
+        
+            # Connect
             await self._elk.connect()
             _LOGGER.info(f"Connected to ELK-M1 at {self._obfuscated_url()}")
             
+            # Check version
+            version = await check_panel_version(self._elk)
+        
+            # Only verify settings for serial connections
+            if self._connection_type == CONNECTION_SERIAL:
+                _LOGGER.info("Serial connection detected - checking panel settings...")
+                configured, details = await verify_panel_configuration(self._elk)
+            
+                if not configured:
+                    _LOGGER.warning(
+                        "Panel global settings not fully configured. "
+                        "Some features may not work properly. "
+                        "See documentation for required settings."
+                    )
+                    # Log details
+                    for setting_num, status in details["settings"].items():
+                        if status["enabled"] is False:
+                            _LOGGER.warning(
+                                f"  - Global Setting {setting_num} "
+                                f"({status['name']}) is disabled"
+                            )
+        
         except Exception as err:
             _LOGGER.error(f"Failed to connect to ELK-M1: {err}")
             raise UpdateFailed(f"Connection failed: {err}")
