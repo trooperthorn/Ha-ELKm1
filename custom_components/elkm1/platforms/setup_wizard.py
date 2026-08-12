@@ -1,6 +1,7 @@
 """Setup wizard to check and configure panel on first connection."""
 import logging
 from typing import Any
+from elkm1_lib import Elk
 
 from ..helpers.panel_settings import (
     check_panel_version,
@@ -11,7 +12,7 @@ from ..helpers.panel_settings import (
 _LOGGER = logging.getLogger(__name__)
 
 # Best practice: update the return hint so other functions know what to expect
-async def run_panel_setup_wizard(elk_connection, connection_type: str) -> dict[str, Any]:
+async def run_panel_setup_wizard(elk_connection: Elk, connection_type: str) -> dict[str, Any]:
     """
     Run setup wizard to check and optionally configure panel.
     
@@ -33,7 +34,7 @@ async def run_panel_setup_wizard(elk_connection, connection_type: str) -> dict[s
     _LOGGER.info("Running ELK-M1 panel setup wizard...")
     
     # Check version
-    version = await check_panel_version(elk_connection)
+    version = await check_panel_version(elk_connection: Elk)
     results["version"] = version
     
     # Only check settings for serial connections
@@ -41,7 +42,7 @@ async def run_panel_setup_wizard(elk_connection, connection_type: str) -> dict[s
         _LOGGER.info("Serial connection - checking global settings...")
         
         # Check current settings
-        settings = await check_required_settings(elk_connection)
+        settings = await check_required_settings(elk_connection: Elk)
         results["settings_checked"] = True
         results["details"]["initial_settings"] = settings
         
@@ -50,12 +51,12 @@ async def run_panel_setup_wizard(elk_connection, connection_type: str) -> dict[s
         
         if not all_enabled:
             _LOGGER.info("Some settings are disabled. Attempting to enable...")
-            enable_results = await enable_required_settings(elk_connection)
+            enable_results = await enable_required_settings(elk_connection: Elk)
             results["settings_enabled"] = all(enable_results.values())
             results["details"]["enable_results"] = enable_results
             
             # Re-check settings
-            settings = await check_required_settings(elk_connection)
+            settings = await check_required_settings(elk_connection: Elk)
             results["details"]["final_settings"] = settings
     
     return results
