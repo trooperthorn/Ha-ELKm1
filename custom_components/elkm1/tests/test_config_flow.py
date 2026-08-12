@@ -1,8 +1,6 @@
 """Test config flow."""
 import pytest
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-from homeassistant.data_entry_flow import FlowResult
 
 from custom_components.elkm1.const import DOMAIN
 
