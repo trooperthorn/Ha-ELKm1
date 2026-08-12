@@ -28,7 +28,7 @@ async def check_panel_version(elk_connection: Elk) -> str | None:
     """
     try:
         # Get version from panel
-        version = getattr(elk_connection: Elk, 'panel_version', None)
+        version = getattr(elk_connection, 'panel_version', None)
         
         if version:
             _LOGGER.info(f"ELK-M1 Panel Version: {version}")
@@ -80,9 +80,7 @@ async def read_global_setting(elk_connection: Elk, setting_number: int) -> int |
         return None
 
 
-async def write_global_setting(
-    elk_connection, setting_number: int, value: int
-) -> bool:
+async def write_global_setting(elk_connection: Elk, setting_number: int, value: int) -> bool:
     """
     Write a global setting to the panel.
     
@@ -123,7 +121,7 @@ async def check_required_settings(elk_connection: Elk) -> dict[int, dict]:
     settings_status = {}
     
     for setting_num, setting_name in REQUIRED_SETTINGS.items():
-        value = await read_global_setting(elk_connection: Elk, setting_num)
+        value = await read_global_setting(elk_connection, setting_num)
         is_enabled = value == 1 if value is not None else None
         
         settings_status[setting_num] = {
@@ -161,7 +159,7 @@ async def enable_required_settings(elk_connection: Elk) -> dict[int, bool]:
     
     for setting_num, setting_name in REQUIRED_SETTINGS.items():
         # Check current value
-        current_value = await read_global_setting(elk_connection: Elk, setting_num)
+        current_value = await read_global_setting(elk_connection, setting_num)
         
         if current_value == 1:
             _LOGGER.info(f"Setting {setting_num} ({setting_name}) is already enabled")
@@ -169,7 +167,7 @@ async def enable_required_settings(elk_connection: Elk) -> dict[int, bool]:
         elif current_value == 0:
             # Try to enable it
             _LOGGER.info(f"Enabling setting {setting_num} ({setting_name})...")
-            success = await write_global_setting(elk_connection: Elk, setting_num, 1)
+            success = await write_global_setting(elk_connection, setting_num, 1)
             results[setting_num] = success
         else:
             _LOGGER.error(f"Could not read setting {setting_num}")
@@ -195,11 +193,11 @@ async def verify_panel_configuration(elk_connection: Elk) -> tuple[bool, dict[st
     details: dict[str, Any] = {}
     
     # Check version
-    version = await check_panel_version(elk_connection: Elk)
+    version = await check_panel_version(elk_connection)
     details["version"] = version
     
     # Check settings
-    settings_status = await check_required_settings(elk_connection: Elk)
+    settings_status = await check_required_settings(elk_connection)
     details["settings"] = settings_status
     
     # Determine if all required settings are enabled
