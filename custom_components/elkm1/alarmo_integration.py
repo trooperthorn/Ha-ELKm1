@@ -47,15 +47,12 @@ async def async_setup_alarmo_auto_config(hass: HomeAssistant) -> None:
         # Find all ELK-M1 zone sensors
         elk_zones = []
         for entity_id, entity in entity_reg.entities.items():
-            if entity.domain == "binary_sensor" and DOMAIN in entity.platform:
-                # Extract zone info
-                if "zone" in entity_id and "battery" not in entity_id:
-                if (
-                    entity.domain == "binary_sensor"
-                    and DOMAIN in entity.platform
-                    and "zone" in entity_id
-                    and "battery" not in entity_id
-                ):
+            if (
+                entity.domain == "binary_sensor"
+                and DOMAIN in entity.platform
+                and "zone" in entity_id
+                and "battery" not in entity_id
+            ):
                     elk_zones.append({
                         "entity_id": entity_id,
                         "name": entity.original_name or entity.name,
