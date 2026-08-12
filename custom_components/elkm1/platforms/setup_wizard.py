@@ -1,7 +1,7 @@
 """Setup wizard to check and configure panel on first connection."""
 import logging
 
-from .panel_settings import (
+from ..helpers.panel_settings import (
     check_panel_version,
     check_required_settings,
     enable_required_settings,
