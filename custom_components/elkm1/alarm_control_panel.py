@@ -7,11 +7,13 @@ from typing import Any
 from homeassistant.components.alarm_control_panel import (
     AlarmControlPanelEntity,
     AlarmControlPanelEntityFeature,
+    CodeFormat,
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
     STATE_ARMED_AWAY,
     STATE_ARMED_HOME,
+    STATE_ARMED_NIGHT,
     STATE_DISARMED,
     STATE_ALARM_TRIGGERED,
 )
@@ -51,8 +53,11 @@ class ElkAlarmControlPanel(ElkEntity, AlarmControlPanelEntity):
     _attr_supported_features = (
         AlarmControlPanelEntityFeature.ARM_AWAY
         | AlarmControlPanelEntityFeature.ARM_HOME
-        | AlarmControlPanelEntityFeature.DISARM
+        | AlarmControlPanelEntityFeature.ARM_NIGHT
+        | AlarmControlPanelEntityFeature.TRIGGER
     )
+    _attr_code_format = CodeFormat.NUMBER
+    _attr_code_arm_required = False
 
     def __init__(
         self,
@@ -71,27 +76,201 @@ class ElkAlarmControlPanel(ElkEntity, AlarmControlPanelEntity):
         if not self.coordinator.data:
             return None
 
+        # Check if triggered/alarm active
+        if getattr(self.coordinator._elk.panel, "alarm_state", False):
+            return STATE_ALARM_TRIGGERED
+
         if self.coordinator.data["armed"]:
-            if self.coordinator.data["armed_mode"] == "stay":
+            armed_mode = self.coordinator.data.get("armed_mode", "").lower()
+            
+            if "stay" in armed_mode or "home" in armed_mode:
                 return STATE_ARMED_HOME
-            else:
+            elif "night" in armed_mode:
+                return STATE_ARMED_NIGHT
+            else:  # away or default
                 return STATE_ARMED_AWAY
+        
         return STATE_DISARMED
 
-    async def async_alarm_arm_away(self, code: str | None = None) -> None:
-        """Arm away."""
-        # Use serial queue for write
-        await self._coordinator._serial_queue.async_send_command(
-            "arm_stay",
-            user=0,
-        )
-        # Refresh state
-        await self.coordinator.async_request_refresh()
+    # ============================================================================
+    # PART 5: Enhanced alarm_control_panel with Attributes
+    # Add rich attributes to track alarm state details
+    # ============================================================================
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return extra state attributes with detailed panel information."""
+        if not self.coordinator.data or not self.coordinator._elk:
+            return {}
+
+        panel = self.coordinator._elk.panel
+        data = self.coordinator.data
+
+        # Build comprehensive attributes dict
+        attributes: dict[str, Any] = {
+            # Armed/Mode information
+            "armed": data.get("armed", False),
+            "armed_mode": data.get("armed_mode", "disarmed"),
+            "entry_delay_active": getattr(panel, "entry_delay_active", False),
+            "exit_delay_active": getattr(panel, "exit_delay_active", False),
+            "entry_delay_seconds": getattr(panel, "entry_delay", 0),
+            "exit_delay_seconds": getattr(panel, "exit_delay", 0),
+            
+            # User/Access information
+            "last_user": data.get("last_user"),
+            "last_user_name": data.get("last_user_name", "Unknown"),
+            "last_keypad": getattr(panel, "last_keypad", None),
+            
+            # Zone/Faulted information
+            "zones_faulted": data.get("zones_faulted", []),
+            "zones_faulted_count": len(data.get("zones_faulted", [])),
+            
+            # Get actual zone names for faulted zones
+            "faulted_zone_names": self._get_faulted_zone_names(),
+            
+            # Output/Relay information
+            "outputs_active": data.get("outputs_active", []),
+            "outputs_active_count": len(data.get("outputs_active", [])),
+            "active_output_names": self._get_active_output_names(),
+            
+            # System health/status
+            "trouble_status": getattr(panel, "trouble_status", False),
+            "ac_power": getattr(panel, "ac_power", True),
+            "battery_status": getattr(panel, "battery_status", "Good"),
+            "panel_temperature": getattr(panel, "temperature", None),
+            
+            # Connection information
+            "connection_status": "Connected" if self.coordinator.last_update_success else "Disconnected",
+            "last_update": self.coordinator.last_update_success,
+            
+            # Alarm state information
+            "alarm_triggered": getattr(panel, "alarm_state", False),
+            "fire_alarm": self._get_fire_alarm_status(),
+            "panic_alarm": getattr(panel, "panic_state", False),
+            
+            # Zone bypass information
+            "bypassed_zones": self._get_bypassed_zones(),
+            "bypassed_zones_count": len(self._get_bypassed_zones()),
+        }
+
+        return attributes
+
+    def _get_faulted_zone_names(self) -> list[str]:
+        """Get names of faulted zones."""
+        if not self.coordinator.data or not self.coordinator._elk:
+            return []
+
+        faulted_indices = self.coordinator.data.get("zones_faulted", [])
+        names = []
+        
+        for zone_index in faulted_indices:
+            zone = self.coordinator._elk.zones[zone_index]
+            if zone and zone.name:
+                names.append(f"Zone {zone_index + 1}: {zone.name}")
+        
+        return names
+
+    def _get_active_output_names(self) -> list[str]:
+        """Get names of active outputs."""
+        if not self.coordinator.data or not self.coordinator._elk:
+            return []
+
+        active_indices = self.coordinator.data.get("outputs_active", [])
+        names = []
+        
+        for output_index in active_indices:
+            output = self.coordinator._elk.outputs[output_index]
+            if output and output.name:
+                names.append(f"Output {output_index + 1}: {output.name}")
+        
+        return names
+
+    def _get_bypassed_zones(self) -> list[str]:
+        """Get list of bypassed zones."""
+        if not self.coordinator._elk:
+            return []
+
+        bypassed = []
+        for i, zone in enumerate(self.coordinator._elk.zones):
+            if zone and getattr(zone, "bypassed", False):
+                bypassed.append(f"Zone {i + 1}: {zone.name}")
+        
+        return bypassed
+
+    def _get_fire_alarm_status(self) -> bool:
+        """Get fire alarm status."""
+        if not self.coordinator._elk:
+            return False
+
+        # Check if any fire zones are faulted
+        for zone in self.coordinator._elk.zones:
+            if zone and zone.zone_type and "fire" in zone.zone_type.lower():
+                if zone.faulted or zone.open:
+                    return True
+        
+        return False
+
+    # ============================================================================
+    # End of Part 5 Attributes
+    # ============================================================================
 
     async def async_alarm_disarm(self, code: str | None = None) -> None:
         """Disarm."""
-        await self._coordinator._serial_queue.async_send_command(
-            "disarm",
-            user=0,
-        )
-        await self.coordinator.async_request_refresh()
+        try:
+            await self._coordinator._serial_queue.async_send_command(
+                "disarm",
+                user=0,
+            )
+            # Refresh state
+            await self.coordinator.async_request_refresh()
+            _LOGGER.info("Panel disarmed")
+        except Exception as err:
+            _LOGGER.error(f"Error disarming: {err}")
+
+    async def async_alarm_arm_home(self, code: str | None = None) -> None:
+        """Arm home (stay mode)."""
+        try:
+            await self._coordinator._serial_queue.async_send_command(
+                "arm_stay",
+                user=0,
+            )
+            await self.coordinator.async_request_refresh()
+            _LOGGER.info("Panel armed (stay/home mode)")
+        except Exception as err:
+            _LOGGER.error(f"Error arming home: {err}")
+
+    async def async_alarm_arm_away(self, code: str | None = None) -> None:
+        """Arm away."""
+        try:
+            await self._coordinator._serial_queue.async_send_command(
+                "arm_away",
+                user=0,
+            )
+            await self.coordinator.async_request_refresh()
+            _LOGGER.info("Panel armed (away mode)")
+        except Exception as err:
+            _LOGGER.error(f"Error arming away: {err}")
+
+    async def async_alarm_arm_night(self, code: str | None = None) -> None:
+        """Arm night."""
+        try:
+            await self._coordinator._serial_queue.async_send_command(
+                "arm_night",
+                user=0,
+            )
+            await self.coordinator.async_request_refresh()
+            _LOGGER.info("Panel armed (night mode)")
+        except Exception as err:
+            _LOGGER.error(f"Error arming night: {err}")
+
+    async def async_alarm_trigger(self, code: str | None = None) -> None:
+        """Trigger alarm (panic)."""
+        try:
+            await self._coordinator._serial_queue.async_send_command(
+                "panic_alarm",
+                panic_type="police",
+            )
+            await self.coordinator.async_request_refresh()
+            _LOGGER.warning("Panic alarm triggered")
+        except Exception as err:
+            _LOGGER.error(f"Error triggering panic: {err}")
