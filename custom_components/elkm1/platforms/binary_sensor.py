@@ -109,16 +109,15 @@ class ElkZoneBinarySensor(ElkEntity, BinarySensorEntity):
             if self.coordinator._elk and self.coordinator._elk.zones:
                 old_zone = self._zone
                 self._zone = self.coordinator._elk.zones[self._zone_index]
-                
+            
                 _LOGGER.debug(
                     f"Zone {self._zone_index}: Updated from coordinator. "
                     f"State changed from {old_zone.status if old_zone else 'N/A'} "
                     f"to {self._zone.status}"
                 )
-        except (IndexError, AttributeError) as e:
+        except (IndexError, AttributeError):
             _LOGGER.exception(f"Failed to update zone {self._zone_index}")
-
-        
+    
         # Notify Home Assistant of state change
         self.async_write_ha_state()
 
