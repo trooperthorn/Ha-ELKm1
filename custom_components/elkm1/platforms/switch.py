@@ -71,11 +71,7 @@ class ElkOutputSwitch(ElkEntity, SwitchEntity):
         self._attr_name = output.name
         
         # Determine device class based on output name
-        if "siren" in output.name.lower():
-            self._attr_device_class = SwitchDeviceClass.OUTLET
-        elif "strobe" in output.name.lower():
-            self._attr_device_class = SwitchDeviceClass.OUTLET
-        elif "light" in output.name.lower():
+        if any(keyword in output.name.lower() for keyword in ("siren", "strobe", "light")):
             self._attr_device_class = SwitchDeviceClass.OUTLET
 
     @property
@@ -102,8 +98,8 @@ class ElkOutputSwitch(ElkEntity, SwitchEntity):
                 output=self._output_index,
             )
             await self.coordinator.async_request_refresh()
-        except Exception as err:
-            _LOGGER.error(f"Error turning off output {self._output_index}: {err}")
+        except (OSError, ValueError, AttributeError) as err:
+            _LOGGER.error(f"Error turning on output {self._output_index}: {err}")
 
     @callback
     def _handle_coordinator_update(self) -> None:
