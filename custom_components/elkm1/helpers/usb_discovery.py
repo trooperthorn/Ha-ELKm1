@@ -1,115 +1,133 @@
-"""USB port discovery for Elk-M1 adapters."""
-from __future__ import annotations
+"""USB serial port discovery for ELK-M1 integration."""
 
 import asyncio
 import logging
-import re
-from typing import Final
+from typing import Dict
+from serial.tools import list_ports
 
-import serial.tools.list_ports
-from elkm1_lib import Elk
+_LOGGER = logging.getLogger(__name__)
 
-_LOGGER: logging.Logger = logging.getLogger(__name__)
-
-# Common USB IDs for RS232 adapters
-KNOWN_ADAPTERS: Final = {
-    "0403:6001": "FTDI",  # FTDI FT232
-    "0403:6010": "FTDI",  # FTDI FT2232
-    "067b:2303": "Prolific",  # PL2303
-    "10c4:ea60": "SiLabs",  # CP2102
+# Common USB serial adapter VID:PIDs
+KNOWN_ADAPTERS = {
+    "0403:6001": "FTDI FT232R",
+    "067b:2303": "Prolific PL2303",
+    "10c4:ea60": "Silicon Labs CP2102",
     "1a86:7523": "CH340",
+    "0403:6015": "FTDI FT232H",
 }
 
 
-async def discover_elk_ports() -> dict[str, str]:
+async def discover_elk_ports() -> Dict[str, str]:
     """
-    Discover USB-to-Serial ports that might be Elk-M1 devices.
+    Discover available ELK-M1 compatible serial ports.
     
-    Returns dict of {port_path: display_name}
+    Returns:
+        Dictionary of {port_path: friendly_name}
+        
+    Example:
+        {
+            "/dev/serial/by-id/usb-FTDI_FT232R_USB_UART_A10LKDHO-if00-port0": "FTDI FT232R (ttyUSB0)",
+            "/dev/ttyUSB1": "Unknown Device (ttyUSB1)",
+        }
     """
-    ports_found: dict[str, str] = {}
-
-    # List all serial ports
-    for port_info in serial.tools.list_ports.comports():
-        if not port_info.device:
-            continue
-
-        # Prefer /dev/serial/by-id paths (persistent)
-        port_path = port_info.device
-        if port_info.serial_number:
-            # Try to find persistent /dev/serial/by-id path
-            by_id_path = _get_by_id_path(port_info)
-            if by_id_path:
-                port_path = by_id_path
-
-        # Check if it looks like an RS232 adapter
-        if _is_likely_rs232_adapter(port_info):
-            display_name = f"{port_info.manufacturer} ({port_path})"
-            ports_found[port_path] = display_name
-
-    # Now probe each port for Elk M1 response
-    confirmed_ports: dict[str, str] = {}
-    for port_path, display_name in ports_found.items():
-        try:
-            await probe_serial_port(port_path, timeout=2)
-            confirmed_ports[port_path] = f"✓ {display_name}"
-            _LOGGER.debug(f"Elk M1 found at {port_path}")
-        except Exception as err:
-            _LOGGER.debug(f"No Elk M1 at {port_path}: {err}")
-
-    return confirmed_ports
-
-
-def _get_by_id_path(port_info) -> str | None:
-    """Find /dev/serial/by-id path for a port."""
-    import pathlib
-    import glob
-
-    if not port_info.serial_number:
-        return None
-
-    # Look for symlink in /dev/serial/by-id/
-    pattern = f"/dev/serial/by-id/*{port_info.serial_number}*"
-    matches = glob.glob(pattern)
+    ports = {}
     
-    if matches:
-        return matches[0]
+    # Run port detection in thread pool (serial.tools.list_ports blocks)
+    loop = asyncio.get_event_loop()
     
-    return None
-
-
-def _is_likely_rs232_adapter(port_info) -> bool:
-    """Heuristic: check if port is likely a USB-to-Serial adapter."""
-    # Check VID:PID against known adapters
-    if port_info.vid and port_info.pid:
-        usb_id = f"{port_info.vid:04x}:{port_info.pid:04x}"
-        if usb_id in KNOWN_ADAPTERS:
-            return True
-
-    # Check description for serial indicators
-    desc = (port_info.description or "").lower()
-    return "usb" in desc and "serial" in desc
-
-
-async def probe_serial_port(port_path: str, timeout: float = 5.0) -> bool:
-    """
-    Test if an Elk M1 is at this port.
-    Raises exception if not found or unreachable.
-    """
+    def _list_ports():
+        available_ports = {}
+        for port_info in list_ports.comports():
+            # Prefer persistent by-id paths (Linux)
+            if port_info.name.startswith("/dev/serial/by-id/"):
+                port_path = port_info.name
+            else:
+                port_path = port_info.device
+            
+            # Get friendly name
+            friendly = _get_friendly_name(port_info)
+            available_ports[port_path] = friendly
+            
+            _LOGGER.debug(f"Found port: {port_path} → {friendly}")
+        
+        return available_ports
+    
     try:
-        config = {"url": f"serial://{port_path}"}
-        elk = Elk(config)
+        ports = await loop.run_in_executor(None, _list_ports)
+    except Exception as e:
+        _LOGGER.error(f"Error discovering ports: {e}")
+        return {}
+    
+    return ports
+
+
+def _get_friendly_name(port_info) -> str:
+    """
+    Get friendly name for a serial port.
+    
+    Args:
+        port_info: pyserial PortInfo object
         
-        # Set a connection timeout
-        await asyncio.wait_for(elk.async_connect(), timeout=timeout)
+    Returns:
+        Friendly string like "FTDI FT232R (ttyUSB0)" or "Unknown Device (ttyUSB0)"
+    """
+    # Try to get product name
+    product = port_info.product or "Unknown Device"
+    
+    # Get device name (ttyUSB0, COM3, etc)
+    device_name = port_info.name.split("/")[-1] if port_info.name else "unknown"
+    
+    return f"{product} ({device_name})"
+
+
+async def probe_serial_port(port: str, timeout: float = 5.0) -> bool:
+    """
+    Test if a serial port has an ELK-M1 panel.
+    
+    Attempts to connect and send a ping command.
+    
+    Args:
+        port: Serial port path (e.g., "/dev/ttyUSB0")
+        timeout: Connection timeout in seconds
         
-        # Try a simple status query to verify
-        # elkm1_lib should have a method to query panel version/status
-        await asyncio.wait_for(elk.async_disconnect(), timeout=2)
+    Returns:
+        True if ELK-M1 detected, False otherwise
+    """
+    from elkm1_lib.connection import ElkM1Connection
+    
+    try:
+        # Create connection URL
+        if port.startswith("/"):
+            # Unix path
+            url = f"serial://{port}"
+        else:
+            # Windows COM port
+            url = f"serial://{port}"
         
-        return True
+        _LOGGER.debug(f"Probing port: {url}")
+        
+        # Create connection with timeout
+        connection = ElkM1Connection(
+            url=url,
+            timeout=timeout,
+        )
+        
+        # Try to connect
+        loop = asyncio.get_event_loop()
+        
+        async def _connect():
+            await asyncio.wait_for(connection.connect(), timeout=timeout)
+            # If we got here, connection successful
+            await connection.disconnect()
+            return True
+        
+        result = await _connect()
+        _LOGGER.info(f"Port {url}: ELK-M1 detected ✓")
+        return result
         
     except asyncio.TimeoutError:
-        raise ConnectionError(f"Timeout connecting to {port_path}") from None
-    except Exception as err:
-        raise ConnectionError(f"Failed to connect to {port_path}: {err}") from err
+        _LOGGER.debug(f"Port {port}: Connection timeout (no device?)")
+        return False
+    except Exception as e:
+        _LOGGER.debug(f"Port {port}: No ELK-M1 detected - {e}")
+        return False
