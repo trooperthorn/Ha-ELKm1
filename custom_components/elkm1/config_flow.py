@@ -27,7 +27,7 @@ class ElkM1ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: ignore
 
     VERSION = 1
     
-    _connection_type: str = None
+    _connection_type: str | None = None
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
