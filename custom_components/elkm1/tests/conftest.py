@@ -1,6 +1,7 @@
 """Pytest fixtures for Elk-M1 integration tests."""
+from unittest.mock import AsyncMock, MagicMock
+
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
 
 @pytest.fixture
 def mock_coordinator():
