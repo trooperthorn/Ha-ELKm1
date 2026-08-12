@@ -10,7 +10,6 @@ from homeassistant.components.alarm_control_panel import (
     CodeFormat,
 )
 from homeassistant.config_entries import ConfigEntry
-
 from homeassistant.const import (
     STATE_ALARM_TRIGGERED,
     STATE_ARMED_AWAY,
@@ -24,7 +23,6 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from .coordinator import ElkDataUpdateCoordinator
 from .data import ElkRuntimeData
 from .entity import ElkEntity
-from .const import DOMAIN
 
 _LOGGER: logging.Logger = logging.getLogger(__name__)
 
