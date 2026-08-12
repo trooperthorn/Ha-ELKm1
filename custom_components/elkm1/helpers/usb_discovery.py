@@ -2,7 +2,7 @@
 
 import asyncio
 import logging
-from typing import Dict
+
 from serial.tools import list_ports
 
 _LOGGER = logging.getLogger(__name__)
@@ -95,7 +95,6 @@ async def probe_serial_port(port: str, timeout: float = 5.0) -> bool:
             timeout=timeout,
         )
         
-        
         async def _connect():
             await asyncio.wait_for(connection.connect(), timeout=timeout)
             # If we got here, connection successful
@@ -109,6 +108,6 @@ async def probe_serial_port(port: str, timeout: float = 5.0) -> bool:
     except asyncio.TimeoutError:
         _LOGGER.debug(f"Port {port}: Connection timeout (no device?)")
         return False
-    except Exception as e:
+    except (OSError, AttributeError, ValueError) as e:
         _LOGGER.debug(f"Port {port}: No ELK-M1 detected - {e}")
         return False
