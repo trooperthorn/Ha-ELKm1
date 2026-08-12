@@ -1,27 +1,30 @@
 """Data update coordinator for Elk-M1 Control integration."""
-
 import asyncio
 import logging
-from typing import Any, Dict
+from datetime import timedelta
+from typing import Any
 
-from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from elkm1_lib.connection import ElkM1Connection
+from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers.update_coordinator import (
+    DataUpdateCoordinator,
+    UpdateFailed,
+)
 
 from .const import (
-    DOMAIN,
     CONF_CONNECTION_TYPE,
-    CONF_SERIAL_PORT,
     CONF_HOST,
-    CONF_PORT,
-    CONF_USERNAME,
     CONF_PASSWORD,
     CONF_PIN,
+    CONF_PORT,
+    CONF_SERIAL_PORT,
+    CONF_USERNAME,
     CONF_VERIFY_DEVICE,
-    CONNECTION_SERIAL,
     CONNECTION_NETWORK,
-    ELKM1_BAUDRATE,
+    CONNECTION_SERIAL,
     COORDINATOR_UPDATE_INTERVAL,
+    DOMAIN,
+    ELKM1_BAUDRATE,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -33,7 +36,7 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator):
     def __init__(
         self,
         hass: HomeAssistant,
-        config_entry_data: Dict[str, Any],
+        config_entry_data: dict[str, Any],
     ) -> None:
         """Initialize the coordinator.
         
@@ -45,7 +48,7 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator):
             hass,
             _LOGGER,
             name="Elk-M1 Control",
-            update_interval=asyncio.timedelta(seconds=COORDINATOR_UPDATE_INTERVAL),
+            update_interval=timedelta(seconds=COORDINATOR_UPDATE_INTERVAL),
         )
         
         self._config_data = config_entry_data
@@ -158,18 +161,18 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator):
             try:
                 await self._elk.disconnect()
                 _LOGGER.info("Disconnected from ELK-M1")
-            except Exception as err:
+            except (OSError, AttributeError) as err:
                 _LOGGER.error(f"Error disconnecting: {err}")
             finally:
                 self._elk = None
 
-    async def _async_update_data(self) -> Dict[str, Any]:
+    async def _async_update_data(self) -> dict[str, Any]:
         """Fetch data from the ELK-M1 panel.
         
         This is called periodically by the coordinator framework.
         
         Returns:
-            Dictionary with panel data:
+            dictionary with panel data:
             {
                 "zones": {...},
                 "panel": {...},
@@ -222,9 +225,9 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator):
                 "thermostat": thermostat,
             }
             
-        except Exception as err:
-            _LOGGER.error(f"Error fetching coordinator data: {err}", exc_info=True)
-            raise UpdateFailed(f"Failed to fetch data: {err}")
+        except (OSError, AttributeError, KeyError) as err:
+            _LOGGER.exception(f"Error fetching coordinator data: {err}")
+            raise UpdateFailed(f"Failed to fetch data: {err}") from err
 
     async def async_first_refresh(self) -> None:
         """Connect and do first data refresh."""
@@ -254,12 +257,10 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator):
         
         try:
             _LOGGER.info("Sending disarm command")
-            # PIN is included in the command
             await self._elk.disarm(pin=self._pin)
-            # Refresh data after command
             await self.async_request_refresh()
             return True
-        except Exception as err:
+        except (OSError, AttributeError, ValueError) as err:
             _LOGGER.error(f"Failed to disarm: {err}")
             return False
 
@@ -274,7 +275,7 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator):
             await self._elk.arm_stay(pin=self._pin)
             await self.async_request_refresh()
             return True
-        except Exception as err:
+        except (OSError, AttributeError, ValueError) as err:
             _LOGGER.error(f"Failed to arm stay: {err}")
             return False
 
@@ -289,7 +290,7 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator):
             await self._elk.arm_away(pin=self._pin)
             await self.async_request_refresh()
             return True
-        except Exception as err:
+        except (OSError, AttributeError, ValueError) as err:
             _LOGGER.error(f"Failed to arm away: {err}")
             return False
 
@@ -304,7 +305,7 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator):
             await self._elk.arm_night(pin=self._pin)
             await self.async_request_refresh()
             return True
-        except Exception as err:
+        except (OSError, AttributeError, ValueError) as err:
             _LOGGER.error(f"Failed to arm night: {err}")
             return False
 
@@ -326,7 +327,7 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator):
             await self._elk.bypass_zone(zone_number, pin=self._pin)
             await self.async_request_refresh()
             return True
-        except Exception as err:
+        except (OSError, AttributeError, ValueError) as err:
             _LOGGER.error(f"Failed to bypass zone {zone_number}: {err}")
             return False
 
@@ -348,7 +349,7 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator):
             await self._elk.unbypass_zone(zone_number, pin=self._pin)
             await self.async_request_refresh()
             return True
-        except Exception as err:
+        except (OSError, AttributeError, ValueError) as err:
             _LOGGER.error(f"Failed to unbypass zone {zone_number}: {err}")
             return False
 
@@ -363,7 +364,7 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator):
             await self._elk.panic(pin=self._pin)
             await self.async_request_refresh()
             return True
-        except Exception as err:
+        except (OSError, AttributeError, ValueError) as err:
             _LOGGER.error(f"Failed to trigger panic: {err}")
             return False
 
@@ -388,7 +389,7 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator):
             await self._elk.set_temperature(thermostat_id, temperature)
             await self.async_request_refresh()
             return True
-        except Exception as err:
+        except (OSError, AttributeError, ValueError) as err:
             _LOGGER.error(f"Failed to set thermostat: {err}")
             return False
 
@@ -410,7 +411,7 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator):
             await self._elk.activate_task(task_number)
             await self.async_request_refresh()
             return True
-        except Exception as err:
+        except (OSError, AttributeError, ValueError) as err:
             _LOGGER.error(f"Failed to activate task {task_number}: {err}")
             return False
 
@@ -432,7 +433,7 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator):
                 if zone.number == zone_number:
                     return zone
             return None
-        except Exception as err:
+        except (AttributeError, KeyError) as err:
             _LOGGER.error(f"Error getting zone {zone_number}: {err}")
             return None
 
@@ -454,7 +455,7 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator):
                 if area.number == area_number:
                     return area
             return None
-        except Exception as err:
+        except (AttributeError, KeyError) as err:
             _LOGGER.error(f"Error getting area {area_number}: {err}")
             return None
 
@@ -469,7 +470,7 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator):
                 if output.number == output_number:
                     return output
             return None
-        except Exception as err:
+        except (AttributeError, KeyError) as err:
             _LOGGER.error(f"Error getting output {output_number}: {err}")
             return None
 
