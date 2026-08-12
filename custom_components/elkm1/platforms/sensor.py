@@ -13,7 +13,7 @@ from .const import DOMAIN
 from .coordinator import ElkDataUpdateCoordinator
 from .data import ElkRuntimeData
 from .entity import ElkEntity
-
+from ..helpers.troublestatus import get_trouble_status_string
 _LOGGER: logging.Logger = logging.getLogger(__name__)
 
 
@@ -96,3 +96,31 @@ class ElkFaultedZonesSensor(ElkEntity, SensorEntity):
             return "None"
         
         return ", ".join(str(z + 1) for z in zones)
+
+
+
+class ElkPanelSensor(CoordinatorEntity, SensorEntity):
+    """Sensor for ELK panel information."""
+    
+    @property
+    def state(self) -> str | None:
+        """Return panel state (armed/disarmed status)."""
+        panel = self.coordinator.data.get("panel")
+        if panel is None:
+            return None
+        return str(panel.state)
+    
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return additional attributes."""
+        panel = self.coordinator.data.get("panel")
+        if panel is None:
+            return {}
+        
+        return {
+            "armed": panel.armed,
+            "mode": panel.mode,
+            "system_trouble_status": get_trouble_status_string(panel),
+            "temperature": getattr(panel, 'temperature', None),
+            "battery": getattr(panel, 'battery_voltage', None),
+        }
