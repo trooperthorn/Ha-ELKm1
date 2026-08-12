@@ -10,21 +10,21 @@ from homeassistant.components.alarm_control_panel import (
     CodeFormat,
 )
 from homeassistant.config_entries import ConfigEntry
+
 from homeassistant.const import (
+    STATE_ALARM_TRIGGERED,
     STATE_ARMED_AWAY,
     STATE_ARMED_HOME,
     STATE_ARMED_NIGHT,
     STATE_DISARMED,
-    STATE_ALARM_TRIGGERED,
 )
-from homeassistant.core import HomeAssistant, callback
+from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DOMAIN
 from .coordinator import ElkDataUpdateCoordinator
 from .data import ElkRuntimeData
 from .entity import ElkEntity
+from .const import DOMAIN
 
 _LOGGER: logging.Logger = logging.getLogger(__name__)
 
@@ -202,11 +202,14 @@ class ElkAlarmControlPanel(ElkEntity, AlarmControlPanelEntity):
         if not self.coordinator._elk:
             return False
 
-        # Check if any fire zones are faulted
         for zone in self.coordinator._elk.zones:
-            if zone and zone.zone_type and "fire" in zone.zone_type.lower():
-                if zone.faulted or zone.open:
-                    return True
+            if (
+                zone
+                and zone.zone_type
+                and "fire" in zone.zone_type.lower()
+                and (zone.faulted or zone.open)
+            ):
+                return True
         
         return False
 
@@ -224,7 +227,7 @@ class ElkAlarmControlPanel(ElkEntity, AlarmControlPanelEntity):
             # Refresh state
             await self.coordinator.async_request_refresh()
             _LOGGER.info("Panel disarmed")
-        except Exception as err:
+        except (OSError, TimeoutError, ValueError, AttributeError) as err:
             _LOGGER.error(f"Error disarming: {err}")
 
     async def async_alarm_arm_home(self, code: str | None = None) -> None:
@@ -236,7 +239,7 @@ class ElkAlarmControlPanel(ElkEntity, AlarmControlPanelEntity):
             )
             await self.coordinator.async_request_refresh()
             _LOGGER.info("Panel armed (stay/home mode)")
-        except Exception as err:
+        except (OSError, TimeoutError, ValueError, AttributeError) as err:
             _LOGGER.error(f"Error arming home: {err}")
 
     async def async_alarm_arm_away(self, code: str | None = None) -> None:
@@ -248,7 +251,7 @@ class ElkAlarmControlPanel(ElkEntity, AlarmControlPanelEntity):
             )
             await self.coordinator.async_request_refresh()
             _LOGGER.info("Panel armed (away mode)")
-        except Exception as err:
+        except (OSError, TimeoutError, ValueError, AttributeError) as err:
             _LOGGER.error(f"Error arming away: {err}")
 
     async def async_alarm_arm_night(self, code: str | None = None) -> None:
@@ -260,7 +263,7 @@ class ElkAlarmControlPanel(ElkEntity, AlarmControlPanelEntity):
             )
             await self.coordinator.async_request_refresh()
             _LOGGER.info("Panel armed (night mode)")
-        except Exception as err:
+        except (OSError, TimeoutError, ValueError, AttributeError) as err:
             _LOGGER.error(f"Error arming night: {err}")
 
     async def async_alarm_trigger(self, code: str | None = None) -> None:
@@ -272,5 +275,5 @@ class ElkAlarmControlPanel(ElkEntity, AlarmControlPanelEntity):
             )
             await self.coordinator.async_request_refresh()
             _LOGGER.warning("Panic alarm triggered")
-        except Exception as err:
+        except (OSError, TimeoutError, ValueError, AttributeError) as err:
             _LOGGER.error(f"Error triggering panic: {err}")
