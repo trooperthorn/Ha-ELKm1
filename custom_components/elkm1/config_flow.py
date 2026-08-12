@@ -259,22 +259,29 @@ async def probe_network_device(
     """Test network connection to Elk M1XEP."""
     import asyncio
     
-    from elkm1_lib.connection import ElkM1Connection
+    # FIX 1: Import the correct Elk class
+    from elkm1_lib import Elk
     
     try:
         url = f"elk://{host}:{port}"
         _LOGGER.debug(f"Testing connection to {url}")
         
-        connection = ElkM1Connection(
-            url=url,
-            timeout=timeout,
-            username=username,
-            password=password,
-        )
+        # FIX 2: elkm1_lib expects a config dictionary, not kwargs
+        config = {"url": url}
+        if username:
+            config["userid"] = username
+        if password:
+            config["password"] = password
+            
+        # Initialize with the config dict
+        connection = Elk(config)
         
         async def _connect():
+            # Attempt to connect within the timeout period
             await asyncio.wait_for(connection.connect(), timeout=timeout)
-            await connection.disconnect()
+            
+            # FIX 3: In elkm1_lib, disconnect is usually synchronous (no 'await' needed)
+            connection.disconnect() 
             return True
         
         result = await _connect()
@@ -284,6 +291,6 @@ async def probe_network_device(
     except asyncio.TimeoutError:
         _LOGGER.debug(f"Network device {host}: Connection timeout")
         return False
-    except (OSError, TimeoutError, ValueError) as e:
+    except Exception as e:  # Broadened to catch elkm1_lib specific exceptions
         _LOGGER.debug(f"Network device {host}: Error - {e}")
         return False
