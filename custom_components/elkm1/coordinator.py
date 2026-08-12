@@ -1,266 +1,481 @@
-"""Data coordinator for Elk-M1 integration."""
-from __future__ import annotations
+"""Data update coordinator for Elk-M1 Control integration."""
 
 import asyncio
 import logging
-from datetime import timedelta
-from typing import Any
+from typing import Any, Dict
 
-from elkm1_lib import Elk
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
+from elkm1_lib.connection import ElkM1Connection
 
 from .const import (
     DOMAIN,
-    DEFAULT_UPDATE_INTERVAL,
-    COMMAND_QUEUE_INTERVAL,
-    LIVENESS_CHECK_INTERVAL,
+    CONF_CONNECTION_TYPE,
+    CONF_SERIAL_PORT,
+    CONF_HOST,
+    CONF_PORT,
+    CONF_USERNAME,
+    CONF_PASSWORD,
+    CONF_PIN,
+    CONF_VERIFY_DEVICE,
+    CONNECTION_SERIAL,
+    CONNECTION_NETWORK,
+    ELKM1_BAUDRATE,
+    COORDINATOR_UPDATE_INTERVAL,
 )
-from .data import ElkPanelStatus
-from .helpers.serial_queue import ElkSerialQueue
 
-_LOGGER: logging.Logger = logging.getLogger(__name__)
+_LOGGER = logging.getLogger(__name__)
 
 
-class ElkDataUpdateCoordinator(DataUpdateCoordinator[ElkPanelStatus]):
-    """Coordinator to manage Elk-M1 data updates."""
+class ElkDataUpdateCoordinator(DataUpdateCoordinator):
+    """Custom coordinator for Elk-M1 panel data updates."""
 
     def __init__(
         self,
         hass: HomeAssistant,
-        serial_port: str,
-        username: str | None = None,
-        password: str | None = None,
+        config_entry_data: Dict[str, Any],
     ) -> None:
-        """Initialize coordinator."""
+        """Initialize the coordinator.
+        
+        Args:
+            hass: Home Assistant instance
+            config_entry_data: Configuration entry data dictionary
+        """
         super().__init__(
             hass,
             _LOGGER,
-            name=DOMAIN,
-            update_interval=DEFAULT_UPDATE_INTERVAL,
-            config_entry_id=None,
+            name="Elk-M1 Control",
+            update_interval=asyncio.timedelta(seconds=COORDINATOR_UPDATE_INTERVAL),
+        )
+        
+        self._config_data = config_entry_data
+        self._elk: ElkM1Connection | None = None
+        self._connection_type = config_entry_data.get(CONF_CONNECTION_TYPE)
+        self._pin = config_entry_data.get(CONF_PIN, "")
+        
+        # Build connection URL based on connection type
+        self._url = self._build_connection_url()
+        
+        _LOGGER.info(
+            f"ElkDataUpdateCoordinator initialized: "
+            f"type={self._connection_type}, url={self._obfuscated_url()}"
         )
 
-        self._serial_port = serial_port
-        self._username = username
-        self._password = password
+    def _build_connection_url(self) -> str:
+        """Build connection URL based on connection type.
         
-        self._elk: Elk | None = None
-        self._serial_queue: ElkSerialQueue | None = None
-        self._liveness_task: asyncio.Task[None] | None = None
-        self._connected = False
-
-        # PART 4: Track previous zone states to fire events on changes
-        self._previous_zone_states: dict[int, bool] = {}
-        self._previous_output_states: dict[int, bool] = {}
-        self._previous_armed_state: bool | None = None
-        self._previous_armed_mode: str | None = None
-
-    async def _async_setup(self) -> None:
-        """Set up connection before first refresh."""
-        # Called before first async_config_entry_first_refresh()
-        await self._connect()
-
-    async def _connect(self) -> None:
-        """Establish connection to Elk panel."""
-        try:
-            # Build URL based on connection type
-            if self._serial_port.startswith("/"):
-                url = f"serial://{self._serial_port}"
-            else:
-                url = f"elk://{self._serial_port}"
-
-            config = {
-                "url": url,
-                "userid": self._username or "admin",
-                "password": self._password or "",
-            }
-
-            self._elk = Elk(config)
-            await self._elk.async_connect()
-
-            # Wrap serial queue for rate limiting
-            self._serial_queue = ElkSerialQueue(
-                elk=self._elk,
-                interval=COMMAND_QUEUE_INTERVAL,
-            )
-
-            self._connected = True
+        Returns:
+            Connection URL for ElkM1Connection
+            - Serial: "serial:///dev/ttyUSB0"
+            - Network: "elk://192.168.1.100:2101"
+        """
+        if self._connection_type == CONNECTION_SERIAL:
+            # Serial connection
+            serial_port = self._config_data.get(CONF_SERIAL_PORT)
+            if not serial_port:
+                raise ValueError("Serial port not configured")
             
-            # Start liveness check task
-            self._liveness_task = asyncio.create_task(self._async_liveness_check())
-            
-            _LOGGER.info(f"Connected to Elk panel at {self._serial_port}")
-
-        except Exception as err:
-            self._connected = False
-            raise UpdateFailed(f"Could not connect to Elk panel: {err}") from err
-
-    async def _async_update_data(self) -> ElkPanelStatus:
-        """Fetch latest data from panel."""
-        if not self._connected or not self._elk:
-            await self._connect()
-
-        try:
-            # Query panel state
-            panel_data: ElkPanelStatus = {
-                "armed": self._elk.panel.armed,
-                "armed_mode": self._elk.panel.armed_mode,
-                "last_user": self._elk.panel.last_user,
-                "last_user_name": self._elk.panel.last_user_name,
-                "zones_faulted": [i for i, z in enumerate(self._elk.zones) if z.faulted],
-                "outputs_active": [i for i, o in enumerate(self._elk.outputs) if o.status],
-            }
-
-            # PART 4: Fire events for zone state changes
-            await self._async_check_zone_changes()
-            
-            # PART 4: Fire events for output state changes
-            await self._async_check_output_changes()
-            
-            # PART 4: Fire events for armed state changes
-            await self._async_check_armed_changes(panel_data)
-
-            return panel_data
-
-        except Exception as err:
-            self._connected = False
-            raise UpdateFailed(f"Error updating Elk data: {err}") from err
-
-    # ============================================================================
-    # PART 4: Event Firing Methods - Fire Zone Events for Automations
-    # ============================================================================
-
-    @callback
-    async def _async_check_zone_changes(self) -> None:
-        """Check for zone state changes and fire events."""
-        if not self._elk:
-            return
-
-        for zone_index, zone in enumerate(self._elk.zones):
-            if not zone:
-                continue
-
-            zone_number = zone_index + 1
-            is_open = zone.faulted or zone.open
-            
-            # Get previous state
-            prev_state = self._previous_zone_states.get(zone_index)
-            
-            # Fire event if state changed
-            if prev_state != is_open:
-                event_type = "open" if is_open else "closed"
-                
-                self.hass.bus.async_fire(
-                    f"{DOMAIN}_zone_{event_type}",
-                    {
-                        "zone_number": zone_number,
-                        "zone_name": zone.name,
-                        "zone_index": zone_index,
-                        "zone_type": zone.zone_type,
-                        "is_open": is_open,
-                        "timestamp": self.hass.loop.time(),
-                    },
-                )
-                
-                _LOGGER.debug(
-                    f"Zone {zone_number} ({zone.name}) {event_type}: {is_open}"
-                )
-                
-                self._previous_zone_states[zone_index] = is_open
-
-    @callback
-    async def _async_check_output_changes(self) -> None:
-        """Check for output state changes and fire events."""
-        if not self._elk:
-            return
-
-        for output_index, output in enumerate(self._elk.outputs):
-            if not output:
-                continue
-
-            output_number = output_index + 1
-            is_active = output.status
-            
-            # Get previous state
-            prev_state = self._previous_output_states.get(output_index)
-            
-            # Fire event if state changed
-            if prev_state != is_active:
-                event_type = "activated" if is_active else "deactivated"
-                
-                self.hass.bus.async_fire(
-                    f"{DOMAIN}_output_{event_type}",
-                    {
-                        "output_number": output_number,
-                        "output_name": output.name,
-                        "output_index": output_index,
-                        "is_active": is_active,
-                        "timestamp": self.hass.loop.time(),
-                    },
-                )
-                
-                _LOGGER.debug(
-                    f"Output {output_number} ({output.name}) {event_type}: {is_active}"
-                )
-                
-                self._previous_output_states[output_index] = is_active
-
-    @callback
-    async def _async_check_armed_changes(self, panel_data: ElkPanelStatus) -> None:
-        """Check for armed/disarmed state changes and fire events."""
-        is_armed = panel_data.get("armed", False)
-        armed_mode = panel_data.get("armed_mode", "disarmed")
+            # Build serial URL: serial:///dev/ttyUSB0
+            url = f"serial://{serial_port}"
+            _LOGGER.debug(f"Built serial URL: {url}")
+            return url
         
-        # Fire event if armed state changed
-        if self._previous_armed_state != is_armed:
-            event_type = "armed" if is_armed else "disarmed"
+        elif self._connection_type == CONNECTION_NETWORK:
+            # Network connection
+            host = self._config_data.get(CONF_HOST)
+            port = self._config_data.get(CONF_PORT, 2101)
             
-            self.hass.bus.async_fire(
-                f"{DOMAIN}_panel_{event_type}",
-                {
-                    "armed": is_armed,
-                    "armed_mode": armed_mode,
-                    "last_user": panel_data.get("last_user"),
-                    "last_user_name": panel_data.get("last_user_name"),
-                    "timestamp": self.hass.loop.time(),
-                },
+            if not host:
+                raise ValueError("Host not configured")
+            
+            # Build network URL: elk://192.168.1.100:2101
+            url = f"elk://{host}:{port}"
+            _LOGGER.debug(f"Built network URL: {url}")
+            return url
+        
+        else:
+            raise ValueError(f"Unknown connection type: {self._connection_type}")
+
+    def _obfuscated_url(self) -> str:
+        """Return connection URL with sensitive data obfuscated for logging."""
+        if self._connection_type == CONNECTION_SERIAL:
+            return self._url
+        else:
+            # Hide password in logs
+            host = self._config_data.get(CONF_HOST)
+            port = self._config_data.get(CONF_PORT, 2101)
+            return f"elk://{host}:{port}"
+
+    async def async_connect(self) -> None:
+        """Establish connection to ELK-M1 panel.
+        
+        Creates the appropriate connection based on connection type
+        and authentication method.
+        
+        Raises:
+            UpdateFailed: If connection fails
+        """
+        try:
+            _LOGGER.info(f"Connecting to ELK-M1 at {self._obfuscated_url()}")
+            
+            # Create connection with appropriate parameters
+            if self._connection_type == CONNECTION_SERIAL:
+                # Serial connection - no credentials needed
+                self._elk = ElkM1Connection(
+                    url=self._url,
+                    timeout=5.0,
+                    baudrate=ELKM1_BAUDRATE,
+                )
+                _LOGGER.debug("Serial connection created")
+            
+            elif self._connection_type == CONNECTION_NETWORK:
+                # Network connection - requires credentials
+                username = self._config_data.get(CONF_USERNAME, "")
+                password = self._config_data.get(CONF_PASSWORD, "")
+                
+                self._elk = ElkM1Connection(
+                    url=self._url,
+                    username=username,
+                    password=password,
+                    timeout=5.0,
+                )
+                _LOGGER.debug(f"Network connection created for {username}@{self._url}")
+            
+            # Connect to the panel
+            await self._elk.connect()
+            _LOGGER.info(f"Connected to ELK-M1 at {self._obfuscated_url()}")
+            
+        except Exception as err:
+            _LOGGER.error(f"Failed to connect to ELK-M1: {err}")
+            raise UpdateFailed(f"Connection failed: {err}")
+
+    async def async_disconnect(self) -> None:
+        """Disconnect from ELK-M1 panel."""
+        if self._elk:
+            try:
+                await self._elk.disconnect()
+                _LOGGER.info("Disconnected from ELK-M1")
+            except Exception as err:
+                _LOGGER.error(f"Error disconnecting: {err}")
+            finally:
+                self._elk = None
+
+    async def _async_update_data(self) -> Dict[str, Any]:
+        """Fetch data from the ELK-M1 panel.
+        
+        This is called periodically by the coordinator framework.
+        
+        Returns:
+            Dictionary with panel data:
+            {
+                "zones": {...},
+                "panel": {...},
+                "areas": {...},
+                "outputs": {...},
+                "tasks": {...},
+                "thermostat": {...},
+            }
+            
+        Raises:
+            UpdateFailed: If data fetch fails
+        """
+        if not self._elk:
+            raise UpdateFailed("Not connected to ELK-M1")
+        
+        try:
+            # Fetch all panel data
+            zones = self._elk.zones
+            panel = self._elk.panel
+            areas = self._elk.areas
+            outputs = self._elk.outputs
+            tasks = self._elk.tasks
+            thermostat = self._elk.thermostat
+            
+            # Log for debugging
+            _LOGGER.debug(
+                f"Coordinator update: "
+                f"zones={len(zones) if zones else 0}, "
+                f"areas={len(areas) if areas else 0}, "
+                f"outputs={len(outputs) if outputs else 0}"
             )
             
-            _LOGGER.info(f"Panel {event_type}: mode={armed_mode}")
-            self._previous_armed_state = is_armed
-
-        # Fire event if armed mode changed
-        if self._previous_armed_mode != armed_mode and is_armed:
-            self.hass.bus.async_fire(
-                f"{DOMAIN}_panel_mode_changed",
-                {
-                    "armed_mode": armed_mode,
-                    "last_user": panel_data.get("last_user"),
-                    "last_user_name": panel_data.get("last_user_name"),
-                    "timestamp": self.hass.loop.time(),
-                },
-            )
+            # Log zone states for debugging
+            if zones:
+                for zone in zones:
+                    _LOGGER.debug(
+                        f"  Zone {zone.number} ({zone.name}): "
+                        f"status={zone.status}, "
+                        f"faulted={zone.faulted}, "
+                        f"open={zone.open}"
+                    )
             
-            _LOGGER.info(f"Panel armed mode changed to: {armed_mode}")
-            self._previous_armed_mode = armed_mode
+            # Return all data in standardized format
+            return {
+                "zones": zones if zones else [],
+                "panel": panel,
+                "areas": areas if areas else [],
+                "outputs": outputs if outputs else [],
+                "tasks": tasks if tasks else [],
+                "thermostat": thermostat,
+            }
+            
+        except Exception as err:
+            _LOGGER.error(f"Error fetching coordinator data: {err}", exc_info=True)
+            raise UpdateFailed(f"Failed to fetch data: {err}")
 
-    # ============================================================================
-    # End of Part 4 Event Firing
-    # ============================================================================
-
-    async def _async_liveness_check(self) -> None:
-        """Monitor connection liveness; reconnect if silent."""
-        while self._connected:
-            await asyncio.sleep(LIVENESS_CHECK_INTERVAL.total_seconds())
-            # Check if we've heard from the panel recently
-            # If not, trigger a reconnect
-            # (elkm1_lib should track last message time)
+    async def async_first_refresh(self) -> None:
+        """Connect and do first data refresh."""
+        try:
+            await self.async_connect()
+            await super().async_request_refresh()
+        except Exception as err:
+            await self.async_disconnect()
+            raise
 
     async def async_shutdown(self) -> None:
-        """Gracefully shutdown coordinator."""
-        if self._liveness_task:
-            self._liveness_task.cancel()
-        if self._elk:
-            await self._elk.async_disconnect()
-        self._connected = False
+        """Shutdown coordinator and disconnect."""
+        await self.async_disconnect()
+
+    # -------- Service Methods --------
+    # These methods are called by services (disarm, bypass, etc.)
+
+    async def send_disarm(self) -> bool:
+        """Send disarm command to panel.
+        
+        Returns:
+            True if successful, False otherwise
+        """
+        if not self._elk:
+            _LOGGER.error("Cannot send disarm: not connected")
+            return False
+        
+        try:
+            _LOGGER.info("Sending disarm command")
+            # PIN is included in the command
+            await self._elk.disarm(pin=self._pin)
+            # Refresh data after command
+            await self.async_request_refresh()
+            return True
+        except Exception as err:
+            _LOGGER.error(f"Failed to disarm: {err}")
+            return False
+
+    async def send_arm_stay(self) -> bool:
+        """Send arm stay command to panel."""
+        if not self._elk:
+            _LOGGER.error("Cannot send arm stay: not connected")
+            return False
+        
+        try:
+            _LOGGER.info("Sending arm stay command")
+            await self._elk.arm_stay(pin=self._pin)
+            await self.async_request_refresh()
+            return True
+        except Exception as err:
+            _LOGGER.error(f"Failed to arm stay: {err}")
+            return False
+
+    async def send_arm_away(self) -> bool:
+        """Send arm away command to panel."""
+        if not self._elk:
+            _LOGGER.error("Cannot send arm away: not connected")
+            return False
+        
+        try:
+            _LOGGER.info("Sending arm away command")
+            await self._elk.arm_away(pin=self._pin)
+            await self.async_request_refresh()
+            return True
+        except Exception as err:
+            _LOGGER.error(f"Failed to arm away: {err}")
+            return False
+
+    async def send_arm_night(self) -> bool:
+        """Send arm night command to panel."""
+        if not self._elk:
+            _LOGGER.error("Cannot send arm night: not connected")
+            return False
+        
+        try:
+            _LOGGER.info("Sending arm night command")
+            await self._elk.arm_night(pin=self._pin)
+            await self.async_request_refresh()
+            return True
+        except Exception as err:
+            _LOGGER.error(f"Failed to arm night: {err}")
+            return False
+
+    async def bypass_zone(self, zone_number: int) -> bool:
+        """Bypass a zone.
+        
+        Args:
+            zone_number: Zone number (1-208)
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        if not self._elk:
+            _LOGGER.error("Cannot bypass zone: not connected")
+            return False
+        
+        try:
+            _LOGGER.info(f"Bypassing zone {zone_number}")
+            await self._elk.bypass_zone(zone_number, pin=self._pin)
+            await self.async_request_refresh()
+            return True
+        except Exception as err:
+            _LOGGER.error(f"Failed to bypass zone {zone_number}: {err}")
+            return False
+
+    async def unbypass_zone(self, zone_number: int) -> bool:
+        """Unbypass a zone.
+        
+        Args:
+            zone_number: Zone number (1-208)
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        if not self._elk:
+            _LOGGER.error("Cannot unbypass zone: not connected")
+            return False
+        
+        try:
+            _LOGGER.info(f"Unbypassing zone {zone_number}")
+            await self._elk.unbypass_zone(zone_number, pin=self._pin)
+            await self.async_request_refresh()
+            return True
+        except Exception as err:
+            _LOGGER.error(f"Failed to unbypass zone {zone_number}: {err}")
+            return False
+
+    async def panic_alarm(self) -> bool:
+        """Trigger panic alarm."""
+        if not self._elk:
+            _LOGGER.error("Cannot trigger panic: not connected")
+            return False
+        
+        try:
+            _LOGGER.warning("Sending panic alarm command")
+            await self._elk.panic(pin=self._pin)
+            await self.async_request_refresh()
+            return True
+        except Exception as err:
+            _LOGGER.error(f"Failed to trigger panic: {err}")
+            return False
+
+    async def set_thermostat_temperature(
+        self, thermostat_id: int, temperature: float
+    ) -> bool:
+        """Set thermostat temperature.
+        
+        Args:
+            thermostat_id: Thermostat ID
+            temperature: Temperature in degrees
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        if not self._elk:
+            _LOGGER.error("Cannot set thermostat: not connected")
+            return False
+        
+        try:
+            _LOGGER.info(f"Setting thermostat {thermostat_id} to {temperature}°")
+            await self._elk.set_temperature(thermostat_id, temperature)
+            await self.async_request_refresh()
+            return True
+        except Exception as err:
+            _LOGGER.error(f"Failed to set thermostat: {err}")
+            return False
+
+    async def activate_task(self, task_number: int) -> bool:
+        """Activate a task.
+        
+        Args:
+            task_number: Task number (1-32)
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        if not self._elk:
+            _LOGGER.error("Cannot activate task: not connected")
+            return False
+        
+        try:
+            _LOGGER.info(f"Activating task {task_number}")
+            await self._elk.activate_task(task_number)
+            await self.async_request_refresh()
+            return True
+        except Exception as err:
+            _LOGGER.error(f"Failed to activate task {task_number}: {err}")
+            return False
+
+    def get_zone(self, zone_number: int) -> Any | None:
+        """Get zone object by number.
+        
+        Args:
+            zone_number: Zone number (1-208)
+            
+        Returns:
+            Zone object or None if not found
+        """
+        if not self._elk or not self.data:
+            return None
+        
+        try:
+            zones = self.data.get("zones", [])
+            for zone in zones:
+                if zone.number == zone_number:
+                    return zone
+            return None
+        except Exception as err:
+            _LOGGER.error(f"Error getting zone {zone_number}: {err}")
+            return None
+
+    def get_area(self, area_number: int) -> Any | None:
+        """Get area object by number.
+        
+        Args:
+            area_number: Area number (1-8)
+            
+        Returns:
+            Area object or None if not found
+        """
+        if not self._elk or not self.data:
+            return None
+        
+        try:
+            areas = self.data.get("areas", [])
+            for area in areas:
+                if area.number == area_number:
+                    return area
+            return None
+        except Exception as err:
+            _LOGGER.error(f"Error getting area {area_number}: {err}")
+            return None
+
+    def get_output(self, output_number: int) -> Any | None:
+        """Get output object by number."""
+        if not self._elk or not self.data:
+            return None
+        
+        try:
+            outputs = self.data.get("outputs", [])
+            for output in outputs:
+                if output.number == output_number:
+                    return output
+            return None
+        except Exception as err:
+            _LOGGER.error(f"Error getting output {output_number}: {err}")
+            return None
+
+    @property
+    def connected(self) -> bool:
+        """Return True if connected to panel."""
+        return self._elk is not None and self.last_update_success
+
+    @property
+    def connection_type(self) -> str:
+        """Return connection type (serial or network)."""
+        return self._connection_type
