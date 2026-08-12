@@ -8,13 +8,13 @@ from homeassistant import config_entries
 from homeassistant.const import CONF_HOST, CONF_PORT, CONF_USERNAME, CONF_PASSWORD
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResult
-from homeassistant.exceptions import HomeAssistantError
 
 from .const import (
     DOMAIN,
     CONF_SERIAL_PORT,
     CONF_CONNECTION_TYPE,
     CONF_VERIFY_DEVICE,
+    CONF_PIN,
     CONNECTION_SERIAL,
     CONNECTION_NETWORK,
 )
@@ -28,7 +28,6 @@ class ElkM1ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     VERSION = 1
     
-    # Store connection type for use in next step
     _connection_type: str = None
 
     async def async_step_user(
@@ -37,16 +36,13 @@ class ElkM1ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         """Step 1: Ask user how to connect (Serial or Network)."""
         
         if user_input is not None:
-            # Save connection type for next step
             self._connection_type = user_input[CONF_CONNECTION_TYPE]
             
-            # Go to appropriate next step
             if self._connection_type == CONNECTION_SERIAL:
                 return await self.async_step_serial()
             else:
                 return await self.async_step_network()
 
-        # Show connection type selection
         data_schema = vol.Schema(
             {
                 vol.Required(CONF_CONNECTION_TYPE): vol.In(
@@ -67,18 +63,17 @@ class ElkM1ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_serial(
         self, user_input: Optional[Dict[str, Any]] = None
     ) -> FlowResult:
-        """Step 2a: Serial/USB configuration."""
+        """Step 2a: Serial/USB configuration with PIN."""
         errors = {}
 
         if user_input is not None:
-            # Validate and save
             port = user_input[CONF_SERIAL_PORT]
             
             # Check if already configured
             await self.async_set_unique_id(port)
             self._abort_if_unique_id_configured()
             
-            # Optional: verify device exists
+            # Verify device exists on this port
             if user_input.get(CONF_VERIFY_DEVICE, True):
                 try:
                     if not await probe_serial_port(port, timeout=5):
@@ -93,8 +88,8 @@ class ElkM1ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     data={
                         CONF_CONNECTION_TYPE: CONNECTION_SERIAL,
                         CONF_SERIAL_PORT: port,
-                        CONF_USERNAME: user_input.get(CONF_USERNAME, ""),
-                        CONF_PASSWORD: user_input.get(CONF_PASSWORD, ""),
+                        CONF_PIN: user_input.get(CONF_PIN, ""),  # PIN for commands
+                        # Note: No username/password for serial
                     },
                 )
 
@@ -107,16 +102,14 @@ class ElkM1ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             ports = {}
             description_placeholders = {"discovered": "0"}
 
-        # If no ports found, allow manual entry
         if not ports:
             ports = {"manual": "Enter port manually"}
 
-        # Serial configuration schema
+        # Serial configuration schema - PIN instead of username/password
         data_schema = vol.Schema(
             {
                 vol.Required(CONF_SERIAL_PORT): vol.In(ports),
-                vol.Optional(CONF_USERNAME, default=""): str,
-                vol.Optional(CONF_PASSWORD, default=""): str,
+                vol.Optional(CONF_PIN, default=""): str,  # PIN for commands
                 vol.Optional(CONF_VERIFY_DEVICE, default=True): bool,
             }
         )
@@ -131,21 +124,26 @@ class ElkM1ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_network(
         self, user_input: Optional[Dict[str, Any]] = None
     ) -> FlowResult:
-        """Step 2b: Network (Elk M1XEP) configuration."""
+        """Step 2b: Network (Elk M1XEP) configuration with username/password."""
         errors = {}
 
         if user_input is not None:
             host = user_input[CONF_HOST]
             port = user_input.get(CONF_PORT, 2101)
             
-            # Create unique ID from host:port
             unique_id = f"{host}:{port}"
             await self.async_set_unique_id(unique_id)
             self._abort_if_unique_id_configured()
             
-            # Optional: test connection
+            # Test network connection
             try:
-                if not await probe_network_device(host, port, timeout=5):
+                if not await probe_network_device(
+                    host, 
+                    port,
+                    user_input.get(CONF_USERNAME, ""),
+                    user_input.get(CONF_PASSWORD, ""),
+                    timeout=5
+                ):
                     errors["base"] = "cannot_connect"
             except Exception as e:
                 _LOGGER.error(f"Error testing network connection: {e}")
@@ -160,16 +158,18 @@ class ElkM1ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         CONF_PORT: port,
                         CONF_USERNAME: user_input.get(CONF_USERNAME, ""),
                         CONF_PASSWORD: user_input.get(CONF_PASSWORD, ""),
+                        CONF_PIN: user_input.get(CONF_PIN, ""),  # Optional PIN
                     },
                 )
 
-        # Network configuration schema
+        # Network configuration schema - username/password
         data_schema = vol.Schema(
             {
-                vol.Required(CONF_HOST): str,  # e.g., "192.168.1.100"
+                vol.Required(CONF_HOST): str,
                 vol.Optional(CONF_PORT, default=2101): int,
-                vol.Optional(CONF_USERNAME, default=""): str,
-                vol.Optional(CONF_PASSWORD, default=""): str,
+                vol.Required(CONF_USERNAME): str,  # M1XEP requires username
+                vol.Required(CONF_PASSWORD): str,  # M1XEP requires password
+                vol.Optional(CONF_PIN, default=""): str,  # Optional PIN override
             }
         )
 
@@ -183,7 +183,7 @@ class ElkM1ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_reconfigure(
         self, user_input: Optional[Dict[str, Any]] = None
     ) -> FlowResult:
-        """Handle reconfiguration of existing entry."""
+        """Handle reconfiguration."""
         config_entry = self.hass.config_entries.async_get_entry(
             self.context["entry_id"]
         )
@@ -191,7 +191,6 @@ class ElkM1ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         connection_type = config_entry.data.get(CONF_CONNECTION_TYPE)
 
         if user_input is not None:
-            # Update the config entry
             self.hass.config_entries.async_update_entry(
                 config_entry,
                 data={**config_entry.data, **user_input},
@@ -216,12 +215,11 @@ class ElkM1ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         CONF_SERIAL_PORT,
                         default=config_entry.data.get(CONF_SERIAL_PORT),
                     ): vol.In(ports),
+                    vol.Optional(
+                        CONF_PIN,
+                        default=config_entry.data.get(CONF_PIN, ""),
+                    ): str,
                 }
-            )
-
-            return self.async_show_form(
-                step_id="reconfigure",
-                data_schema=data_schema,
             )
         else:
             # Network reconfiguration
@@ -235,29 +233,31 @@ class ElkM1ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         CONF_PORT,
                         default=config_entry.data.get(CONF_PORT, 2101),
                     ): int,
+                    vol.Required(
+                        CONF_USERNAME,
+                        default=config_entry.data.get(CONF_USERNAME, ""),
+                    ): str,
+                    vol.Required(
+                        CONF_PASSWORD,
+                        default=config_entry.data.get(CONF_PASSWORD, ""),
+                    ): str,
                 }
             )
 
-            return self.async_show_form(
-                step_id="reconfigure",
-                data_schema=data_schema,
-            )
+        return self.async_show_form(
+            step_id="reconfigure",
+            data_schema=data_schema,
+        )
 
 
 async def probe_network_device(
-    host: str, port: int = 2101, timeout: float = 5.0
+    host: str,
+    port: int = 2101,
+    username: str = "",
+    password: str = "",
+    timeout: float = 5.0,
 ) -> bool:
-    """
-    Test if a network device is an ELK-M1 panel.
-    
-    Args:
-        host: IP address or hostname
-        port: TCP port (default 2101 for Elk M1XEP)
-        timeout: Connection timeout
-        
-    Returns:
-        True if device responds, False otherwise
-    """
+    """Test network connection to Elk M1XEP."""
     from elkm1_lib.connection import ElkM1Connection
     import asyncio
     
@@ -265,7 +265,12 @@ async def probe_network_device(
         url = f"elk://{host}:{port}"
         _LOGGER.debug(f"Testing connection to {url}")
         
-        connection = ElkM1Connection(url=url, timeout=timeout)
+        connection = ElkM1Connection(
+            url=url,
+            timeout=timeout,
+            username=username,
+            password=password,
+        )
         
         async def _connect():
             await asyncio.wait_for(connection.connect(), timeout=timeout)
@@ -273,12 +278,12 @@ async def probe_network_device(
             return True
         
         result = await _connect()
-        _LOGGER.info(f"Network device {url}: ELK-M1 detected ✓")
+        _LOGGER.info(f"Network device {url}: Connected ✓")
         return result
         
     except asyncio.TimeoutError:
         _LOGGER.debug(f"Network device {host}: Connection timeout")
         return False
     except Exception as e:
-        _LOGGER.debug(f"Network device {host}: No response - {e}")
+        _LOGGER.debug(f"Network device {host}: Error - {e}")
         return False
