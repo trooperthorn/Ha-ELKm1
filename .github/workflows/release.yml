@@ -1,0 +1,20 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v4
+      - run: pip install -r requirements-dev.txt
+      - run: ruff check custom_components/elkm1 && black --check && mypy
+      - run: mkdir -p build/elkm1 && cp -r custom_components/elkm1 build/
+      - run: cd build && zip -r ../elkm1.zip elkm1/
+      - uses: softprops/action-gh-release@v1
+        with:
+          files: elkm1.zip
