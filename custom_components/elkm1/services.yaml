@@ -1,0 +1,80 @@
+bypass_zone:
+  name: Bypass Zone
+  description: Bypass a specific zone from triggering the alarm
+  fields:
+    zone:
+      name: Zone
+      description: Zone number or name to bypass
+      required: true
+      selector:
+        number:
+          min: 1
+          max: 208
+
+unbypass_zone:
+  name: Unbypass Zone
+  description: Unbypass a zone
+  fields:
+    zone:
+      name: Zone
+      description: Zone number or name to unbypass
+      required: true
+      selector:
+        number:
+          min: 1
+          max: 208
+
+panic_alarm:
+  name: Trigger Panic Alarm
+  description: Trigger a panic alarm
+  fields:
+    panic_type:
+      name: Panic Type
+      description: Type of panic alarm (police/fire/ambulance)
+      required: true
+      selector:
+        select:
+          options:
+            - police
+            - fire
+            - ambulance
+
+arm_stay:
+  name: Arm Stay
+  description: Arm panel in stay mode
+  fields:
+    user_code:
+      name: User Code
+      description: Optional user code
+      required: false
+      selector:
+        number:
+          min: 0
+          max: 999999
+
+disarm:
+  name: Disarm Panel
+  description: Disarm the alarm panel
+  fields:
+    user_code:
+      name: User Code
+      description: Disarm code
+      required: true
+      selector:
+        number:
+          min: 0
+          max: 999999
+
+set_temperature:
+  name: Set Thermostat Temperature
+  description: Set the thermostat to a target temperature
+  fields:
+    temperature:
+      name: Temperature
+      description: Target temperature in degrees
+      required: true
+      selector:
+        number:
+          min: 50
+          max: 90
+          step: 0.1
