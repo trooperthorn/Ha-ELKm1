@@ -73,3 +73,32 @@ async def async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """Reload config entry."""
     await async_unload_entry(hass, entry)
     await async_setup_entry(hass, entry)
+
+async def async_setup_services(hass: HomeAssistant) -> None:
+    """Register custom services."""
+    
+    async def handle_bypass_zone(call: ServiceCall) -> None:
+        """Handle bypass zone service."""
+        entry_id = call.data.get("entry_id")
+        entry = hass.config_entries.async_get_entry(entry_id)
+        if not entry:
+            return
+        
+        coordinator: ElkDataUpdateCoordinator = entry.runtime_data.coordinator
+        zone = call.data.get("zone")
+        
+        try:
+            await coordinator._serial_queue.async_send_command(
+                "bypass_zone",
+                zone=zone - 1,  # Convert to 0-based
+            )
+            await coordinator.async_request_refresh()
+        except Exception as err:
+            _LOGGER.error(f"Error bypassing zone: {err}")
+    
+    # Register services
+    hass.services.async_register(
+        DOMAIN,
+        "bypass_zone",
+        handle_bypass_zone,
+    )
