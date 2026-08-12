@@ -1,8 +1,7 @@
 """Panel settings configuration and verification."""
 
 import logging
-from typing import Dict, Tuple
-from homeassistant.core import HomeAssistant
+from typing import Final  # only if you use Final; otherwise remove
 
 _LOGGER = logging.getLogger(__name__)
 
