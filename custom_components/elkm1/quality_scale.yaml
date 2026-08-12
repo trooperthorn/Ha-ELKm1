@@ -1,0 +1,24 @@
+rules:
+  # Bronze tier
+  config-flow: done
+  entity-unique-id: done
+  runtime-data: done
+  test-before-setup: done
+  
+  # Silver tier
+  entity-unavailable: done
+  parallel-updates: done
+    # Set PARALLEL_UPDATES = 1 in each platform to serialize writes
+  
+  # Gold tier
+  diagnostics: done
+  discovery: done
+    # mDNS discovery of Elk-M1 devices
+  test-coverage: done
+    # pytest with >90% coverage
+  
+  # Platinum tier
+  strict-typing: done
+    # Full type hints validated with mypy
+  async-dependency: done
+    # elkm1_lib is fully async
