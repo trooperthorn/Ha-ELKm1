@@ -1,4 +1,6 @@
 """Elk-M1 Control integration."""
+# At the top with other imports
+from .alarmo_integration import async_setup_alarmo_service
 from __future__ import annotations
 
 import logging
@@ -55,6 +57,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Listen for unload
     entry.async_on_unload(entry.add_update_listener(async_reload_entry))
 
+    # Setup Alarmo integration service
+    await async_setup_alarmo_service(hass)
+    
     return True
 
 
