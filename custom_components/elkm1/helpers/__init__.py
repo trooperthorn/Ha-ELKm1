@@ -3,7 +3,7 @@
 # Optionally, you could add convenience imports:
 # from .usb_discovery import discover_elk_ports
 # from .serial_queue import ElkSerialQueue
-from .usb_discovery import discover_elk_ports, probe_serial_port
 from .serial_queue import ElkSerialQueue
+from .usb_discovery import discover_elk_ports, probe_serial_port
 
-__all__ = ["discover_elk_ports", "probe_serial_port", "ElkSerialQueue"]
+__all__ = ["ElkSerialQueue", "discover_elk_ports", "probe_serial_port"]
