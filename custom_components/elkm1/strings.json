@@ -10,16 +10,39 @@
           "password": "Password (optional)"
         }
       }
-    },
-    "error": {
-      "cannot_connect": "Failed to connect to the Elk-M1 panel",
-      "invalid_auth": "Invalid credentials"
     }
   },
   "entity": {
     "alarm_control_panel": {
       "alarm_panel": {
         "name": "Alarm Panel"
+      }
+    },
+    "binary_sensor": {
+      "zone": {
+        "name": "{name} Zone"
+      },
+      "zone_battery": {
+        "name": "{name} Battery"
+      }
+    },
+    "switch": {
+      "output": {
+        "name": "{name} Relay"
+      }
+    },
+    "sensor": {
+      "panel_temperature": {
+        "name": "Panel Temperature"
+      },
+      "panel_status": {
+        "name": "Panel Status"
+      },
+      "last_user": {
+        "name": "Last User"
+      },
+      "faulted_zones": {
+        "name": "Faulted Zones"
       }
     }
   }
