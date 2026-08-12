@@ -50,6 +50,12 @@ async def async_setup_alarmo_auto_config(hass: HomeAssistant) -> None:
             if entity.domain == "binary_sensor" and DOMAIN in entity.platform:
                 # Extract zone info
                 if "zone" in entity_id and "battery" not in entity_id:
+                if (
+                    entity.domain == "binary_sensor"
+                    and DOMAIN in entity.platform
+                    and "zone" in entity_id
+                    and "battery" not in entity_id
+                ):
                     elk_zones.append({
                         "entity_id": entity_id,
                         "name": entity.original_name or entity.name,
@@ -59,10 +65,9 @@ async def async_setup_alarmo_auto_config(hass: HomeAssistant) -> None:
         if not elk_zones:
             _LOGGER.warning("No ELK-M1 zones found. Install/setup binary_sensor.py first.")
             hass.components.persistent_notification.async_create(
-                f"No ELK-M1 zones found to auto-configure in Alarmo. "
-                f"Make sure binary_sensor.py is installed and zones are created.",
+                "No ELK-M1 zones found to auto-configure in Alarmo. "
+                "Make sure binary_sensor.py is installed and zones are created.",
                 title="Alarmo Auto-Setup Failed",
-                notification_id=f"{DOMAIN}_alarmo_setup_failed",
             )
             return
         
@@ -70,10 +75,9 @@ async def async_setup_alarmo_auto_config(hass: HomeAssistant) -> None:
         if ALARMO_DOMAIN not in hass.data:
             _LOGGER.warning("Alarmo integration not found. Install Alarmo first.")
             hass.components.persistent_notification.async_create(
-                f"Alarmo integration not installed. "
-                f"Install Alarmo via HACS before running this automation.",
+                "Alarmo integration not installed. "
+                "Install Alarmo via HACS before running this automation.",
                 title="Alarmo Not Found",
-                notification_id=f"{DOMAIN}_alarmo_not_found",
             )
             return
         
