@@ -3,10 +3,10 @@
 import logging
 from typing import Final
 
-from homeassistant.config_entries import ConfigEntry, ConfigEntryNotReady
-from homeassistant.const import Platform
+from homeassistant.config_entries import ConfigEntryNotReady
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.helpers.update_coordinator import UpdateFailed
+from homeassistant.const import Platform
 from .const import DOMAIN
 from .coordinator import ElkDataUpdateCoordinator
 from .data import ElkRuntimeData
@@ -28,15 +28,7 @@ PLATFORMS: Final[list[Platform]] = [
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Elk-M1 Control from a config entry."""
-    
-    _LOGGER.info(f"Setting up Elk-M1 at {entry.data.get('serial_port', entry.data.get('host'))}")
-    
-    # Create coordinator with config data
-    coordinator = ElkDataUpdateCoordinator(
-        hass=hass,
-        config_entry_data=entry.data,  # ← Pass the entire config entry data
-    )
-    
+    coordinator = ElkDataUpdateCoordinator(hass=hass, config_entry_data=entry.data)
 
     try:
         await coordinator.async_first_refresh()
@@ -44,20 +36,39 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         _LOGGER.error(f"Failed to set up coordinator: {err}")
         await coordinator.async_disconnect()
         raise ConfigEntryNotReady(f"Failed to connect: {err}") from err
-    
+
     # Store coordinator in hass.data
-    if DOMAIN not in hass.data:
-        hass.data[DOMAIN] = {}
-    
+    hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN][entry.entry_id] = ElkRuntimeData(coordinator=coordinator)
-    
-    # Set up all platforms
+
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
-    
-    # Listen for unload
     entry.async_on_unload(coordinator.async_shutdown)
-    
+
+    await async_register_services(hass)
+
     return True
+
+
+async def async_register_services(hass: HomeAssistant) -> None:
+    """Register custom services."""
+
+    async def handle_bypass_zone(call: ServiceCall) -> None:
+        """Handle bypass zone service."""
+        entry_id = call.data.get("entry_id")
+        zone_number = call.data.get("zone")
+
+        runtime_data = hass.data[DOMAIN].get(entry_id)
+        if runtime_data is None:
+            _LOGGER.error(f"No config entry found for entry_id {entry_id}")
+            return
+
+        try:
+            await runtime_data.coordinator.bypass_zone(zone_number)
+            await runtime_data.coordinator.async_request_refresh()
+        except (AttributeError, KeyError, ValueError) as err:
+            _LOGGER.error(f"Error bypassing zone: {err}")
+
+    hass.services.async_register(DOMAIN, "bypass_zone", handle_bypass_zone)
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
