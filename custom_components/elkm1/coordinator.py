@@ -1,11 +1,10 @@
 """Data update coordinator for Elk-M1 Control integration."""
-import asyncio
 import logging
 from datetime import timedelta
 from typing import Any
 
 from elkm1_lib.connection import ElkM1Connection
-from homeassistant.core import HomeAssistant, callback
+from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import (
     DataUpdateCoordinator,
     UpdateFailed,
@@ -19,11 +18,9 @@ from .const import (
     CONF_PORT,
     CONF_SERIAL_PORT,
     CONF_USERNAME,
-    CONF_VERIFY_DEVICE,
     CONNECTION_NETWORK,
     CONNECTION_SERIAL,
     COORDINATOR_UPDATE_INTERVAL,
-    DOMAIN,
     ELKM1_BAUDRATE,
 )
 
@@ -224,17 +221,16 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator):
                 "tasks": tasks if tasks else [],
                 "thermostat": thermostat,
             }
-            
         except (OSError, AttributeError, KeyError) as err:
-            _LOGGER.exception(f"Error fetching coordinator data: {err}")
-            raise UpdateFailed(f"Failed to fetch data: {err}") from err
+            _LOGGER.exception("Error fetching coordinator data")
+            raise UpdateFailed(f"Failed to fetch data: {err}") from err    
 
     async def async_first_refresh(self) -> None:
         """Connect and do first data refresh."""
         try:
             await self.async_connect()
             await super().async_request_refresh()
-        except Exception as err:
+        except Exception:
             await self.async_disconnect()
             raise
 
