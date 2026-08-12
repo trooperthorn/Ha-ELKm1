@@ -1,0 +1,71 @@
+# Example automations that bridge ELK-M1 → Unifi Protect
+
+automation:
+  # Trigger Unifi Protect recording when door is opened
+  - alias: Record door open on UniFi when ELK zone triggered
+    trigger:
+      platform: state
+      entity_id: binary_sensor.front_door_zone
+      to: "on"
+    action:
+      - service: camera.record
+        target:
+          entity_id: camera.front_door_doorbell
+        data:
+          duration: 30
+
+  # Change Unifi Protect camera mode based on alarm state
+  - alias: Enable all cameras when alarm armed away
+    trigger:
+      platform: state
+      entity_id: alarm_control_panel.elk_m1
+      to: "armed_away"
+    action:
+      - service: switch.turn_on
+        target:
+          entity_id:
+            - switch.front_door_camera_recording
+            - switch.side_yard_camera_recording
+            - switch.garage_camera_recording
+
+  # Send notification with camera snapshot on zone trigger
+  - alias: Notify on suspicious zone with camera snapshot
+    trigger:
+      platform: state
+      entity_id: binary_sensor.motion_sensor_zone
+      to: "on"
+    action:
+      - service: camera.snapshot
+        target:
+          entity_id: camera.garage_camera
+        data:
+          filename: /config/www/motion_alert.jpg
+      - service: notify.mobile_app_iphone
+        data:
+          title: Motion Detected
+          message: "Motion detected in garage at {{ now().strftime('%H:%M:%S') }}"
+          data:
+            image: /config/www/motion_alert.jpg
+
+  # Trigger sirens when alarm triggered AND camera records
+  - alias: Full lockdown on alarm trigger
+    trigger:
+      platform: state
+      entity_id: alarm_control_panel.elk_m1
+      to: "triggered"
+    action:
+      - service: switch.turn_on
+        target:
+          entity_id: switch.siren_relay
+      - service: light.turn_on
+        target:
+          entity_id: light.strobe_lights
+        data:
+          brightness: 255
+      - service: camera.record
+        target:
+          entity_id: 
+            - camera.front_door_doorbell
+            - camera.garage_camera
+        data:
+          duration: 300  # 5 minutes
