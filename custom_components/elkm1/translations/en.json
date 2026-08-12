@@ -1,0 +1,188 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect to Elk M1",
+        "description": "Found {discovered_count} serial ports. Select or enter the port where your ELK-M1 is connected.",
+        "data": {
+          "serial_port": "Serial Port",
+          "username": "Username (optional)",
+          "password": "Password (optional)"
+        }
+      },
+      "reconfigure": {
+        "title": "Reconfigure Elk M1 Connection",
+        "description": "Update your ELK-M1 connection settings",
+        "data": {
+          "serial_port": "Serial Port",
+          "username": "Username",
+          "password": "Password"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Failed to connect to Elk M1 panel. Check serial port and cable connection.",
+      "invalid_auth": "Invalid username or password",
+      "timeout": "Connection timeout. Panel did not respond within 10 seconds.",
+      "already_configured": "Elk M1 integration is already configured"
+    },
+    "abort": {
+      "already_configured": "Elk M1 integration is already configured",
+      "cannot_connect": "Failed to connect to the Elk M1 panel",
+      "reconfigure_failed": "Reconfiguration failed"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Elk M1 Options",
+        "description": "Configure polling intervals and advanced settings",
+        "data": {
+          "poll_interval": "Status update interval (seconds)",
+          "command_delay": "Delay between serial commands (milliseconds)",
+          "entry_delay": "Entry delay countdown (seconds)",
+          "exit_delay": "Exit delay countdown (seconds)"
+        }
+      }
+    }
+  },
+  "entity": {
+    "alarm_control_panel": {
+      "elk_m1": {
+        "name": "Alarm Panel"
+      }
+    },
+    "binary_sensor": {
+      "zone": {
+        "name": "{name}"
+      },
+      "zone_battery": {
+        "name": "{name} Battery"
+      }
+    },
+    "switch": {
+      "output": {
+        "name": "{name}"
+      }
+    },
+    "sensor": {
+      "panel_temperature": {
+        "name": "Panel Temperature"
+      },
+      "panel_status": {
+        "name": "Panel Status"
+      },
+      "last_user": {
+        "name": "Last User"
+      },
+      "faulted_zones": {
+        "name": "Faulted Zones"
+      }
+    },
+    "climate": {
+      "thermostat": {
+        "name": "Thermostat"
+      }
+    }
+  },
+  "services": {
+    "bypass_zone": {
+      "name": "Bypass Zone",
+      "description": "Bypass a zone from triggering the alarm",
+      "fields": {
+        "zone": {
+          "name": "Zone Number",
+          "description": "Zone number to bypass (1-208)"
+        }
+      }
+    },
+    "unbypass_zone": {
+      "name": "Unbypass Zone",
+      "description": "Remove bypass from a zone",
+      "fields": {
+        "zone": {
+          "name": "Zone Number",
+          "description": "Zone number to unbypass (1-208)"
+        }
+      }
+    },
+    "panic_alarm": {
+      "name": "Trigger Panic Alarm",
+      "description": "Trigger a panic alarm on the panel",
+      "fields": {
+        "panic_type": {
+          "name": "Panic Type",
+          "description": "Type of panic: police, fire, or ambulance"
+        }
+      }
+    },
+    "arm_stay": {
+      "name": "Arm Stay",
+      "description": "Arm the panel in stay/home mode",
+      "fields": {
+        "user_code": {
+          "name": "User Code",
+          "description": "Optional user code for logging"
+        }
+      }
+    },
+    "arm_away": {
+      "name": "Arm Away",
+      "description": "Arm the panel in away mode",
+      "fields": {
+        "user_code": {
+          "name": "User Code",
+          "description": "Optional user code for logging"
+        }
+      }
+    },
+    "arm_night": {
+      "name": "Arm Night",
+      "description": "Arm the panel in night mode",
+      "fields": {
+        "user_code": {
+          "name": "User Code",
+          "description": "Optional user code for logging"
+        }
+      }
+    },
+    "disarm": {
+      "name": "Disarm",
+      "description": "Disarm the alarm panel",
+      "fields": {
+        "user_code": {
+          "name": "User Code",
+          "description": "User code required to disarm"
+        }
+      }
+    },
+    "set_temperature": {
+      "name": "Set Temperature",
+      "description": "Set the thermostat to a target temperature",
+      "fields": {
+        "temperature": {
+          "name": "Temperature",
+          "description": "Target temperature in degrees"
+        }
+      }
+    },
+    "alarmo_auto_setup": {
+      "name": "Auto-Setup Alarmo",
+      "description": "Automatically configure Alarmo with discovered ELK-M1 zones"
+    }
+  },
+  "issues": {
+    "connection_lost": {
+      "title": "Elk M1 Connection Lost",
+      "description": "The connection to the Elk M1 panel was lost. Check your serial connection and try reconfiguring the integration."
+    },
+    "invalid_port": {
+      "title": "Invalid Serial Port",
+      "description": "The configured serial port '{port}' is no longer available. Please reconfigure the integration."
+    },
+    "zones_not_found": {
+      "title": "No Zones Detected",
+      "description": "No zones were found in the Elk M1 panel. Check panel configuration."
+    }
+  }
+}
