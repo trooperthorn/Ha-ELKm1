@@ -1,5 +1,6 @@
 """Setup wizard to check and configure panel on first connection."""
 import logging
+from typing import Any
 
 from ..helpers.panel_settings import (
     check_panel_version,
@@ -9,7 +10,8 @@ from ..helpers.panel_settings import (
 
 _LOGGER = logging.getLogger(__name__)
 
-async def run_panel_setup_wizard(elk_connection, connection_type: str) -> dict:
+# Best practice: update the return hint so other functions know what to expect
+async def run_panel_setup_wizard(elk_connection, connection_type: str) -> dict[str, Any]:
     """
     Run setup wizard to check and optionally configure panel.
     
@@ -20,7 +22,8 @@ async def run_panel_setup_wizard(elk_connection, connection_type: str) -> dict:
     Returns:
         Setup results dictionary
     """
-    results = {
+    # FIX: Add the type hint to 'results' right here
+    results: dict[str, Any] = {
         "version": None,
         "settings_checked": False,
         "settings_enabled": False,
