@@ -1,10 +1,13 @@
 """Binary sensor platform for Elk-M1 zones and sensors."""
 import logging
 from typing import Any
-from homeassistant.components.binary_sensor import BinarySensorEntity, BinarySensorDeviceClass
+
+from homeassistant.components.binary_sensor import (
+    BinarySensorDeviceClass,
+    BinarySensorEntity,
+)
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import callback
-from homeassistant.helpers.entity import Entity
 
 from .coordinator import ElkDataUpdateCoordinator
 from .entity import ElkEntity
@@ -113,10 +116,8 @@ class ElkZoneBinarySensor(ElkEntity, BinarySensorEntity):
                     f"to {self._zone.status}"
                 )
         except (IndexError, AttributeError) as e:
-            _LOGGER.error(
-                f"Failed to update zone {self._zone_index}: {e}",
-                exc_info=True
-            )
+            _LOGGER.exception(f"Failed to update zone {self._zone_index}: {e}")
+
         
         # Notify Home Assistant of state change
         self.async_write_ha_state()
