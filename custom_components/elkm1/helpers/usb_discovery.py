@@ -17,7 +17,7 @@ KNOWN_ADAPTERS = {
 }
 
 
-async def discover_elk_ports() -> Dict[str, str]:
+async def discover_elk_ports() -> dict[str, str]:
     """
     Discover available ELK-M1 compatible serial ports.
     
@@ -51,10 +51,10 @@ async def discover_elk_ports() -> Dict[str, str]:
             _LOGGER.debug(f"Found port: {port_path} → {friendly}")
         
         return available_ports
-    
+
     try:
         ports = await loop.run_in_executor(None, _list_ports)
-    except Exception as e:
+except OSError as e:
         _LOGGER.error(f"Error discovering ports: {e}")
         return {}
     
@@ -112,8 +112,6 @@ async def probe_serial_port(port: str, timeout: float = 5.0) -> bool:
             timeout=timeout,
         )
         
-        # Try to connect
-        loop = asyncio.get_event_loop()
         
         async def _connect():
             await asyncio.wait_for(connection.connect(), timeout=timeout)
