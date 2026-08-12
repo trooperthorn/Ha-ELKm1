@@ -1,7 +1,4 @@
 """Elk-M1 Control integration."""
-# At the top with other imports
-from .alarmo_integration import async_setup_alarmo_service
-from __future__ import annotations
 
 import logging
 from typing import Final
@@ -9,68 +6,79 @@ from typing import Final
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import ConfigEntryNotReady
 
 from .const import DOMAIN
 from .coordinator import ElkDataUpdateCoordinator
 from .data import ElkRuntimeData
 
-_LOGGER: logging.getLogger = logging.getLogger(__name__)
+_LOGGER = logging.getLogger(__name__)
 
-PLATFORMS: Final = [
+PLATFORMS: Final[list[Platform]] = [
     Platform.ALARM_CONTROL_PANEL,
     Platform.BINARY_SENSOR,
     Platform.CLIMATE,
     Platform.LIGHT,
+    Platform.NUMBER,
+    Platform.SCENE,
     Platform.SENSOR,
     Platform.SWITCH,
+    Platform.TIME,
 ]
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Set up from a config entry."""
-    _LOGGER.debug("Setting up Elk-M1 integration")
+    """Set up Elk-M1 Control from a config entry."""
     
-    # Create coordinator
+    _LOGGER.info(f"Setting up Elk-M1 at {entry.data.get('serial_port', entry.data.get('host'))}")
+    
+    # Create coordinator with config data
     coordinator = ElkDataUpdateCoordinator(
         hass=hass,
-        serial_port=entry.data["serial_port"],
-        username=entry.data.get("username"),
-        password=entry.data.get("password"),
+        config_entry_data=entry.data,  # ← Pass the entire config entry data
     )
-
-    # Do initial sync (connect, get panel state)
+    
     try:
-        await coordinator.async_config_entry_first_refresh()
+        # Connect and do first refresh
+        await coordinator.async_first_refresh()
     except Exception as err:
-        raise ConfigEntryNotReady(f"Failed to connect to Elk panel: {err}") from err
-
-    # Store coordinator in runtime_data
-    entry.runtime_data = ElkRuntimeData(
-        coordinator=coordinator,
-        serial_port=entry.data["serial_port"],
-    )
-
-    # Set up platforms
+        _LOGGER.error(f"Failed to set up coordinator: {err}")
+        await coordinator.async_disconnect()
+        raise ConfigEntryNotReady(f"Failed to connect: {err}")
+    
+    # Store coordinator in hass.data
+    if DOMAIN not in hass.data:
+        hass.data[DOMAIN] = {}
+    
+    hass.data[DOMAIN][entry.entry_id] = ElkRuntimeData(coordinator=coordinator)
+    
+    # Set up all platforms
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
-
+    
     # Listen for unload
-    entry.async_on_unload(entry.add_update_listener(async_reload_entry))
-
-    # Setup Alarmo integration service
-    await async_setup_alarmo_service(hass)
+    entry.async_on_unload(coordinator.async_shutdown)
     
     return True
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
+    
+    _LOGGER.info(f"Unloading Elk-M1 entry: {entry.entry_id}")
+    
+    # Unload all platforms
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
-
+    
     if unload_ok:
-        coordinator: ElkDataUpdateCoordinator = entry.runtime_data.coordinator
-        await coordinator.async_shutdown()
-
+        # Disconnect coordinator
+        coordinator = hass.data[DOMAIN][entry.entry_id].coordinator
+        await coordinator.async_disconnect()
+        
+        # Remove from hass.data
+        hass.data[DOMAIN].pop(entry.entry_id)
+        
+        if not hass.data[DOMAIN]:
+            hass.data.pop(DOMAIN)
+    
     return unload_ok
 
 
