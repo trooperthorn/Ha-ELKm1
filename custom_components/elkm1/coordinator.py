@@ -7,7 +7,7 @@ from datetime import timedelta
 from typing import Any
 
 from elkm1_lib import Elk
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .const import (
@@ -49,6 +49,12 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator[ElkPanelStatus]):
         self._serial_queue: ElkSerialQueue | None = None
         self._liveness_task: asyncio.Task[None] | None = None
         self._connected = False
+
+        # PART 4: Track previous zone states to fire events on changes
+        self._previous_zone_states: dict[int, bool] = {}
+        self._previous_output_states: dict[int, bool] = {}
+        self._previous_armed_state: bool | None = None
+        self._previous_armed_mode: str | None = None
 
     async def _async_setup(self) -> None:
         """Set up connection before first refresh."""
@@ -97,8 +103,6 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator[ElkPanelStatus]):
 
         try:
             # Query panel state
-            # The elkm1_lib should handle unsolicited updates via callbacks
-            # but you can poll for status as well
             panel_data: ElkPanelStatus = {
                 "armed": self._elk.panel.armed,
                 "armed_mode": self._elk.panel.armed_mode,
@@ -107,11 +111,143 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator[ElkPanelStatus]):
                 "zones_faulted": [i for i, z in enumerate(self._elk.zones) if z.faulted],
                 "outputs_active": [i for i, o in enumerate(self._elk.outputs) if o.status],
             }
+
+            # PART 4: Fire events for zone state changes
+            await self._async_check_zone_changes()
+            
+            # PART 4: Fire events for output state changes
+            await self._async_check_output_changes()
+            
+            # PART 4: Fire events for armed state changes
+            await self._async_check_armed_changes(panel_data)
+
             return panel_data
 
         except Exception as err:
             self._connected = False
             raise UpdateFailed(f"Error updating Elk data: {err}") from err
+
+    # ============================================================================
+    # PART 4: Event Firing Methods - Fire Zone Events for Automations
+    # ============================================================================
+
+    @callback
+    async def _async_check_zone_changes(self) -> None:
+        """Check for zone state changes and fire events."""
+        if not self._elk:
+            return
+
+        for zone_index, zone in enumerate(self._elk.zones):
+            if not zone:
+                continue
+
+            zone_number = zone_index + 1
+            is_open = zone.faulted or zone.open
+            
+            # Get previous state
+            prev_state = self._previous_zone_states.get(zone_index)
+            
+            # Fire event if state changed
+            if prev_state != is_open:
+                event_type = "open" if is_open else "closed"
+                
+                self.hass.bus.async_fire(
+                    f"{DOMAIN}_zone_{event_type}",
+                    {
+                        "zone_number": zone_number,
+                        "zone_name": zone.name,
+                        "zone_index": zone_index,
+                        "zone_type": zone.zone_type,
+                        "is_open": is_open,
+                        "timestamp": self.hass.loop.time(),
+                    },
+                )
+                
+                _LOGGER.debug(
+                    f"Zone {zone_number} ({zone.name}) {event_type}: {is_open}"
+                )
+                
+                self._previous_zone_states[zone_index] = is_open
+
+    @callback
+    async def _async_check_output_changes(self) -> None:
+        """Check for output state changes and fire events."""
+        if not self._elk:
+            return
+
+        for output_index, output in enumerate(self._elk.outputs):
+            if not output:
+                continue
+
+            output_number = output_index + 1
+            is_active = output.status
+            
+            # Get previous state
+            prev_state = self._previous_output_states.get(output_index)
+            
+            # Fire event if state changed
+            if prev_state != is_active:
+                event_type = "activated" if is_active else "deactivated"
+                
+                self.hass.bus.async_fire(
+                    f"{DOMAIN}_output_{event_type}",
+                    {
+                        "output_number": output_number,
+                        "output_name": output.name,
+                        "output_index": output_index,
+                        "is_active": is_active,
+                        "timestamp": self.hass.loop.time(),
+                    },
+                )
+                
+                _LOGGER.debug(
+                    f"Output {output_number} ({output.name}) {event_type}: {is_active}"
+                )
+                
+                self._previous_output_states[output_index] = is_active
+
+    @callback
+    async def _async_check_armed_changes(self, panel_data: ElkPanelStatus) -> None:
+        """Check for armed/disarmed state changes and fire events."""
+        is_armed = panel_data.get("armed", False)
+        armed_mode = panel_data.get("armed_mode", "disarmed")
+        
+        # Fire event if armed state changed
+        if self._previous_armed_state != is_armed:
+            event_type = "armed" if is_armed else "disarmed"
+            
+            self.hass.bus.async_fire(
+                f"{DOMAIN}_panel_{event_type}",
+                {
+                    "armed": is_armed,
+                    "armed_mode": armed_mode,
+                    "last_user": panel_data.get("last_user"),
+                    "last_user_name": panel_data.get("last_user_name"),
+                    "timestamp": self.hass.loop.time(),
+                },
+            )
+            
+            _LOGGER.info(f"Panel {event_type}: mode={armed_mode}")
+            self._previous_armed_state = is_armed
+
+        # Fire event if armed mode changed
+        if self._previous_armed_mode != armed_mode and is_armed:
+            self.hass.bus.async_fire(
+                f"{DOMAIN}_panel_mode_changed",
+                {
+                    "armed_mode": armed_mode,
+                    "last_user": panel_data.get("last_user"),
+                    "last_user_name": panel_data.get("last_user_name"),
+                    "timestamp": self.hass.loop.time(),
+                },
+            )
+            
+            _LOGGER.info(f"Panel armed mode changed to: {armed_mode}")
+            self._previous_armed_mode = armed_mode
+
+    # ============================================================================
+    # End of Part 4 Event Firing
+    # ============================================================================
 
     async def _async_liveness_check(self) -> None:
         """Monitor connection liveness; reconnect if silent."""
