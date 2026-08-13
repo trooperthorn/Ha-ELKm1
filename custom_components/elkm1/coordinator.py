@@ -213,40 +213,18 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator):
             tasks = getattr(self._elk, "tasks", [])
             thermostat = getattr(self._elk, "thermostats", getattr(self._elk, "thermostat", []))
             
-            # Log for debugging
-            _LOGGER.debug(
-                f"Coordinator update: "
-                f"zones={len(zones) if zones else 0}, "
-                f"areas={len(areas) if areas else 0}, "
-                f"outputs={len(outputs) if outputs else 0}"
-            )
-            
-            # Log zone states for debugging
-            # Log zone states safely for debugging
-            if zones:
-                for zone in zones:
-                    try:
-                        _LOGGER.debug(
-                            f"  Zone {getattr(zone, 'number', '?')} ({getattr(zone, 'name', 'Unknown')}): "
-                            f"status={getattr(zone, 'status', 'unknown')}, "
-                            f"faulted={getattr(zone, 'faulted', 'unknown')}, "
-                            f"open={getattr(zone, 'open', 'unknown')}"
-                        )
-                    except Exception:
-                        pass
-            
-            # Return all data in standardized format
+            # Return all data in standardized format without calling len() or iterating
             return {
-                "zones": zones if zones else [],
+                "zones": zones,
                 "panel": panel,
-                "areas": areas if areas else [],
-                "outputs": outputs if outputs else [],
-                "tasks": tasks if tasks else [],
-                "thermostat": thermostat if thermostat else [],
+                "areas": areas,
+                "outputs": outputs,
+                "tasks": tasks,
+                "thermostat": thermostat,
             }
-        except (OSError, AttributeError, KeyError) as err:
+        except Exception as err:
             _LOGGER.exception("Error fetching coordinator data")
-            raise UpdateFailed(f"Failed to fetch data: {err}") from err    
+            raise UpdateFailed(f"Failed to fetch data: {err}") from err
 
     async def async_first_refresh(self) -> None:
         """Connect and do first data refresh."""
