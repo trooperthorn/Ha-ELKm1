@@ -5,8 +5,10 @@ from typing import Any
 
 import voluptuous as vol  # type: ignore[import-untyped]
 from homeassistant import config_entries
+from homeassistant.helpers import selector
 from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_PORT, CONF_USERNAME
 from homeassistant.data_entry_flow import FlowResult
+
 
 from .const import (
     CONF_CONNECTION_TYPE,
@@ -17,7 +19,7 @@ from .const import (
     CONNECTION_SERIAL,
     DOMAIN,
 )
-from .helpers.usb_discovery import discover_elk_ports, probe_serial_port
+from .helpers.usb_discovery import probe_serial_port
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -92,22 +94,10 @@ class ElkM1ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: ignore
                     },
                 )
 
-        # Discover available ports
-        try:
-            ports = await discover_elk_ports()
-            description_placeholders = {"discovered": str(len(ports))}
-        except (OSError, ValueError) as e:
-            _LOGGER.error(f"Error probing port: {e}")
-            ports = {}
-            description_placeholders = {"discovered": "0"}
-
-        if not ports:
-            ports = {"manual": "Enter port manually"}
-
-        # Serial configuration schema - PIN instead of username/password
+        # Serial configuration schema using the native UI Selector
         data_schema = vol.Schema(
             {
-                vol.Required(CONF_SERIAL_PORT): vol.In(ports),
+                vol.Required(CONF_SERIAL_PORT): selector.SerialPortSelector(),
                 vol.Optional(CONF_PIN, default=""): str,  # PIN for commands
                 vol.Optional(CONF_VERIFY_DEVICE, default=True): bool,
             }
@@ -117,7 +107,7 @@ class ElkM1ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: ignore
             step_id="serial",
             data_schema=data_schema,
             errors=errors,
-            description_placeholders=description_placeholders,
+            description_placeholders={},
         )
 
     async def async_step_network(
@@ -199,21 +189,12 @@ class ElkM1ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: ignore
 
         # Show appropriate form based on connection type
         if connection_type == CONNECTION_SERIAL:
-            try:
-                ports = await discover_elk_ports()
-            except (OSError, ValueError) as e:
-                _LOGGER.error(f"Error probing port: {e}")
-                ports = {}
-
-            if not ports:
-                ports = {"manual": "Enter port manually"}
-
             data_schema = vol.Schema(
                 {
                     vol.Required(
                         CONF_SERIAL_PORT,
                         default=config_entry.data.get(CONF_SERIAL_PORT),
-                    ): vol.In(ports),
+                    ): selector.SerialPortSelector(),
                     vol.Optional(
                         CONF_PIN,
                         default=config_entry.data.get(CONF_PIN, ""),
