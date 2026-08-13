@@ -6,6 +6,7 @@ import os
 from typing import Any
 
 import voluptuous as vol  # type: ignore[import-untyped]
+import homeassistant.helpers.config_validation as cv
 from homeassistant import config_entries
 from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_PORT, CONF_USERNAME
 from homeassistant.data_entry_flow import FlowResult
@@ -24,6 +25,21 @@ from .helpers.usb_discovery import probe_serial_port
 
 _LOGGER = logging.getLogger(__name__)
 
+# Serial schema
+SERIAL_SCHEMA = vol.Schema({
+    vol.Required(CONF_SERIAL_PORT): selector.SerialPortSelector(),
+    vol.Optional(CONF_PIN, default=""): vol.Any(int, str, None),
+    vol.Optional(CONF_VERIFY_DEVICE, default=True): bool,
+})
+
+# Network schema
+NETWORK_SCHEMA = vol.Schema({
+    vol.Required(CONF_HOST): str,
+    vol.Optional(CONF_PORT, default=2101): cv.port,
+    vol.Required(CONF_USERNAME): str,
+    vol.Required(CONF_PASSWORD): str,
+    vol.Optional(CONF_PIN, default=""): vol.Any(int, str, None),
+})
 
 def get_persistent_port_path(device_path: str) -> str:
     """Map a raw /dev/ttyUSBx path to its persistent /dev/serial/by-id/ symlink."""
@@ -97,6 +113,12 @@ class ElkM1ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: ignore
         """Step 2a: Serial/USB configuration with PIN."""
         errors = {}
 
+        # Safely count the available serial ports
+        ports = await self.hass.async_add_executor_job(
+            lambda: glob.glob("/dev/serial/by-id/*") + glob.glob("/dev/ttyUSB*")
+        )
+        ports_count = len(ports)
+
         if user_input is not None:
             raw_port = user_input[CONF_SERIAL_PORT]
             
@@ -119,21 +141,24 @@ class ElkM1ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: ignore
                     errors["base"] = "cannot_connect"
             
             if not errors:
+                # Normalize PIN: ignore if empty, None, 0, or "0"
+                raw_pin = user_input.get(CONF_PIN)
+                pin = str(raw_pin).strip() if raw_pin not in (None, "", 0, "0") else ""
+
                 return self.async_create_entry(
                     title=f"Elk-M1 Serial @ {port}",
                     data={
                         CONF_CONNECTION_TYPE: CONNECTION_SERIAL,
                         CONF_SERIAL_PORT: port,
-                        CONF_PIN: user_input.get(CONF_PIN, ""),  # PIN for commands
-                        # Note: No username/password for serial
+                        CONF_PIN: pin,  # Saves as empty string if ignored
                     },
                 )
 
-        # Serial configuration schema using the native UI Selector
+        # Serial configuration schema using flexible PIN type to catch blanks/0
         data_schema = vol.Schema(
             {
                 vol.Required(CONF_SERIAL_PORT): selector.SerialPortSelector(),
-                vol.Optional(CONF_PIN, default=""): str,  # PIN for commands
+                vol.Optional(CONF_PIN, default=""): vol.Any(int, str, None),
                 vol.Optional(CONF_VERIFY_DEVICE, default=True): bool,
             }
         )
@@ -142,7 +167,7 @@ class ElkM1ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: ignore
             step_id="serial",
             data_schema=data_schema,
             errors=errors,
-            description_placeholders={},
+            description_placeholders={"discovered": str(ports_count)}
         )
 
     async def async_step_network(
@@ -223,6 +248,11 @@ class ElkM1ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: ignore
                 )
                 user_input[CONF_SERIAL_PORT] = persistent_port
 
+            # Normalize PIN if it was modified during reconfiguration
+            if CONF_PIN in user_input:
+                raw_pin = user_input[CONF_PIN]
+                user_input[CONF_PIN] = str(raw_pin).strip() if raw_pin not in (None, "", 0, "0") else ""
+
             self.hass.config_entries.async_update_entry(
                 config_entry,
                 data={**config_entry.data, **user_input},
@@ -241,7 +271,7 @@ class ElkM1ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: ignore
                     vol.Optional(
                         CONF_PIN,
                         default=config_entry.data.get(CONF_PIN, ""),
-                    ): str,
+                    ): vol.Any(int, str, None),
                 }
             )
         else:
@@ -254,7 +284,8 @@ class ElkM1ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: ignore
                     ): str,
                     vol.Optional(
                         CONF_PORT,
-                        default=config_entry.data.get(CONF_PORT, 2101),
+                        # FIX: Changed int() to int (passing type, not calling function)
+                        default=int(config_entry.data.get(CONF_PORT, 2101)),
                     ): int,
                     vol.Required(
                         CONF_USERNAME,
@@ -271,7 +302,6 @@ class ElkM1ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: ignore
             step_id="reconfigure",
             data_schema=data_schema,
         )
-
 
 async def probe_network_device(
     host: str,
