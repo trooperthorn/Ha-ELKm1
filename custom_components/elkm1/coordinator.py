@@ -1,7 +1,7 @@
 """Data update coordinator for Elk-M1 Control integration."""
-import glob
+
 import logging
-import os
+
 from datetime import timedelta
 from typing import Any
 
@@ -23,7 +23,6 @@ from .const import (
     CONNECTION_NETWORK,
     CONNECTION_SERIAL,
     COORDINATOR_UPDATE_INTERVAL,
-    ELKM1_BAUDRATE,
 )
 
 _LOGGER = logging.getLogger(__name__)
