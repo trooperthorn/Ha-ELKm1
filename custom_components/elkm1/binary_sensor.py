@@ -9,8 +9,8 @@ from homeassistant.components.binary_sensor import (
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import callback
 
-from ..coordinator import ElkDataUpdateCoordinator
-from ..entity import ElkEntity
+from .coordinator import ElkDataUpdateCoordinator
+from .entity import ElkEntity
 
 _LOGGER = logging.getLogger(__name__)
 
