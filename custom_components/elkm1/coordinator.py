@@ -114,6 +114,7 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator):
 
     async def async_connect(self) -> None:
         """Establish connection to ELK-M1 panel."""
+        import asyncio
         from .helpers.panel_settings import (
             check_panel_version,
             verify_panel_configuration,
@@ -134,7 +135,23 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator):
             # Initialize Elk with the dictionary
             self._elk = Elk(config)
 
-            await self._elk.connect()
+            # 1. Create the event tracker to monitor connection state
+            connected_event = asyncio.Event()
+            
+            def on_connected(*args, **kwargs):
+                connected_event.set()
+                
+            self._elk.add_handler("connected", on_connected)
+
+            # 2. Call connect synchronously (NO AWAIT)
+            self._elk.connect()
+            
+            # 3. Wait for the event to trigger, up to a 10 second timeout
+            await asyncio.wait_for(connected_event.wait(), timeout=10.0)
+            
+            # 4. Wait a brief moment for the initial sync data to populate
+            await asyncio.sleep(1.5)
+
             _LOGGER.info(f"Connected to ELK-M1 at {self._obfuscated_url()}")
 
             await check_panel_version(self._elk)
@@ -150,7 +167,7 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator):
                                 f"({status['name']}) is disabled"
                             )
 
-        except (OSError, TimeoutError, ValueError) as err:
+        except (OSError, TimeoutError, ValueError, asyncio.TimeoutError) as err:
             _LOGGER.error(f"Failed to connect to ELK-M1: {err}")
             raise UpdateFailed(f"Connection failed: {err}") from err
 
