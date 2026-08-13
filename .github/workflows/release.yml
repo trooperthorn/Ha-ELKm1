@@ -1,50 +1,53 @@
-name: Auto-Release
+name: Auto-Release Custom Component
 
 on:
   push:
     branches: [main]
+  workflow_dispatch: # Also allows you to trigger it manually if needed
+
+permissions:
+  contents: write # Required to create tags and releases
 
 jobs:
   release:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Required to count previous tags for same-day runs
       
-      - name: Generate version from date
+      - name: Generate version from date (with run counter)
         id: version
         run: |
-          VERSION=$(date +%Y.%m.%d)
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          git fetch --tags --force
+          CALVER=$(date +'%Y.%m.%d')
+          
+          # Count how many tags already exist today
+          TAG_COUNT=$(git tag -l "v${CALVER}*" | wc -l | xargs)
+          
+          if [ "$TAG_COUNT" -eq 0 ]; then
+            VERSION="$CALVER"
+          else
+            VERSION="${CALVER}.${TAG_COUNT}"
+          fi
+          
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+          echo "TAG=v$VERSION" >> $GITHUB_OUTPUT
       
       - name: Update manifest.json
         run: |
-          python3 << 'EOF'
-          import json
-          with open('custom_components/elkm1/manifest.json', 'r') as f:
-              manifest = json.load(f)
-          manifest['version'] = "${{ steps.version.outputs.version }}"
-          with open('custom_components/elkm1/manifest.json', 'w') as f:
-              json.dump(manifest, f, indent=2)
-          EOF
+          jq ".version = \"${{ steps.version.outputs.VERSION }}\"" custom_components/elkm1/manifest.json > tmp.json && mv tmp.json custom_components/elkm1/manifest.json
       
-      - name: Commit updated manifest
+      - name: Zip integration
         run: |
-          git config user.email "action@github.com"
-          git config user.name "GitHub Action"
-          git add custom_components/elkm1/manifest.json
-          git commit -m "Auto-update version" || true
-          git push || true
+          cd custom_components/elkm1
+          zip -r ../../elkm1.zip .
       
       - name: Create Release
-        uses: softprops/action-gh-release@v1
-        with:
-          tag_name: v${{ steps.version.outputs.version }}
-          name: Elk-M1 v${{ steps.version.outputs.version }}
-          body: |
-            Automatic release from latest commit
-            Commit: ${{ github.sha }}
-          draft: false
-          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${{ steps.version.outputs.TAG }}" elkm1.zip \
+            --title "Elk-M1 ${{ steps.version.outputs.TAG }}" \
+            --notes "Automatic release from latest commit: ${{ github.sha }}"
