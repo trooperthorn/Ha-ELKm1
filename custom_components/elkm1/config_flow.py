@@ -29,7 +29,7 @@ def get_persistent_port_path(device_path: str) -> str:
     """Map a raw /dev/ttyUSBx path to its persistent /dev/serial/by-id/ symlink."""
     try:
         resolved_target = os.path.realpath(device_path)
-    except Exception:
+    except OSError:
         return device_path
     
     # 1. First choice: Check /dev/serial/by-id/ (Unique by hardware serial number)
@@ -37,7 +37,8 @@ def get_persistent_port_path(device_path: str) -> str:
         try:
             if os.path.realpath(symlink) == resolved_target:
                 return symlink
-        except Exception:
+        except OSError as err:
+            _LOGGER.debug("Could not resolve symlink %s: %s", symlink, err)
             continue
 
     # 2. Second choice: Check /dev/serial/by-path/ (Unique by physical USB socket)
@@ -45,7 +46,8 @@ def get_persistent_port_path(device_path: str) -> str:
         try:
             if os.path.realpath(symlink) == resolved_target:
                 return symlink
-        except Exception:
+        except OSError as err:
+            _LOGGER.debug("Could not resolve symlink %s: %s", symlink, err)
             continue
 
     # Fallback to provided path if no persistent symlinks exist
