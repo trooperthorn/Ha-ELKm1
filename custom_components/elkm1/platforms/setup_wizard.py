@@ -51,7 +51,7 @@ async def run_panel_setup_wizard(elk_connection: Elk, connection_type: str) -> d
         
         if not all_enabled:
             _LOGGER.info("Some settings are disabled. Attempting to enable...")
-            enable_results = await enable_required_settings(elk_connection: Elk)
+            enable_results = await enable_required_settings(elk_connection)
             results["settings_enabled"] = all(enable_results.values())
             results["details"]["enable_results"] = enable_results
             
