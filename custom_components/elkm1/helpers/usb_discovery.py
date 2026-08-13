@@ -66,7 +66,7 @@ async def probe_serial_port(port: str, timeout: float = 5.0) -> bool:
     """
     Test if a serial port has an ELK-M1 panel.
     
-    Attempts to connect and send a ping command.
+    Attempts to connect and wait for the connected event.
     
     Args:
         port: Serial port path (e.g., "/dev/ttyUSB0")
@@ -75,7 +75,6 @@ async def probe_serial_port(port: str, timeout: float = 5.0) -> bool:
     Returns:
         True if ELK-M1 detected, False otherwise
     """
-    # FIX 1: Import the correct Elk class
     from elkm1_lib import Elk
     
     try:
@@ -86,28 +85,39 @@ async def probe_serial_port(port: str, timeout: float = 5.0) -> bool:
         else:
             # Windows COM port
             url = f"serial://{port}"
-        
+            
         _LOGGER.debug(f"Probing port: {url}")
         
-        # FIX 2: Pass configuration as a dictionary, not as kwargs
         config = {"url": url}
         connection = Elk(config)
         
-        async def _connect():
-            await asyncio.wait_for(connection.connect(), timeout=timeout)
-            # If we got here, connection successful
-            # FIX 3: Remove 'await' because disconnect() is a synchronous method
-            connection.disconnect()
+        # 1. Use an Event to track when elkm1_lib successfully connects
+        connected_event = asyncio.Event()
+        
+        def on_connected(*args, **kwargs):
+            connected_event.set()
+            
+        # Hook into the native 'connected' callback in elkm1_lib
+        connection.add_handler("connected", on_connected)
+        
+        # 2. connect() is synchronous and returns None. Do NOT await it.
+        # This safely creates the background tasks without crashing.
+        connection.connect()
+        
+        try:
+            # 3. Wait for the 'connected' event to trigger, up to the timeout limit
+            await asyncio.wait_for(connected_event.wait(), timeout=timeout)
+            _LOGGER.info(f"Port {url}: ELK-M1 detected ✓")
             return True
-        
-        result = await _connect()
-        _LOGGER.info(f"Port {url}: ELK-M1 detected ✓")
-        return result
-        
-    except asyncio.TimeoutError:
-        _LOGGER.debug(f"Port {port}: Connection timeout (no device?)")
-        return False
-    except Exception as e:  # noqa: BLE001
-        # Changed to catch all exceptions to prevent UI crashes if elkm1_lib throws a weird error
+        except asyncio.TimeoutError:
+            _LOGGER.debug(f"Port {port}: Connection timeout (no device?)")
+            return False
+        finally:
+            # 4. CRITICAL FIX: Guarantee disconnect runs no matter what.
+            # This cleanly kills the _read_stream and _write_stream tasks
+            # and releases the serial port so other integrations aren't locked out.
+            connection.disconnect()
+            
+    except Exception as e:
         _LOGGER.debug(f"Port {port}: No ELK-M1 detected - {e}")
         return False
