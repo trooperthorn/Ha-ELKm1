@@ -8,10 +8,21 @@ on:
 permissions:
   contents: write # Required to create tags and releases
 
+# This concurrency block creates the 10-minute debounce. 
+# Any new push will cancel the currently running/sleeping workflow and start fresh.
+concurrency:
+  group: "release-${{ github.ref }}"
+  cancel-in-progress: true
+
 jobs:
   release:
     runs-on: ubuntu-latest
     steps:
+      - name: Wait for inactivity
+        run: |
+          echo "Waiting 10 minutes to ensure no further updates are pushed..."
+          sleep 600
+
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
@@ -26,11 +37,9 @@ jobs:
           # Count how many tags already exist today
           TAG_COUNT=$(git tag -l "v${CALVER}*" | wc -l | xargs)
           
-          if [ "$TAG_COUNT" -eq 0 ]; then
-            VERSION="$CALVER"
-          else
-            VERSION="${CALVER}.${TAG_COUNT}"
-          fi
+          # Force the count to be at least two digits (00, 01... 09, 10)
+          PADDED_COUNT=$(printf "%02d" $TAG_COUNT)
+          VERSION="${CALVER}.${PADDED_COUNT}"
           
           echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
           echo "TAG=v$VERSION" >> $GITHUB_OUTPUT
