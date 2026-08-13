@@ -1,63 +1,102 @@
-# Ha-ELKm1
+# Davis Vantage Weather
 
-Home Assistant custom integration providing **Elk M1 Gold & Platinum** support with expanded **Set Command** access.
+[![GitHub Release](https://img.shields.io/github/v/release/trooperthorn/ha_int_elkm1?style=for-the-badge)](https://github.com/trooperthorn/ha_int_elkm1/releases)
+[![GitHub Activity](https://img.shields.io/github/commit-activity/m/trooperthorn/ha_int_elkm1?style=for-the-badge)](https://github.com/trooperthorn/ha_int_elkm1/commits/main)
+[![HACS Custom](https://img.shields.io/badge/HACS-Custom-orange.svg?style=for-the-badge)](https://github.com/hacs/integration)
+
+A feature-rich Home Assistant custom integration for Davis Vantage weather stations, supporting both serial and network connections with advanced weather view support, LOOP2 protocol integration, and granular wind rose directions.
 
 ---
 
-[![GitHub Release](https://img.shields.io/github/v/release/trooperthorn/ha_int_elkm1?style=for-the-badge)](https://github.com/trooperthorn/ha_int_elkm1/releases)
-[![GitHub Activity](https://img.shields.io/github/commit-activity/m/trooperthorn/ha_int_elkm1?style=for-the-badge)](https://github.com/trooperthorn/ha_int_elkm1/commits/master)
-[![HACS Custom](https://img.shields.io/badge/HACS-Custom-orange.svg?style=for-the-badge)](https://github.com/hacs/integration)
-
 ## Features
 
-- **Flexible Connection Modes:** Supports both direct Serial/USB and Ethernet (M1XEP) connections.
-- **Enhanced Control:** Advanced access to Elk-M1 set commands directly through Home Assistant.
-- **Smart Hardware Discovery:** Built-in validation during setup safely probes your system's hardware to ensure target ports match an authentic Elk-M1 panel, automatically resolving persistent, reboot-safe USB paths.
+* **Native Weather Category:** Designed for seamless integration into Home Assistant weather cards.
+* **LOOP2 Protocol Support:** Automatic selection for newer firmware models.
+* **Granular Wind Rose:** Expanded directional reporting including **NNE, SSW, NNW**, etc.
+* **Built-in Diagnostics & Testing:** Includes automatic connection pre-testing before adding serial devices and a dedicated debug connection option.
+* **Comprehensive Actions:** Remotely set panel time, modify archive periods, update rain collectors, and pull raw diagnostic logs directly from Home Assistant.
+
+---
+
+## Supported Hardware
+
+| Model | Compatible |
+| :--- | :---: |
+| Davis WeatherLink SER (6510SER) | Yes |
+| Davis WeatherLink USB (6510USB) | Yes |
+| Davis WeatherlinkIP (6555IP) | Yes [^3] |
+| Vantage Vue | Yes |
+| WeatherLink Live | No |
+| Davis Weather Envoy8X (6318EU) | No |
+
+---
+
+## Prerequisites
+
+Ensure your Davis console is running compatible firmware:
+
+* **Davis Console 3.15 and newer** recommended for full feature support.
+
+| Model | Min Version |
+| :--- | :---: |
+| Vantage Pro2 Console (Wired/Cabled) | 3.88 *(Tested and works on 3.15 via serial)* |
+| Weather Envoy Wireless | 3.88 |
+| Weather Envoy Cabled | 3.12 |
+| WeatherLinkIP Data Logger | 1.1.5 |
 
 ---
 
 ## Installation
 
-### HACS (Recommended)
-1. Open HACS in Home Assistant.
-2. Click the three dots in the top right corner and select **Custom repositories**.
-3. Add `https://github.com/trooperthorn/ha_int_elkm1` as an **Integration**.
-4. Click **Download** and restart Home Assistant.
-
-### Manual
-1. Download the latest release.
-2. Copy the `custom_components/elkm1` directory into your Home Assistant `config/custom_components` directory.
-3. Restart Home Assistant.
+### Via HACS (Recommended)
+1. Open **HACS** in your Home Assistant instance.
+2. Click **Integrations**, then click the three dots in the top right corner and select **Custom repositories**.
+3. Add `https://github.com/trooperthorn/ha_int_elkm1` with category **Integration**.
+4. Search for **Davis Vantage**, download, and restart Home Assistant.
 
 ---
 
-## Setup & Configuration Flow
+## Setup & Configuration
 
-The integration features a guided UI setup flow allowing you to choose between standard connection protocols. Go to **Settings** > **Devices & Services** > **Add Integration** and search for **Elk M1 Control**.
+During setup, choose your connection method:
 
-### Option A: Serial/USB (Direct Connection)
-The integration automatically scans your system and safely tests available serial ports to find your panel.
-1. Select **Serial/USB**.
-2. Open the **Port** dropdown. The integration will identify the panel with an `(ELK-M1 Panel Detected) 🎯` tag.
-3. Enter your optional validation PIN and submit.
-
-### Option B: Network (Elk M1XEP or Remote)
-1. Select **Network**.
-2. Enter the **Host** IP address of your M1XEP.
-3. Enter your Elk-M1 **Username** and **Password** (and optional PIN). 
-4. The integration will test the connection and configure the device.
+* **Serial / USB:** Select your device port. The integration automatically performs a pre-connection test to verify the Davis device responds before finishing configuration.
+* **Network:** Provide the hostname or IP address and port number (typically port `22222`). 
+  > *Tip: If unsure, browse to the IP address of your WeatherLink IP logger to verify the active port number on its configuration page.*
 
 ---
 
-## Panel Configuration Requirements
+## Entities Created
 
-To ensure Home Assistant properly tracks state changes, you must enable Global Settings 35-40 on your Elk panel using ElkRP. These settings dictate what events the panel broadcasts over the serial/network connection.
+### Weather & Environment
+* **Barometric Pressure:** Current, Daily High/Low, High/Low Timestamps, and Trend (Stable, Rising/Falling Slowly/Rapidly).
+* **Temperature & Humidity:** Outside Temperature, Inside Temperature, Feels Like, Heat Index, Wind Chill, Dew Point (with Daily Highs/Lows), Outside Humidity, and Extra Humidity/Temperature (Sensors 1–7).
+* **Precipitation:** Current Rain Rate, Is Raining, Daily/Monthly/Yearly Rain totals, Rain Storm total, and Storm Start Date.
+* **Solar & UV:** Solar Radiation, UV Level (with Daily Highs and Peaks).
+* **Wind:** Current Wind Speed, 10-Minute Average, Archive Average, Wind Gust, Wind Direction (Degrees & Cardinal Rose), and Beaufort scale [^4] [^5].
+* **Astronomical:** Sunrise and Sunset times, Forecast Icons, and Forecast Rules.
 
-| Setting | Function | Impact if Disabled |
-| :---: | :--- | :--- |
-| **35** | Event Log (who armed/disarmed) | Cannot track user state changes |
-| **36** | Zone Changes | Zones do not update in real-time |
-| **37** | Output Changes | Outputs do not update |
-| **38** | Automation Tasks | Tasks do not report |
-| **39** | Light Changes | Lights do not update |
-| **40** | Keypad Changes | Alarm state does not update |
+### Diagnostic Entities
+* Archive Interval [^2], Battery Voltage, Console Elevation, Latitude, Longitude, Rain Collector Type, Last Error Message/Time, Last Fetch Time, and Last Success Time.
+
+---
+
+## Available Actions
+
+* **`davis_vantage.set_davis_time`**: Synchronize the weather station's clock with Home Assistant.
+* **`davis_vantage.get_davis_time`**: Retrieve the current clock reading from the console.
+* **`davis_vantage.get_raw_data`**: Pull raw, unprocessed byte data from the most recent fetch cycle.
+* **`davis_vantage.get_information`**: Fetch console firmware version and system diagnostics.
+* **`davis_vantage.set_yearly_rain`**: Adjust yearly rainfall totals in calibration clicks.
+* **`davis_vantage.set_archive_period`**: Change archive logging intervals (1, 5, 10, 15, 30, 60, 120 mins). *Warning: This clears archived console memory.*
+* **`davis_vantage.set_rain_collector`**: Configure tipping bucket collector size (`0.01"`, `0.2 mm`, or `0.1 mm`).
+
+---
+
+## Footnotes
+
+[^1]: If values show as "Unknown", ensure the Davis console time is set correctly using the *Get/Set Davis Time* actions.
+[^2]: Archive intervals can be modified via the *Set Archive Period* action.
+[^3]: Using WeatherLinkIP while simultaneously streaming data to WeatherLink.com may cause socket conflicts; disabling cloud forwarding is recommended for local polling stability.
+[^4]: Wind direction entities report as `Unknown` if current wind speed is `0.0`.
+[^5]: Mean calculation adjustments for wind direction may require clearing historical long-term statistics in Home Assistant database if migrating from older versions.
