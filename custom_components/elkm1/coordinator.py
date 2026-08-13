@@ -67,7 +67,7 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator):
         """Build connection URL based on connection type.
         
         Returns:
-            Connection URL for ElkM1Connection
+            Connection URL for Elk
             - Serial: "serial:///dev/serial/by-id/...?baud=115200"
             - Network: "elk://192.168.1.100:2101"
         """
@@ -77,15 +77,9 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator):
             if not serial_port:
                 raise ValueError("Serial port not configured")
             
-            # --- Auto-upgrade legacy ttyUSB paths to persistent by-id paths ---
-            try:
-                resolved_target = os.path.realpath(serial_port)
-                for symlink in glob.glob("/dev/serial/by-id/*"):
-                    if os.path.realpath(symlink) == resolved_target:
-                        serial_port = symlink
-                        break
-            except OSError as err:
-                _LOGGER.debug("Failed to resolve persistent path for %s: %s", serial_port, err)
+            # We removed the blocking glob/os.path.realpath logic here.
+            # When you select the /dev/serial/by-id/ path in the setup UI, 
+            # it is passed directly to the URL safely.
             
             # Build serial URL with the specific Elk-M1 baud rate appended
             url = f"serial://{serial_port}?baud={ELKM1_BAUDRATE}"
