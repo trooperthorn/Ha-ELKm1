@@ -23,7 +23,6 @@ async def run_panel_setup_wizard(elk_connection: Elk, connection_type: str) -> d
     Returns:
         Setup results dictionary
     """
-    # FIX: Add the type hint to 'results' right here
     results: dict[str, Any] = {
         "version": None,
         "settings_checked": False,
@@ -41,8 +40,8 @@ async def run_panel_setup_wizard(elk_connection: Elk, connection_type: str) -> d
     if connection_type == "serial":
         _LOGGER.info("Serial connection - checking global settings...")
         
-        # Check current settings
-        enable_results = await enable_required_settings(elk_connection)
+        # Fetch current settings dictionary to satisfy references
+        settings = await check_required_settings(elk_connection)
         results["settings_checked"] = True
         results["details"]["initial_settings"] = settings
         
@@ -58,5 +57,5 @@ async def run_panel_setup_wizard(elk_connection: Elk, connection_type: str) -> d
             # Re-check settings
             settings = await check_required_settings(elk_connection)
             results["details"]["final_settings"] = settings
-    
+
     return results
