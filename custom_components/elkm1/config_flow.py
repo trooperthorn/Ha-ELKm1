@@ -3,12 +3,11 @@
 import logging
 from typing import Any
 
-import voluptuous as vol  # type: ignore[import-untyped]
 from homeassistant import config_entries
-
 from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_PORT, CONF_USERNAME
 from homeassistant.data_entry_flow import FlowResult
 from homeassistant.helpers import selector
+import voluptuous as vol  # type: ignore[import-untyped]
 
 from .const import (
     CONF_CONNECTION_TYPE,
