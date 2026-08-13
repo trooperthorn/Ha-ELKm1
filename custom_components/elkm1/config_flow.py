@@ -29,7 +29,7 @@ _LOGGER = logging.getLogger(__name__)
 # Serial schema
 SERIAL_SCHEMA = vol.Schema({
     vol.Required(CONF_SERIAL_PORT): selector.SerialPortSelector(),
-    vol.Optional(CONF_PIN, default=""): vol.Any(int, str, None),
+    vol.Optional(CONF_PIN, default=""): str,
     vol.Optional(CONF_VERIFY_DEVICE, default=True): bool,
 })
 
@@ -39,7 +39,7 @@ NETWORK_SCHEMA = vol.Schema({
     vol.Optional(CONF_PORT, default=2101): cv.port,
     vol.Required(CONF_USERNAME): str,
     vol.Required(CONF_PASSWORD): str,
-    vol.Optional(CONF_PIN, default=""): vol.Any(int, str, None),
+    vol.Optional(CONF_PIN, default=""): str,
 })
 
 def get_persistent_port_path(device_path: str) -> str:
@@ -159,7 +159,7 @@ class ElkM1ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: ignore
         data_schema = vol.Schema(
             {
                 vol.Required(CONF_SERIAL_PORT): selector.SerialPortSelector(),
-                vol.Optional(CONF_PIN, default=""): vol.Any(int, str, None),
+                vol.Optional(CONF_PIN, default=""): str,  # Use str for serialization compatibility
                 vol.Optional(CONF_VERIFY_DEVICE, default=True): bool,
             }
         )
@@ -272,7 +272,7 @@ class ElkM1ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: ignore
                     vol.Optional(
                         CONF_PIN,
                         default=config_entry.data.get(CONF_PIN, ""),
-                    ): vol.Any(int, str, None),
+                    ): str,  # Use str here too
                 }
             )
         else:
