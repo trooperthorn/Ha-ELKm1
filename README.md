@@ -1,102 +1,91 @@
-# Davis Vantage Weather
+# Elk-M1 Control for Home Assistant
 
-[![GitHub Release](https://img.shields.io/github/v/release/trooperthorn/ha_int_elkm1?style=for-the-badge)](https://github.com/trooperthorn/ha_int_elkm1/releases)
-[![GitHub Activity](https://img.shields.io/github/commit-activity/m/trooperthorn/ha_int_elkm1?style=for-the-badge)](https://github.com/trooperthorn/ha_int_elkm1/commits/main)
-[![HACS Custom](https://img.shields.io/badge/HACS-Custom-orange.svg?style=for-the-badge)](https://github.com/hacs/integration)
+![GitHub Release](https://img.shields.io/github/v/release/trooperthorn/ha_int_elkm1?style=for-the-badge)
+![HACS](https://img.shields.io/badge/HACS-Custom-orange.svg?style=for-the-badge)
+![Home Assistant](https://img.shields.io/badge/Home_Assistant-2024.4+-blue.svg?style=for-the-badge)
 
-A feature-rich Home Assistant custom integration for Davis Vantage weather stations, supporting both serial and network connections with advanced weather view support, LOOP2 protocol integration, and granular wind rose directions.
+A fully-featured custom integration for Home Assistant to monitor and control **Elk-M1 Gold** and **Elk-M1 EZ8** alarm and automation panels. 
 
----
+This integration uses the modern [elkm1_lib](https://github.com/bdraco/elkm1_lib) Python library and supports both direct Serial/USB connections and Network connections via the Elk M1XEP.
 
-## Features
+## ✨ Features
 
-* **Native Weather Category:** Designed for seamless integration into Home Assistant weather cards.
-* **LOOP2 Protocol Support:** Automatic selection for newer firmware models.
-* **Granular Wind Rose:** Expanded directional reporting including **NNE, SSW, NNW**, etc.
-* **Built-in Diagnostics & Testing:** Includes automatic connection pre-testing before adding serial devices and a dedicated debug connection option.
-* **Comprehensive Actions:** Remotely set panel time, modify archive periods, update rain collectors, and pull raw diagnostic logs directly from Home Assistant.
-
----
-
-## Supported Hardware
-
-| Model | Compatible |
-| :--- | :---: |
-| Davis WeatherLink SER (6510SER) | Yes |
-| Davis WeatherLink USB (6510USB) | Yes |
-| Davis WeatherlinkIP (6555IP) | Yes [^3] |
-| Vantage Vue | Yes |
-| WeatherLink Live | No |
-| Davis Weather Envoy8X (6318EU) | No |
+* **UI Configuration:** Fully configurable via the Home Assistant UI (no `configuration.yaml` required).
+* **Dual Connection Support:** Connect via Network (M1XEP) or direct Serial/USB.
+* **Auto-Discovery:** Automatically scans and suggests available USB/Serial ports during setup.
+* **Setup Wizard:** Automatically verifies panel compatibility and checks required global settings during installation.
+* **Instant Updates:** Uses asyncio for rapid, real-time state updates.
+* **Supported Entities:**
+  * 🛡️ **Alarm Control Panel:** Monitor and control Areas (Arm, Disarm, Night, Stay, Away).
+  * 🚪 **Sensors & Binary Sensors:** Real-time state of all Zones (Open, Closed, Bypassed, Faulted).
+  * 💡 **Switches:** Control and monitor panel Outputs.
+  * 🌡️ **Climate:** Monitor and control attached Thermostats.
+  * 🔘 **Buttons:** Trigger panel Automation Tasks.
 
 ---
 
-## Prerequisites
+## 📥 Installation
 
-Ensure your Davis console is running compatible firmware:
+### Option 1: HACS (Recommended)
+1. Open HACS in Home Assistant.
+2. Click the 3-dots menu in the top right and select **Custom repositories**.
+3. Add the URL of this repository and select **Integration** as the category.
+4. Click **Download** on the Elk-M1 Control repository.
+5. Restart Home Assistant.
 
-* **Davis Console 3.15 and newer** recommended for full feature support.
-
-| Model | Min Version |
-| :--- | :---: |
-| Vantage Pro2 Console (Wired/Cabled) | 3.88 *(Tested and works on 3.15 via serial)* |
-| Weather Envoy Wireless | 3.88 |
-| Weather Envoy Cabled | 3.12 |
-| WeatherLinkIP Data Logger | 1.1.5 |
-
----
-
-## Installation
-
-### Via HACS (Recommended)
-1. Open **HACS** in your Home Assistant instance.
-2. Click **Integrations**, then click the three dots in the top right corner and select **Custom repositories**.
-3. Add `https://github.com/trooperthorn/ha_int_elkm1` with category **Integration**.
-4. Search for **Davis Vantage**, download, and restart Home Assistant.
+### Option 2: Manual Installation
+1. Download the latest release from this repository.
+2. Copy the `custom_components/elkm1` folder into your Home Assistant `config/custom_components/` directory.
+3. Restart Home Assistant.
 
 ---
 
-## Setup & Configuration
+## ⚙️ Configuration
 
-During setup, choose your connection method:
+1. In Home Assistant, go to **Settings > Devices & Services**.
+2. Click **+ Add Integration** in the bottom right corner.
+3. Search for **Elk-M1 Control**.
+4. Choose your connection type:
+   * **Serial/USB:** Select your serial port from the discovered list (or enter manually) and optionally provide a PIN for alarm control.
+   * **Network (M1XEP):** Enter your panel's IP Address (Host), Port (default 2101), Username, Password, and optionally a PIN.
+5. The integration will test the connection. If successful, it will verify your panel settings and add your devices!
 
-* **Serial / USB:** Select your device port. The integration automatically performs a pre-connection test to verify the Davis device responds before finishing configuration.
-* **Network:** Provide the hostname or IP address and port number (typically port `22222`). 
-  > *Tip: If unsure, browse to the IP address of your WeatherLink IP logger to verify the active port number on its configuration page.*
+### ⚠️ Important Panel Settings
+For Home Assistant to receive real-time updates from your Elk-M1, the panel **must** be configured to transmit state changes. The setup wizard will attempt to verify and enable these automatically, but if you have issues, ensure the following **Global Settings (35-40)** are checked in ElkRP2:
 
----
-
-## Entities Created
-
-### Weather & Environment
-* **Barometric Pressure:** Current, Daily High/Low, High/Low Timestamps, and Trend (Stable, Rising/Falling Slowly/Rapidly).
-* **Temperature & Humidity:** Outside Temperature, Inside Temperature, Feels Like, Heat Index, Wind Chill, Dew Point (with Daily Highs/Lows), Outside Humidity, and Extra Humidity/Temperature (Sensors 1–7).
-* **Precipitation:** Current Rain Rate, Is Raining, Daily/Monthly/Yearly Rain totals, Rain Storm total, and Storm Start Date.
-* **Solar & UV:** Solar Radiation, UV Level (with Daily Highs and Peaks).
-* **Wind:** Current Wind Speed, 10-Minute Average, Archive Average, Wind Gust, Wind Direction (Degrees & Cardinal Rose), and Beaufort scale [^4] [^5].
-* **Astronomical:** Sunrise and Sunset times, Forecast Icons, and Forecast Rules.
-
-### Diagnostic Entities
-* Archive Interval [^2], Battery Voltage, Console Elevation, Latitude, Longitude, Rain Collector Type, Last Error Message/Time, Last Fetch Time, and Last Success Time.
+* Transmit Event Log
+* Transmit Zone Changes
+* Transmit Output Changes
+* Transmit Automation Task Changes
+* Transmit Light Changes
+* Transmit Keypad Changes
 
 ---
 
-## Available Actions
+## 🛠️ Custom Services
 
-* **`davis_vantage.set_davis_time`**: Synchronize the weather station's clock with Home Assistant.
-* **`davis_vantage.get_davis_time`**: Retrieve the current clock reading from the console.
-* **`davis_vantage.get_raw_data`**: Pull raw, unprocessed byte data from the most recent fetch cycle.
-* **`davis_vantage.get_information`**: Fetch console firmware version and system diagnostics.
-* **`davis_vantage.set_yearly_rain`**: Adjust yearly rainfall totals in calibration clicks.
-* **`davis_vantage.set_archive_period`**: Change archive logging intervals (1, 5, 10, 15, 30, 60, 120 mins). *Warning: This clears archived console memory.*
-* **`davis_vantage.set_rain_collector`**: Configure tipping bucket collector size (`0.01"`, `0.2 mm`, or `0.1 mm`).
+This integration provides several custom services that can be used in Home Assistant automations and scripts:
+
+| Service | Description | Data Parameters |
+| :--- | :--- | :--- |
+| `elkm1.bypass_zone` | Bypass a specific zone | `zone_number` (int) |
+| `elkm1.unbypass_zone` | Unbypass a specific zone | `zone_number` (int) |
+| `elkm1.activate_task` | Trigger an Elk automation task | `task_number` (int) |
+| `elkm1.panic_alarm` | Trigger the panel's panic alarm | None |
+
+*(Standard alarm services like `alarm_control_panel.alarm_arm_away` are also fully supported via the generated Alarm Control Panel entities).*
 
 ---
 
-## Footnotes
+## 🐛 Troubleshooting & Debugging
 
-[^1]: If values show as "Unknown", ensure the Davis console time is set correctly using the *Get/Set Davis Time* actions.
-[^2]: Archive intervals can be modified via the *Set Archive Period* action.
-[^3]: Using WeatherLinkIP while simultaneously streaming data to WeatherLink.com may cause socket conflicts; disabling cloud forwarding is recommended for local polling stability.
-[^4]: Wind direction entities report as `Unknown` if current wind speed is `0.0`.
-[^5]: Mean calculation adjustments for wind direction may require clearing historical long-term statistics in Home Assistant database if migrating from older versions.
+If you are experiencing connection issues or entities aren't updating, you can enable debug logging to see the raw communication between Home Assistant and your panel.
+
+Add the following to your `configuration.yaml` and restart Home Assistant:
+
+```yaml
+logger:
+  default: info
+  logs:
+    custom_components.elkm1: debug
+    elkm1_lib: debug
