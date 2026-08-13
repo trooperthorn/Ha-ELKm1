@@ -4,15 +4,14 @@ import asyncio
 import glob
 import logging
 import os
-import serial.tools.list_ports
 from typing import Any
 
+import serial.tools.list_ports
 import voluptuous as vol  # type: ignore[import-untyped]
 
 from homeassistant import config_entries
 from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_PORT, CONF_USERNAME
 from homeassistant.data_entry_flow import FlowResult
-import homeassistant.helpers.config_validation as cv
 from homeassistant.helpers import selector
 
 from .const import (
@@ -168,7 +167,7 @@ class ElkM1ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: ignore
                     is_elk = await probe_serial_port(persistent_path, timeout=2.0)
                     if is_elk:
                         status_label = "(ELK-M1 Panel Detected) 🎯"
-                except Exception:
+                except Exception:  # noqa: BLE001
                     status_label = "(Available)"
 
             # Build a clean label for the UI
@@ -176,7 +175,7 @@ class ElkM1ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: ignore
             
             return {
                 "value": persistent_path, 
-                "label": f"{label} {status_label}",
+                "label": f"{status_label {label}}",
             }
 
         # 4. Run all port probes CONCURRENTLY
