@@ -64,18 +64,19 @@ def _get_friendly_name(port_info) -> str:
 
 async def probe_serial_port(port: str, timeout: float = 5.0) -> bool:
     """
-    Test if a serial port has an ELK-M1 panel.
+    Test if a serial port actually has an ELK-M1 panel connected.
     
-    Attempts to connect and wait for the connected event.
+    Attempts to connect, wait for the connected event, and verify panel data.
     
     Args:
-        port: Serial port path (e.g., "/dev/ttyUSB0")
+        port: Serial port path (e.g., "/dev/ttyUSB0" or "/dev/serial/by-id/...")
         timeout: Connection timeout in seconds
         
     Returns:
-        True if ELK-M1 detected, False otherwise
+        True if ELK-M1 data detected, False otherwise
     """
     from elkm1_lib import Elk
+    import asyncio
     
     try:
         # Create connection URL
@@ -91,7 +92,7 @@ async def probe_serial_port(port: str, timeout: float = 5.0) -> bool:
         config = {"url": url}
         connection = Elk(config)
         
-        # 1. Use an Event to track when elkm1_lib successfully connects
+        # 1. Use an Event to track when elkm1_lib successfully opens the port
         connected_event = asyncio.Event()
         
         def on_connected(*args, **kwargs):
@@ -105,17 +106,29 @@ async def probe_serial_port(port: str, timeout: float = 5.0) -> bool:
         connection.connect()
         
         try:
-            # 3. Wait for the 'connected' event to trigger, up to the timeout limit
+            # 3. Wait for the port to physically open
             await asyncio.wait_for(connected_event.wait(), timeout=timeout)
-            _LOGGER.info(f"Port {url}: ELK-M1 detected ✓")
-            return True
+            
+            # 4. NEW: The port is open, but is an Elk attached? 
+            # Wait 1.5 seconds for the panel to send its initial sync data.
+            await asyncio.sleep(1.5)
+            
+            # 5. NEW: Check if the panel object was populated with real data.
+            # Empty DB9 ports won't have this.
+            if connection.panel.elkm1_version or connection.panel.system_trouble_status:
+                _LOGGER.info(f"Port {url}: ELK-M1 data verified ✓")
+                return True
+            else:
+                _LOGGER.debug(f"Port {url}: Port opened, but no ELK-M1 data received.")
+                return False
+                
         except asyncio.TimeoutError:
             _LOGGER.debug(f"Port {port}: Connection timeout (no device?)")
             return False
         finally:
-            # 4. CRITICAL FIX: Guarantee disconnect runs no matter what.
+            # 6. CRITICAL FIX: Guarantee disconnect runs no matter what.
             # This cleanly kills the _read_stream and _write_stream tasks
-            # and releases the serial port so other integrations aren't locked out.
+            # and releases the serial port so you don't get "Resource Busy" locks.
             connection.disconnect()
             
     except Exception as e:  # noqa: BLE001
