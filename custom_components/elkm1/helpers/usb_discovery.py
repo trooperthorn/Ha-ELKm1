@@ -1,8 +1,8 @@
 """USB serial port discovery for ELK-M1 integration."""
-
 import asyncio
 import logging
 
+from elkm1_lib import Elk
 from serial.tools import list_ports
 
 _LOGGER = logging.getLogger(__name__)
@@ -76,7 +76,8 @@ async def probe_serial_port(port: str, timeout: float = 5.0) -> bool:
     Returns:
         True if ELK-M1 detected, False otherwise
     """
-    from elkm1_lib.connection import ElkM1Connection
+    # FIX 1: Import the correct Elk class
+    from elkm1_lib import Elk
     
     try:
         # Create connection URL
@@ -89,16 +90,15 @@ async def probe_serial_port(port: str, timeout: float = 5.0) -> bool:
         
         _LOGGER.debug(f"Probing port: {url}")
         
-        # Create connection with timeout
-        connection = ElkM1Connection(
-            url=url,
-            timeout=timeout,
-        )
+        # FIX 2: Pass configuration as a dictionary, not as kwargs
+        config = {"url": url}
+        connection = Elk(config)
         
         async def _connect():
             await asyncio.wait_for(connection.connect(), timeout=timeout)
             # If we got here, connection successful
-            await connection.disconnect()
+            # FIX 3: Remove 'await' because disconnect() is a synchronous method
+            connection.disconnect()
             return True
         
         result = await _connect()
@@ -108,6 +108,7 @@ async def probe_serial_port(port: str, timeout: float = 5.0) -> bool:
     except asyncio.TimeoutError:
         _LOGGER.debug(f"Port {port}: Connection timeout (no device?)")
         return False
-    except (OSError, AttributeError, ValueError) as e:
+    except Exception as e:  # noqa: BLE001
+        # Changed to catch all exceptions to prevent UI crashes if elkm1_lib throws a weird error
         _LOGGER.debug(f"Port {port}: No ELK-M1 detected - {e}")
         return False
