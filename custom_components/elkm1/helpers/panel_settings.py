@@ -1,6 +1,7 @@
 """Panel settings configuration and verification."""
 import logging
 from typing import Any
+
 from elkm1_lib import Elk
 
 _LOGGER = logging.getLogger(__name__)
