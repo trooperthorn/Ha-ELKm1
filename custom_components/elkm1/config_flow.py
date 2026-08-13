@@ -1,6 +1,5 @@
 """Config flow for Elk-M1 Control integration."""
 
-
 import asyncio
 import glob
 import logging
@@ -176,7 +175,7 @@ class ElkM1ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: ignore
             
             return {
                 "value": persistent_path, 
-                "label": f"{status_label {label}}",
+                "label": f"{status_label} {label}",
             }
 
         # 4. Run all port probes CONCURRENTLY
