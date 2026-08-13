@@ -222,14 +222,18 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator):
             )
             
             # Log zone states for debugging
+            # Log zone states safely for debugging
             if zones:
                 for zone in zones:
-                    _LOGGER.debug(
-                        f"  Zone {zone.number} ({zone.name}): "
-                        f"status={zone.status}, "
-                        f"faulted={zone.faulted}, "
-                        f"open={zone.open}"
-                    )
+                    try:
+                        _LOGGER.debug(
+                            f"  Zone {getattr(zone, 'number', '?')} ({getattr(zone, 'name', 'Unknown')}): "
+                            f"status={getattr(zone, 'status', 'unknown')}, "
+                            f"faulted={getattr(zone, 'faulted', 'unknown')}, "
+                            f"open={getattr(zone, 'open', 'unknown')}"
+                        )
+                    except Exception:
+                        pass
             
             # Return all data in standardized format
             return {
