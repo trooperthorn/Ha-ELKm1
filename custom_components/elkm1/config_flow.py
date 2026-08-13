@@ -1,6 +1,8 @@
 """Config flow for Elk-M1 Control integration."""
 
+import glob
 import logging
+import os
 from typing import Any
 
 import voluptuous as vol  # type: ignore[import-untyped]
@@ -21,6 +23,33 @@ from .const import (
 from .helpers.usb_discovery import probe_serial_port
 
 _LOGGER = logging.getLogger(__name__)
+
+
+def get_persistent_port_path(device_path: str) -> str:
+    """Map a raw /dev/ttyUSBx path to its persistent /dev/serial/by-id/ symlink."""
+    try:
+        resolved_target = os.path.realpath(device_path)
+    except Exception:
+        return device_path
+    
+    # 1. First choice: Check /dev/serial/by-id/ (Unique by hardware serial number)
+    for symlink in glob.glob("/dev/serial/by-id/*"):
+        try:
+            if os.path.realpath(symlink) == resolved_target:
+                return symlink
+        except Exception:
+            continue
+
+    # 2. Second choice: Check /dev/serial/by-path/ (Unique by physical USB socket)
+    for symlink in glob.glob("/dev/serial/by-path/*"):
+        try:
+            if os.path.realpath(symlink) == resolved_target:
+                return symlink
+        except Exception:
+            continue
+
+    # Fallback to provided path if no persistent symlinks exist
+    return device_path
 
 
 class ElkM1ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: ignore[call-arg]
@@ -67,9 +96,14 @@ class ElkM1ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: ignore
         errors = {}
 
         if user_input is not None:
-            port = user_input[CONF_SERIAL_PORT]
+            raw_port = user_input[CONF_SERIAL_PORT]
             
-            # Check if already configured
+            # Map dynamic ttyUSB to persistent by-id path
+            port = await self.hass.async_add_executor_job(
+                get_persistent_port_path, raw_port
+            )
+            
+            # Check if already configured using the persistent path
             await self.async_set_unique_id(port)
             self._abort_if_unique_id_configured()
             
@@ -179,6 +213,14 @@ class ElkM1ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: ignore
         connection_type = config_entry.data.get(CONF_CONNECTION_TYPE)
 
         if user_input is not None:
+            # Map dynamic ttyUSB to persistent by-id path during reconfiguration
+            if connection_type == CONNECTION_SERIAL and CONF_SERIAL_PORT in user_input:
+                raw_port = user_input[CONF_SERIAL_PORT]
+                persistent_port = await self.hass.async_add_executor_job(
+                    get_persistent_port_path, raw_port
+                )
+                user_input[CONF_SERIAL_PORT] = persistent_port
+
             self.hass.config_entries.async_update_entry(
                 config_entry,
                 data={**config_entry.data, **user_input},
