@@ -118,6 +118,6 @@ async def probe_serial_port(port: str, timeout: float = 5.0) -> bool:
             # and releases the serial port so other integrations aren't locked out.
             connection.disconnect()
             
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         _LOGGER.debug(f"Port {port}: No ELK-M1 detected - {e}")
         return False
