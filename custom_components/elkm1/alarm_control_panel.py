@@ -6,9 +6,18 @@ from typing import Any
 
 from homeassistant.components.alarm_control_panel import (
     AlarmControlPanelEntity,
-    AlarmControlPanelEntityFeature,
-    CodeFormat,
 )
+
+# Safe imports for optional alarm panel features/formats across HA versions
+try:
+    from homeassistant.components.alarm_control_panel import AlarmControlPanelEntityFeature
+except ImportError:
+    AlarmControlPanelEntityFeature = None
+
+try:
+    from homeassistant.components.alarm_control_panel import CodeFormat
+except ImportError:
+    CodeFormat = None
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
     STATE_ALARM_TRIGGERED,
