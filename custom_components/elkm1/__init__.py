@@ -17,13 +17,13 @@ _LOGGER = logging.getLogger(__name__)
 PLATFORMS: Final[list[Platform]] = [
     Platform.ALARM_CONTROL_PANEL,
     Platform.BINARY_SENSOR,
-    Platform.CLIMATE,
-    Platform.LIGHT,
-    Platform.NUMBER,
-    Platform.SCENE,
+    # Platform.CLIMATE,
+    # Platform.LIGHT,
+    # Platform.NUMBER,
+    # Platform.SCENE,
     Platform.SENSOR,
     Platform.SWITCH,
-    Platform.TIME,
+    # Platform.TIME,
 ]
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
