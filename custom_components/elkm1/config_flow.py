@@ -5,10 +5,10 @@ from typing import Any
 
 import voluptuous as vol  # type: ignore[import-untyped]
 from homeassistant import config_entries
-from homeassistant.helpers import selector
+
 from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_PORT, CONF_USERNAME
 from homeassistant.data_entry_flow import FlowResult
-
+from homeassistant.helpers import selector
 
 from .const import (
     CONF_CONNECTION_TYPE,
@@ -272,6 +272,6 @@ async def probe_network_device(
     except asyncio.TimeoutError:
         _LOGGER.debug(f"Network device {host}: Connection timeout")
         return False
-    except Exception as e:  # Broadened to catch elkm1_lib specific exceptions
+    except Exception as e:  # noqa: BLE001
         _LOGGER.debug(f"Network device {host}: Error - {e}")
         return False
