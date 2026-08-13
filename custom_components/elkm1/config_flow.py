@@ -7,6 +7,7 @@ import os
 from typing import Any
 
 import serial.tools.list_ports
+
 import voluptuous as vol  # type: ignore[import-untyped]
 
 from homeassistant import config_entries
