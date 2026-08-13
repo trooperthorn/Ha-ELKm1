@@ -68,7 +68,7 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator):
         
         Returns:
             Connection URL for ElkM1Connection
-            - Serial: "serial:///dev/serial/by-id/..."
+            - Serial: "serial:///dev/serial/by-id/...?baud=115200"
             - Network: "elk://192.168.1.100:2101"
         """
         if self._connection_type == CONNECTION_SERIAL:
@@ -84,11 +84,11 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator):
                     if os.path.realpath(symlink) == resolved_target:
                         serial_port = symlink
                         break
-            except Exception:
-                pass
+            except OSError as err:
+                _LOGGER.debug("Failed to resolve persistent path for %s: %s", serial_port, err)
             
-            # Build serial URL: serial:///dev/serial/by-id/...
-            url = f"serial://{serial_port}"
+            # Build serial URL with the specific Elk-M1 baud rate appended
+            url = f"serial://{serial_port}?baud={ELKM1_BAUDRATE}"
             _LOGGER.debug(f"Built serial URL: {url}")
             return url
         
