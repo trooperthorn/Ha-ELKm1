@@ -6,6 +6,7 @@ from typing import Any
 
 from homeassistant.components.alarm_control_panel import (
     AlarmControlPanelEntity,
+    AlarmControlPanelState,
 )
 
 # Safe imports for optional alarm panel features/formats across HA versions
@@ -18,16 +19,17 @@ try:
     from homeassistant.components.alarm_control_panel import CodeFormat
 except ImportError:
     CodeFormat = None
+
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import (
-    STATE_ALARM_TRIGGERED,
-    STATE_ARMED_AWAY,
-    STATE_ARMED_HOME,
-    STATE_ARMED_NIGHT,
-    STATE_DISARMED,
-)
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+
+# Map modern enum states to your existing variable names
+STATE_ALARM_TRIGGERED = AlarmControlPanelState.TRIGGERED
+STATE_ARMED_AWAY = AlarmControlPanelState.ARMED_AWAY
+STATE_ARMED_HOME = AlarmControlPanelState.ARMED_HOME
+STATE_ARMED_NIGHT = AlarmControlPanelState.ARMED_NIGHT
+STATE_DISARMED = AlarmControlPanelState.DISARMED
 
 from .coordinator import ElkDataUpdateCoordinator
 from .data import ElkRuntimeData
