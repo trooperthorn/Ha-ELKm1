@@ -1,6 +1,7 @@
 """Setup wizard to check and configure panel on first connection."""
 import logging
 from typing import Any
+
 from elkm1_lib import Elk
 
 from ..helpers.panel_settings import (
