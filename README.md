@@ -4,6 +4,13 @@ Home Assistant integration providing **Elk M1 Gold & Platinum** support with exp
 
 ---
 
+[![GitHub Release][releases-shield]][releases]
+[![GitHub Activity][commits-shield]][commits]
+![Install Stats][stats]
+
+![Project Maintenance][maintenance-shield]
+[![Community Forum][forum-shield]][forum]
+
 ## Features
 
 - **Flexible Connection Modes:** Supports both direct Serial/USB and Ethernet (M1XEP) connections.
@@ -34,10 +41,12 @@ The integration features a guided setup flow allowing you to choose between stan
 
 What Gets Checked and Configured using a PIN
 Global Settings 35-40 (Required for Event Reporting)
-Setting	Enables	Impact if Disabled
-35	Event Log (who armed/disarmed)	Can't track user changes
-36	Zone Changes	Zones don't update in real-time
-37	Output Changes	Outputs don't update
-38	Automation Tasks	Tasks don't report
-39	Light Changes	Lights don't update
-40	Keypad Changes	Alarm state doesn't update
+		
+Enabled Setting | Impact if Disabled
+---|:---:
+35	| Event Log (who armed/disarmed)	Can't track user changes
+36	| Zone Changes	Zones don't update in real-time
+37	| Output Changes	Outputs don't update
+38	| Automation Tasks	Tasks don't report
+39	| Light Changes	Lights don't update
+40	| Keypad Changes	Alarm state doesn't update
