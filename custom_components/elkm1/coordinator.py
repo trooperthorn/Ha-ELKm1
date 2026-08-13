@@ -1,5 +1,7 @@
 """Data update coordinator for Elk-M1 Control integration."""
+import glob
 import logging
+import os
 from datetime import timedelta
 from typing import Any
 
@@ -66,7 +68,7 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator):
         
         Returns:
             Connection URL for ElkM1Connection
-            - Serial: "serial:///dev/ttyUSB0"
+            - Serial: "serial:///dev/serial/by-id/..."
             - Network: "elk://192.168.1.100:2101"
         """
         if self._connection_type == CONNECTION_SERIAL:
@@ -75,7 +77,17 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator):
             if not serial_port:
                 raise ValueError("Serial port not configured")
             
-            # Build serial URL: serial:///dev/ttyUSB0
+            # --- Auto-upgrade legacy ttyUSB paths to persistent by-id paths ---
+            try:
+                resolved_target = os.path.realpath(serial_port)
+                for symlink in glob.glob("/dev/serial/by-id/*"):
+                    if os.path.realpath(symlink) == resolved_target:
+                        serial_port = symlink
+                        break
+            except Exception:
+                pass
+            
+            # Build serial URL: serial:///dev/serial/by-id/...
             url = f"serial://{serial_port}"
             _LOGGER.debug(f"Built serial URL: {url}")
             return url
