@@ -82,7 +82,8 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator):
             # it is passed directly to the URL safely.
             
             # Build serial URL with the specific Elk-M1 baud rate appended
-            url = f"serial://{serial_port}?baud={ELKM1_BAUDRATE}"
+            # The underlying library defaults to 115200 baud automatically
+            url = f"serial://{serial_port}"
             _LOGGER.debug(f"Built serial URL: {url}")
             return url
         
