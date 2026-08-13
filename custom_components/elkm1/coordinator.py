@@ -205,13 +205,13 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator):
             raise UpdateFailed("Not connected to ELK-M1")
         
         try:
-            # Fetch all panel data
-            zones = self._elk.zones
-            panel = self._elk.panel
-            areas = self._elk.areas
-            outputs = self._elk.outputs
-            tasks = self._elk.tasks
-            thermostat = self._elk.thermostat
+            # Fetch all panel data safely
+            zones = getattr(self._elk, "zones", [])
+            panel = getattr(self._elk, "panel", None)
+            areas = getattr(self._elk, "areas", [])
+            outputs = getattr(self._elk, "outputs", [])
+            tasks = getattr(self._elk, "tasks", [])
+            thermostat = getattr(self._elk, "thermostats", getattr(self._elk, "thermostat", []))
             
             # Log for debugging
             _LOGGER.debug(
@@ -238,7 +238,7 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator):
                 "areas": areas if areas else [],
                 "outputs": outputs if outputs else [],
                 "tasks": tasks if tasks else [],
-                "thermostat": thermostat,
+                "thermostat": thermostat if thermostat else [],
             }
         except (OSError, AttributeError, KeyError) as err:
             _LOGGER.exception("Error fetching coordinator data")
