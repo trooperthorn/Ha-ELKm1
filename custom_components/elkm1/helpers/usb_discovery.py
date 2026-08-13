@@ -2,7 +2,6 @@
 import asyncio
 import logging
 
-from elkm1_lib import Elk
 from serial.tools import list_ports
 
 _LOGGER = logging.getLogger(__name__)
