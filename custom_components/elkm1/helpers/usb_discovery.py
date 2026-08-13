@@ -75,8 +75,8 @@ async def probe_serial_port(port: str, timeout: float = 5.0) -> bool:
     Returns:
         True if ELK-M1 data detected, False otherwise
     """
-    from elkm1_lib import Elk
     import asyncio
+    from elkm1_lib import Elk
     
     try:
         # Create connection URL
