@@ -3,7 +3,7 @@ import logging
 from datetime import timedelta
 from typing import Any
 
-from elkm1_lib.connection import ElkM1Connection
+from elkm1_lib import Elk
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import (
     DataUpdateCoordinator,
@@ -49,7 +49,7 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator):
         )
         
         self._config_data = config_entry_data
-        self._elk: ElkM1Connection | None = None
+        self._elk: Elk | None = None
         self._connection_type: str = config_entry_data[CONF_CONNECTION_TYPE]
         self._pin = config_entry_data.get(CONF_PIN, "")
         
@@ -116,21 +116,17 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator):
         try:
             _LOGGER.info(f"Connecting to ELK-M1 at {self._obfuscated_url()}")
 
-            if self._connection_type == CONNECTION_SERIAL:
-                self._elk = ElkM1Connection(
-                    url=self._url,
-                    timeout=5.0,
-                    baudrate=ELKM1_BAUDRATE,
-                )
-            else:
-                username = self._config_data.get(CONF_USERNAME, "")
-                password = self._config_data.get(CONF_PASSWORD, "")
-                self._elk = ElkM1Connection(
-                    url=self._url,
-                    username=username,
-                    password=password,
-                    timeout=5.0,
-                )
+            # Create the config dictionary
+            config = {"url": self._url}
+            
+            if self._connection_type == CONNECTION_NETWORK:
+                if username := self._config_data.get(CONF_USERNAME, ""):
+                    config["userid"] = username
+                if password := self._config_data.get(CONF_PASSWORD, ""):
+                    config["password"] = password
+
+            # Initialize Elk with the dictionary
+            self._elk = Elk(config)
 
             await self._elk.connect()
             _LOGGER.info(f"Connected to ELK-M1 at {self._obfuscated_url()}")
@@ -156,7 +152,7 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator):
         """Disconnect from ELK-M1 panel."""
         if self._elk:
             try:
-                await self._elk.disconnect()
+                self._elk.disconnect()  # Removed await
                 _LOGGER.info("Disconnected from ELK-M1")
             except (OSError, AttributeError) as err:
                 _LOGGER.error(f"Error disconnecting: {err}")
