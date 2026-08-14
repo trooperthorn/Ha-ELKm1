@@ -23,6 +23,66 @@ PLATFORMS: Final[list[Platform]] = [
     Platform.SWITCH,
 ]
 
+async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Set up Elk-M1 Control from a config entry."""
+    _LOGGER.info(f"Setting up Elk-M1 at {entry.data.get(CONF_SERIAL_PORT, entry.data.get('host'))}")
+
+    coordinator = ElkDataUpdateCoordinator(
+        hass=hass,
+        config_entry_data=entry.data,
+    )
+
+    try:
+        await coordinator.async_first_refresh()
+    except UpdateFailed as err:
+        _LOGGER.error(f"Failed to set up coordinator: {err}")
+        await coordinator.async_disconnect()
+        raise ConfigEntryNotReady(f"Failed to connect: {err}") from err
+
+    hass.data.setdefault(DOMAIN, {})
+    
+    serial_port_value = entry.data.get(CONF_SERIAL_PORT)
+    
+    runtime_data = ElkRuntimeData(
+        coordinator=coordinator,
+        serial_port=serial_port_value
+    )
+
+    hass.data[DOMAIN][entry.entry_id] = runtime_data
+    entry.runtime_data = runtime_data
+
+    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+
+    if len(hass.data[DOMAIN]) == 1:
+        await async_setup_services(hass, entry)
+
+    entry.async_on_unload(coordinator.async_shutdown)
+
+    return True
+
+
+async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Unload a config entry."""
+    _LOGGER.info(f"Unloading Elk-M1 entry: {entry.entry_id}")
+
+    unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+
+    if unload_ok:
+        coordinator = hass.data[DOMAIN][entry.entry_id].coordinator
+        await coordinator.async_disconnect()
+        hass.data[DOMAIN].pop(entry.entry_id)
+        if not hass.data[DOMAIN]:
+            hass.data.pop(DOMAIN)
+
+    return unload_ok
+
+
+async def async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Reload config entry."""
+    await async_unload_entry(hass, entry)
+    await async_setup_entry(hass, entry)
+
+
 async def async_setup_services(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """Register custom services."""
     coordinator = entry.runtime_data.coordinator
@@ -110,7 +170,7 @@ async def async_setup_services(hass: HomeAssistant, entry: ConfigEntry) -> None:
         line2 = call.data.get("line2", "^")
         beep = 1 if call.data.get("beep") else 0
         timeout = call.data.get("timeout", 0)
-        # Clear option: 2 = Display until timeout[cite: 1]
+        # Clear option: 2 = Display until timeout
         await coordinator.display_message(area, 2, beep, timeout, line1, line2)
 
     async def handle_speak_phrase(call: ServiceCall) -> None:
