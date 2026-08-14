@@ -14,15 +14,20 @@ from homeassistant import config_entries
 from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_PORT, CONF_USERNAME
 from homeassistant.data_entry_flow import FlowResult
 from homeassistant.helpers import selector
+from homeassistant.core import callback
 
 from .const import (
-    CONF_CONNECTION_TYPE,
-    CONF_PIN,
-    CONF_SERIAL_PORT,
-    CONF_VERIFY_DEVICE,
-    CONNECTION_NETWORK,
-    CONNECTION_SERIAL,
     DOMAIN,
+    CONF_INCLUDED_ZONES,
+    CONF_SYNC_CLOCK,
+    CONF_ENABLE_TASKS,
+    CONF_STRICT_PIN,
+    CONF_AUTO_CLEAR_MEMORY,
+    DEFAULT_INCLUDED_ZONES,
+    DEFAULT_SYNC_CLOCK,
+    DEFAULT_ENABLE_TASKS,
+    DEFAULT_STRICT_PIN,
+    DEFAULT_AUTO_CLEAR_MEMORY,
 )
 from .helpers.usb_discovery import probe_serial_port
 
@@ -63,6 +68,14 @@ class ElkM1ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: ignore
     VERSION = 1
     
     _connection_type: str | None = None
+    
+    @staticmethod
+    @callback
+    def async_get_options_flow(
+        config_entry: config_entries.ConfigEntry,
+    ) -> config_entries.OptionsFlow:
+        """Create the options flow."""
+        return ElkOptionsFlowHandler(config_entry)
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
@@ -387,3 +400,53 @@ async def probe_network_device(
     except Exception as e:  # noqa: BLE001
         _LOGGER.debug(f"Network device {host}: Error - {e}")
         return False
+
+# ADD THIS NEW CLASS TO THE BOTTOM OF THE FILE:
+class ElkOptionsFlowHandler(config_entries.OptionsFlow):
+    """Handle options for the Elk-M1 integration."""
+
+    def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
+        """Initialize options flow."""
+        self.config_entry = config_entry
+
+    async def async_step_init(self, user_input=None):
+        """Manage the Elk-M1 options."""
+        if user_input is not None:
+            # Save the new options and update the configuration entry
+            return self.async_create_entry(title="Elk-M1 Settings", data=user_input)
+
+        # Build the form with current options (or defaults if not yet set)
+        options = self.config_entry.options
+
+        schema = vol.Schema(
+            {
+                vol.Required(
+                    CONF_INCLUDED_ZONES,
+                    default=options.get(CONF_INCLUDED_ZONES, DEFAULT_INCLUDED_ZONES),
+                ): str,
+                vol.Required(
+                    CONF_STRICT_PIN,
+                    default=options.get(CONF_STRICT_PIN, DEFAULT_STRICT_PIN),
+                ): bool,
+                vol.Required(
+                    CONF_AUTO_CLEAR_MEMORY,
+                    default=options.get(CONF_AUTO_CLEAR_MEMORY, DEFAULT_AUTO_CLEAR_MEMORY),
+                ): bool,
+                vol.Required(
+                    CONF_SYNC_CLOCK,
+                    default=options.get(CONF_SYNC_CLOCK, DEFAULT_SYNC_CLOCK),
+                ): bool,
+                vol.Required(
+                    CONF_ENABLE_TASKS,
+                    default=options.get(CONF_ENABLE_TASKS, DEFAULT_ENABLE_TASKS),
+                ): bool,
+            }
+        )
+
+        return self.async_show_form(
+            step_id="init",
+            data_schema=schema,
+            description_placeholders={
+                "zone_help": "Example: '1-16, 20' to only expose those specific zones."
+            }
+        )
