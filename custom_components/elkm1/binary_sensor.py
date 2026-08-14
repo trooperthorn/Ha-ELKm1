@@ -22,7 +22,7 @@ class ElkZoneBinarySensor(ElkEntity, BinarySensorEntity):
     
     _attr_has_entity_name = True
     _attr_should_poll = False
-    _attr_entity_registry_enabled_default = False  # Users can enable as needed
+    _attr_entity_registry_enabled_default = True  # This enables all windows and doors sensor
 
     def __init__(
         self,
@@ -53,12 +53,16 @@ class ElkZoneBinarySensor(ElkEntity, BinarySensorEntity):
             _LOGGER.debug(f"Zone {self._zone_index}: No coordinator data or zone missing")
             return None
         
-        # elkm1_lib uses logical_status and physical_status integers
-        logical_status = getattr(self._zone, "logical_status", 0)
-        physical_status = getattr(self._zone, "physical_status", 0)
+        # Grab the Enum objects
+        logical_status = getattr(self._zone, "logical_status", None)
+        physical_status = getattr(self._zone, "physical_status", None)
+        
+        # Extract the integer value from the Enum (safely falling back to 0)
+        logical_val = getattr(logical_status, "value", 0)
+        physical_val = getattr(physical_status, "value", 0)
         
         # 2 = Violated (Logical), 1 = Open, 3 = Short (Physical)
-        result = logical_status == 2 or physical_status in (1, 3)
+        result = logical_val == 2 or physical_val in (1, 3)
         
         _LOGGER.debug(
             f"Zone {self._zone_index} ({getattr(self._zone, 'name', 'Unknown')}): "
