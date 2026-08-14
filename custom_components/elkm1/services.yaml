@@ -1,15 +1,53 @@
-bypass_zone:
-  name: Bypass Zone
-  description: Bypass a specific zone from triggering the alarm
+trigger_zone:
+  name: Trigger Zone
+  description: Momentarily violate a hardwired zone.
   fields:
-    zone:
-      name: Zone
-      description: Zone number or name to bypass
+    zone_number:
+      name: Zone Number
+      description: The Elk zone number (1-208) to trigger.
       required: true
       selector:
         number:
           min: 1
           max: 208
+
+force_arm_away:
+  name: Force Arm Away
+  description: Force arm the system to Away mode, bypassing open zones.
+  fields:
+    area:
+      name: Area
+      description: The Area to arm (1-8).
+      required: true
+      selector:
+        number:
+          min: 1
+          max: 8
+    pin_code:
+      name: PIN Code
+      description: 4 or 6 digit user PIN code.
+      required: true
+      selector:
+        text:
+
+bypass_zone:
+  name: Bypass Zone
+  description: Bypass or unbypass a specific zone.
+  fields:
+    zone_number:
+      name: Zone Number
+      description: Zone to bypass (1-208).
+      required: true
+      selector:
+        number:
+          min: 1
+          max: 208
+    pin_code:
+      name: PIN Code
+      description: Valid user PIN code.
+      required: true
+      selector:
+        text:
 
 unbypass_zone:
   name: Unbypass Zone
