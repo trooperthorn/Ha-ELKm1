@@ -407,13 +407,13 @@ async def probe_network_device(
         _LOGGER.debug(f"Network device {host}: Error - {e}")
         return False
 
-# ADD THIS NEW CLASS TO THE BOTTOM OF THE FILE:
 class ElkOptionsFlowHandler(config_entries.OptionsFlow):
     """Handle options for the Elk-M1 integration."""
 
     def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
         """Initialize options flow."""
-        self.config_entry = config_entry
+        # Save it to a private variable to avoid clashing with the HA base class property
+        self._config_entry = config_entry
 
     async def async_step_init(self, user_input=None):
         """Manage the Elk-M1 options."""
@@ -422,7 +422,7 @@ class ElkOptionsFlowHandler(config_entries.OptionsFlow):
             return self.async_create_entry(title="Elk-M1 Settings", data=user_input)
 
         # Build the form with current options (or defaults if not yet set)
-        options = self.config_entry.options
+        options = self._config_entry.options
 
         schema = vol.Schema(
             {
