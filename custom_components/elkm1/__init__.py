@@ -10,73 +10,21 @@ from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.helpers.update_coordinator import UpdateFailed
 
-# FIX: Removed PLATFORMS from this import line so it doesn't conflict
 from .const import CONF_SERIAL_PORT, CONF_PIN, DOMAIN
 from .coordinator import ElkDataUpdateCoordinator
 from .data import ElkRuntimeData
 
 _LOGGER = logging.getLogger(__name__)
 
-# Make sure PLATFORMS is defined somewhere here, for example:
-# PLATFORMS: list[Platform] = [Platform.ALARM_CONTROL_PANEL, Platform.SENSOR, Platform.BINARY_SENSOR, Platform.SWITCH]
-
 PLATFORMS: Final[list[Platform]] = [
     Platform.ALARM_CONTROL_PANEL,
     Platform.BINARY_SENSOR,
-    # Platform.CLIMATE,
-    # Platform.LIGHT,
-    # Platform.NUMBER,
-    # Platform.SCENE,
     Platform.SENSOR,
     Platform.SWITCH,
-    # Platform.TIME,
 ]
-
-async def async_setup_services(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    """Register custom Elk-M1 services."""
-    # Grab the default PIN saved during the config flow
-    default_pin = entry.data.get(CONF_PIN)
-    
-    # Grab the coordinator so we can talk to the panel
-    coordinator = entry.runtime_data.coordinator
-
-    async def handle_bypass_zone(call: ServiceCall) -> None:
-        """Handle the elkm1.bypass_zone service call."""
-        zone_number = call.data.get("zone_number")
-        
-        # 1. Try to get the code from the service call data
-        # 2. If missing, fall back to the default PIN from device setup
-        code = call.data.get("code") or default_pin
-
-        if not code:
-            _LOGGER.warning(
-                "Cannot bypass zone %s: No PIN provided in service call, "
-                "and no default PIN was saved during device setup.", 
-                zone_number
-            )
-            return
-
-        if coordinator._elk:
-            # elkm1_lib uses 0-based indexing! Zone 1 is index 0.
-            zone_index = zone_number - 1
-            
-            _LOGGER.debug("Bypassing zone %s using PIN", zone_number)
-            coordinator._elk.zones[zone_index].bypass(code)
-
-    # Register the service with Home Assistant
-    hass.services.async_register(
-        DOMAIN,
-        "bypass_zone",
-        handle_bypass_zone,
-        schema=vol.Schema({
-            vol.Required("zone_number"): vol.All(vol.Coerce(int), vol.Range(min=1, max=208)),
-            vol.Optional("code"): cv.string,
-        }),
-    )
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Elk-M1 Control from a config entry."""
-    # It's good practice to use your constant here too if possible!
     _LOGGER.info(f"Setting up Elk-M1 at {entry.data.get(CONF_SERIAL_PORT, entry.data.get('host'))}")
 
     coordinator = ElkDataUpdateCoordinator(
@@ -91,11 +39,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         await coordinator.async_disconnect()
         raise ConfigEntryNotReady(f"Failed to connect: {err}") from err
 
-    # Store coordinator in hass.data
     hass.data.setdefault(DOMAIN, {})
     
-    # FIX: Extract the serial port and pass it to ElkRuntimeData
-    # We use .get(..., "") or similar fallback if your dataclass strictly requires a string
     serial_port_value = entry.data.get(CONF_SERIAL_PORT)
     
     runtime_data = ElkRuntimeData(
@@ -103,18 +48,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         serial_port=serial_port_value
     )
 
-    # Store it in both places so legacy services and modern platforms are happy
     hass.data[DOMAIN][entry.entry_id] = runtime_data
     entry.runtime_data = runtime_data
 
-    # Set up all platforms
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
-    # Register services (only once, even if multiple entries)
     if len(hass.data[DOMAIN]) == 1:
         await async_setup_services(hass, entry)
 
-    # Listen for unload
     entry.async_on_unload(coordinator.async_shutdown)
 
     return True
@@ -124,17 +65,12 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
     _LOGGER.info(f"Unloading Elk-M1 entry: {entry.entry_id}")
 
-    # Unload all platforms
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
 
     if unload_ok:
-        # Disconnect coordinator
         coordinator = hass.data[DOMAIN][entry.entry_id].coordinator
         await coordinator.async_disconnect()
-
-        # Remove from hass.data
         hass.data[DOMAIN].pop(entry.entry_id)
-
         if not hass.data[DOMAIN]:
             hass.data.pop(DOMAIN)
 
@@ -147,142 +83,63 @@ async def async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
     await async_setup_entry(hass, entry)
 
 
-async def async_setup_services(hass: HomeAssistant) -> None:
+async def async_setup_services(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """Register custom services."""
+    default_pin = entry.data.get(CONF_PIN)
+    coordinator = entry.runtime_data.coordinator
 
     async def handle_bypass_zone(call: ServiceCall) -> None:
         """Handle bypass zone service."""
-        zone_number = call.data.get("zone")
-        entry_id = call.data.get("entry_id")
+        # Check both "zone" and "zone_number" just in case
+        zone_number = call.data.get("zone_number") or call.data.get("zone")
+        code = call.data.get("code") or default_pin
 
-        if not zone_number or not entry_id:
-            _LOGGER.error("Missing zone or entry_id in bypass_zone service call")
+        if not code:
+            _LOGGER.warning("Cannot bypass zone %s: No PIN provided.", zone_number)
             return
 
-        runtime_data = hass.data[DOMAIN].get(entry_id)
-        if runtime_data is None:
-            _LOGGER.error(f"No config entry found for entry_id {entry_id}")
-            return
-
-        try:
-            await runtime_data.coordinator.bypass_zone(zone_number)
-            await runtime_data.coordinator.async_request_refresh()
-        except (AttributeError, KeyError, ValueError) as err:
-            _LOGGER.error(f"Error bypassing zone {zone_number}: {err}")
+        if coordinator._elk and zone_number:
+            zone_index = int(zone_number) - 1
+            _LOGGER.debug("Bypassing zone %s using PIN", zone_number)
+            coordinator._elk.zones[zone_index].bypass(code)
 
     async def handle_unbypass_zone(call: ServiceCall) -> None:
         """Handle unbypass zone service."""
-        zone_number = call.data.get("zone")
-        entry_id = call.data.get("entry_id")
-
-        if not zone_number or not entry_id:
-            _LOGGER.error("Missing zone or entry_id in unbypass_zone service call")
-            return
-
-        runtime_data = hass.data[DOMAIN].get(entry_id)
-        if runtime_data is None:
-            _LOGGER.error(f"No config entry found for entry_id {entry_id}")
-            return
-
-        try:
-            await runtime_data.coordinator.unbypass_zone(zone_number)
-            await runtime_data.coordinator.async_request_refresh()
-        except (AttributeError, KeyError, ValueError) as err:
-            _LOGGER.error(f"Error unbypassing zone {zone_number}: {err}")
+        zone_number = call.data.get("zone_number") or call.data.get("zone")
+        code = call.data.get("code") or default_pin
+        
+        if coordinator._elk and zone_number:
+            zone_index = int(zone_number) - 1
+            coordinator._elk.zones[zone_index].bypass(code) # In Elk, bypass toggles or clears depending on panel setting, but passing the code is identical
 
     async def handle_disarm(call: ServiceCall) -> None:
-        """Handle disarm service."""
-        entry_id = call.data.get("entry_id")
-
-        if not entry_id:
-            _LOGGER.error("Missing entry_id in disarm service call")
-            return
-
-        runtime_data = hass.data[DOMAIN].get(entry_id)
-        if runtime_data is None:
-            _LOGGER.error(f"No config entry found for entry_id {entry_id}")
-            return
-
         try:
-            await runtime_data.coordinator.send_disarm()
-            await runtime_data.coordinator.async_request_refresh()
-        except (AttributeError, KeyError, ValueError) as err:
+            await coordinator.send_disarm()
+        except Exception as err:
             _LOGGER.error(f"Error disarming: {err}")
 
     async def handle_arm_stay(call: ServiceCall) -> None:
-        """Handle arm stay service."""
-        entry_id = call.data.get("entry_id")
-
-        if not entry_id:
-            _LOGGER.error("Missing entry_id in arm_stay service call")
-            return
-
-        runtime_data = hass.data[DOMAIN].get(entry_id)
-        if runtime_data is None:
-            _LOGGER.error(f"No config entry found for entry_id {entry_id}")
-            return
-
         try:
-            await runtime_data.coordinator.send_arm_stay()
-            await runtime_data.coordinator.async_request_refresh()
-        except (AttributeError, KeyError, ValueError) as err:
+            await coordinator.send_arm_stay()
+        except Exception as err:
             _LOGGER.error(f"Error arming stay: {err}")
 
     async def handle_arm_away(call: ServiceCall) -> None:
-        """Handle arm away service."""
-        entry_id = call.data.get("entry_id")
-
-        if not entry_id:
-            _LOGGER.error("Missing entry_id in arm_away service call")
-            return
-
-        runtime_data = hass.data[DOMAIN].get(entry_id)
-        if runtime_data is None:
-            _LOGGER.error(f"No config entry found for entry_id {entry_id}")
-            return
-
         try:
-            await runtime_data.coordinator.send_arm_away()
-            await runtime_data.coordinator.async_request_refresh()
-        except (AttributeError, KeyError, ValueError) as err:
+            await coordinator.send_arm_away()
+        except Exception as err:
             _LOGGER.error(f"Error arming away: {err}")
 
     async def handle_arm_night(call: ServiceCall) -> None:
-        """Handle arm night service."""
-        entry_id = call.data.get("entry_id")
-
-        if not entry_id:
-            _LOGGER.error("Missing entry_id in arm_night service call")
-            return
-
-        runtime_data = hass.data[DOMAIN].get(entry_id)
-        if runtime_data is None:
-            _LOGGER.error(f"No config entry found for entry_id {entry_id}")
-            return
-
         try:
-            await runtime_data.coordinator.send_arm_night()
-            await runtime_data.coordinator.async_request_refresh()
-        except (AttributeError, KeyError, ValueError) as err:
+            await coordinator.send_arm_night()
+        except Exception as err:
             _LOGGER.error(f"Error arming night: {err}")
 
     async def handle_panic(call: ServiceCall) -> None:
-        """Handle panic alarm service."""
-        entry_id = call.data.get("entry_id")
-
-        if not entry_id:
-            _LOGGER.error("Missing entry_id in panic_alarm service call")
-            return
-
-        runtime_data = hass.data[DOMAIN].get(entry_id)
-        if runtime_data is None:
-            _LOGGER.error(f"No config entry found for entry_id {entry_id}")
-            return
-
         try:
-            await runtime_data.coordinator.panic_alarm()
-            await runtime_data.coordinator.async_request_refresh()
-        except (AttributeError, KeyError, ValueError) as err:
+            await coordinator.panic_alarm()
+        except Exception as err:
             _LOGGER.error(f"Error triggering panic: {err}")
 
     # Register all services
