@@ -175,7 +175,7 @@ async def async_setup_entry(
                 # NOTE: Ensure 'ElkBinarySensor' matches the class name defined higher up in this file!
                 # (It might be called ElkZone, ElkZoneSensor, etc.)
                 entities.append(
-                    ElkBinarySensor(
+                    ElkZoneBinarySensor(
                         coordinator=coordinator,
                         config_entry=config_entry,
                         zone=zone,
