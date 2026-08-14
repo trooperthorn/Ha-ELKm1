@@ -268,65 +268,80 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator):
         """Shutdown coordinator and disconnect."""
         await self.async_disconnect()
 
-    # -------- Service Methods --------
+
+    # ----ARMING---- Service Methods --------
     # These methods are called by services (disarm, bypass, etc.)
 
-    async def send_disarm(self, pin_code: str = None) -> bool:
+    async def send_disarm(self, pin_code: str = None, area: int = 1) -> bool:
         """Send disarm command to panel."""
         if not self._elk:
             return False
         try:
             active_pin = pin_code if pin_code is not None else self._pin
-            _LOGGER.info("Sending disarm command")
-            await self._elk.disarm(pin=active_pin)
+            formatted_pin = str(active_pin).zfill(6)
+            _LOGGER.info(f"Sending disarm command to Area {area}")
+            
+            # 'a0' is the ASCII command for Disarm
+            self.send_raw_elk_command(f"a0{area}{formatted_pin}")
             await self.async_request_refresh()
             return True
-        except (OSError, AttributeError, ValueError) as err:
+        except Exception as err:
             _LOGGER.error(f"Failed to disarm: {err}")
             return False
 
-    async def send_arm_stay(self, pin_code: str = None) -> bool:
+    async def send_arm_stay(self, pin_code: str = None, area: int = 1) -> bool:
         """Send arm stay command to panel."""
         if not self._elk:
             return False
         try:
             active_pin = pin_code if pin_code is not None else self._pin
-            _LOGGER.info("Sending arm stay command")
-            await self._elk.arm_stay(pin=active_pin)
+            formatted_pin = str(active_pin).zfill(6)
+            _LOGGER.info(f"Sending arm stay command to Area {area}")
+            
+            # 'a2' is the ASCII command for Arm Stay
+            self.send_raw_elk_command(f"a2{area}{formatted_pin}")
             await self.async_request_refresh()
             return True
-        except (OSError, AttributeError, ValueError) as err:
+        except Exception as err:
             _LOGGER.error(f"Failed to arm stay: {err}")
             return False
 
-    async def send_arm_away(self, pin_code: str = None) -> bool:
+    async def send_arm_away(self, pin_code: str = None, area: int = 1) -> bool:
         """Send arm away command to panel."""
         if not self._elk:
             return False
         try:
             active_pin = pin_code if pin_code is not None else self._pin
-            _LOGGER.info("Sending arm away command")
-            await self._elk.arm_away(pin=active_pin)
+            formatted_pin = str(active_pin).zfill(6)
+            _LOGGER.info(f"Sending arm away command to Area {area}")
+            
+            # 'a1' is the ASCII command for Arm Away
+            self.send_raw_elk_command(f"a1{area}{formatted_pin}")
             await self.async_request_refresh()
             return True
-        except (OSError, AttributeError, ValueError) as err:
+        except Exception as err:
             _LOGGER.error(f"Failed to arm away: {err}")
             return False
 
-    async def send_arm_night(self, pin_code: str = None) -> bool:
+    async def send_arm_night(self, pin_code: str = None, area: int = 1) -> bool:
         """Send arm night command to panel."""
         if not self._elk:
             return False
         try:
             active_pin = pin_code if pin_code is not None else self._pin
-            _LOGGER.info("Sending arm night command")
-            await self._elk.arm_night(pin=active_pin)
+            formatted_pin = str(active_pin).zfill(6)
+            _LOGGER.info(f"Sending arm night command to Area {area}")
+            
+            # 'a4' is the ASCII command for Arm Night
+            self.send_raw_elk_command(f"a4{area}{formatted_pin}")
             await self.async_request_refresh()
             return True
-        except (OSError, AttributeError, ValueError) as err:
+        except Exception as err:
             _LOGGER.error(f"Failed to arm night: {err}")
             return False
-
+            
+    # ------BYPASS-- Service Methods --------
+    
     async def bypass_zone(self, zone_number: int, pin_code: str = None) -> bool:
         """Bypass a zone."""
         if not self._elk:
