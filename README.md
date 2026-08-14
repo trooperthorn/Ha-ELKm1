@@ -68,6 +68,8 @@ For Home Assistant to receive real-time updates from your Elk-M1, the panel **mu
 
 This integration provides several custom services that can be used in Home Assistant automations and scripts:
 
+
+
 | Service | Description | Data Parameters |
 | :--- | :--- | :--- |
 | `elkm1.bypass_zone` | Bypass a specific zone | `zone_number` (int) |
@@ -81,13 +83,4 @@ This integration provides several custom services that can be used in Home Assis
 
 ## 🐛 Troubleshooting & Debugging
 
-If you are experiencing connection issues or entities aren't updating, you can enable debug logging to see the raw communication between Home Assistant and your panel.
-
-Add the following to your `configuration.yaml` and restart Home Assistant:
-
-```yaml
-logger:
-  default: info
-  logs:
-    custom_components.elkm1: debug
-    elkm1_lib: debug
+If you are experiencing connection issues or entities aren't updating, you can enable debug logging IN THE INTEGRATION to see the raw communication between Home Assistant and your panel.
