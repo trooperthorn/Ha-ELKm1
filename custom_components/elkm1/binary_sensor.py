@@ -7,8 +7,10 @@ from homeassistant.components.binary_sensor import (
     BinarySensorEntity,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import callback
+from homeassistant.core import callback, HomeAssistant
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
+from .data import ElkRuntimeData
 from .coordinator import ElkDataUpdateCoordinator
 from .entity import ElkEntity
 
@@ -151,3 +153,17 @@ class ElkZoneBinarySensor(ElkEntity, BinarySensorEntity):
             return BinarySensorDeviceClass.DOOR
         
         return device_class
+
+async def async_setup_entry(
+    hass: HomeAssistant,
+    config_entry: ConfigEntry,
+    async_add_entities: AddEntitiesCallback,
+) -> None:
+    """Set up the Elk-M1 binary sensor platform."""
+    runtime_data: ElkRuntimeData = config_entry.runtime_data
+    coordinator = runtime_data.coordinator
+
+    # We will populate ElkBinarySensor entities for your zones here later
+    entities = [] 
+    
+    async_add_entities(entities)
