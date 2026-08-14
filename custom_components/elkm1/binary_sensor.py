@@ -163,7 +163,23 @@ async def async_setup_entry(
     runtime_data: ElkRuntimeData = config_entry.runtime_data
     coordinator = runtime_data.coordinator
 
-    # We will populate ElkBinarySensor entities for your zones here later
     entities = [] 
     
+    if coordinator._elk:
+        # Safely iterate through zones (remember, no len() allowed!)
+        for zone in coordinator._elk.zones:
+            # Definition > 0 means the zone is actually programmed in ElkRP. 
+            # We also check that it has a name.
+            if zone and getattr(zone, "definition", 0) > 0 and getattr(zone, "name", None):
+                
+                # NOTE: Ensure 'ElkBinarySensor' matches the class name defined higher up in this file!
+                # (It might be called ElkZone, ElkZoneSensor, etc.)
+                entities.append(
+                    ElkBinarySensor(
+                        coordinator=coordinator,
+                        config_entry=config_entry,
+                        zone=zone,
+                    )
+                )
+                
     async_add_entities(entities)
