@@ -10,6 +10,8 @@ This integration uses the modern [elkm1_lib](https://github.com/bdraco/elkm1_lib
 
 ## ✨ Features
 
+PLEASE MAKE SURE TO DELETE YOUR EXISTING ELKM1 Integration. This is designed to take over its place and properly register everything. 
+* **DESIGNED FOR ALARMO:** Has auto registration to automatically set the sensors to Alarmo. No more extra YAML for support.
 * **UI Configuration:** Fully configurable via the Home Assistant UI (no `configuration.yaml` required).
 * **Dual Connection Support:** Connect via Network (M1XEP) or direct Serial/USB.
 * **Auto-Discovery:** Automatically scans and suggests available USB/Serial ports during setup.
