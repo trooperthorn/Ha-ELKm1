@@ -48,36 +48,28 @@ class ElkZoneBinarySensor(ElkEntity, BinarySensorEntity):
 
     @property
     def is_on(self) -> bool | None:
-        """Return true if zone is open/triggered.
-        
-        Zone is "on" (open) when:
-        - Faulted: sensor is triggered (door open, motion detected, etc.)
-        - Open: zone status indicates violation
-        """
-        if not self.coordinator.data:
-            _LOGGER.debug(f"Zone {self._zone_index}: No coordinator data")
+        """Return true if zone is open/triggered."""
+        if not self.coordinator.data or not self._zone:
+            _LOGGER.debug(f"Zone {self._zone_index}: No coordinator data or zone missing")
             return None
         
-        # Check both conditions
-        is_faulted = bool(self._zone.faulted)
-        is_open = bool(self._zone.open)
+        # elkm1_lib uses logical_status and physical_status integers
+        logical_status = getattr(self._zone, "logical_status", 0)
+        physical_status = getattr(self._zone, "physical_status", 0)
         
-        result = is_faulted or is_open
+        # 2 = Violated (Logical), 1 = Open, 3 = Short (Physical)
+        result = logical_status == 2 or physical_status in (1, 3)
         
         _LOGGER.debug(
-            f"Zone {self._zone_index} ({self._zone.name}): "
-            f"faulted={is_faulted}, open={is_open}, result={result}"
+            f"Zone {self._zone_index} ({getattr(self._zone, 'name', 'Unknown')}): "
+            f"logical={logical_status}, physical={physical_status}, result={result}"
         )
         
         return result
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        """Return additional state attributes.
-        
-        Updates with every coordinator refresh so data is current.
-        """
-        # We use getattr with string conversions so Enums render safely in HA
+        """Return additional state attributes."""
         return {
             "zone_number": self._zone_index + 1,
             "zone_definition": str(getattr(self._zone, "definition", "Unknown")),
@@ -106,20 +98,18 @@ class ElkZoneBinarySensor(ElkEntity, BinarySensorEntity):
 
     @callback
     def _handle_coordinator_update(self) -> None:
-        """Handle updated data from coordinator.
-        
-        Called whenever coordinator updates.
-        Refreshes zone reference and notifies HA of state change.
-        """
+        """Handle updated data from coordinator."""
         try:
             if self.coordinator._elk and self.coordinator._elk.zones:
                 old_zone = self._zone
                 self._zone = self.coordinator._elk.zones[self._zone_index]
             
+                old_status = getattr(old_zone, "logical_status", "N/A") if old_zone else "N/A"
+                new_status = getattr(self._zone, "logical_status", "N/A")
+
                 _LOGGER.debug(
                     f"Zone {self._zone_index}: Updated from coordinator. "
-                    f"State changed from {old_zone.status if old_zone else 'N/A'} "
-                    f"to {self._zone.status}"
+                    f"State changed from {old_status} to {new_status}"
                 )
         except (IndexError, AttributeError):
             _LOGGER.exception(f"Failed to update zone {self._zone_index}")
@@ -129,15 +119,7 @@ class ElkZoneBinarySensor(ElkEntity, BinarySensorEntity):
 
     @staticmethod
     def _get_device_class(zone_definition: int) -> BinarySensorDeviceClass | None:
-        """Map ELK zone definition integer to HA device class.
-        
-        Args:
-            zone_definition: ELK zone definition integer (from ElkRP)
-            
-        Returns:
-            Home Assistant BinarySensorDeviceClass or None
-        """
-        # Map official Elk-M1 Zone Definition integers to HA Device Classes
+        """Map ELK zone definition integer to HA device class."""
         zone_type_map = {
             1: BinarySensorDeviceClass.DOOR,       # Burglar Entry/Exit 1
             2: BinarySensorDeviceClass.DOOR,       # Burglar Entry/Exit 2
@@ -159,12 +141,11 @@ class ElkZoneBinarySensor(ElkEntity, BinarySensorEntity):
         device_class = zone_type_map.get(zone_definition)
         
         if device_class is None:
-            # We return None instead of DOOR so that unmapped or generic automation 
-            # zones just show up as a generic sensor (Clear/Detected) in Home Assistant.
             _LOGGER.debug(f"Unmapped zone definition: {zone_definition}, defaulting to generic sensor")
             return None
             
         return device_class
+
 
 async def async_setup_entry(
     hass: HomeAssistant,
@@ -178,7 +159,6 @@ async def async_setup_entry(
     entities = [] 
     
     if coordinator._elk:
-        # Use enumerate() to get BOTH the index number and the zone object
         for index, zone in enumerate(coordinator._elk.zones):
             
             # Safely get the definition value, defaulting to 0 if it's missing or not an Enum
@@ -189,7 +169,7 @@ async def async_setup_entry(
                     ElkZoneBinarySensor(
                         coordinator=coordinator,
                         config_entry=config_entry,
-                        zone_index=index,  # <--- We are now passing the missing index!
+                        zone_index=index,
                         zone=zone,
                     )
                 )
