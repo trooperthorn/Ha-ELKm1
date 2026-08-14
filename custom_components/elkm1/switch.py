@@ -26,16 +26,16 @@ async def async_setup_entry(
 
     entities: list[ElkOutputSwitch] = []
 
-    # Create a switch for each output (up to 208 on ELK-M1)
+    # Create a switch for each output safely
     if coordinator._elk:
-        for output_index in range(len(coordinator._elk.outputs)):
-            output = coordinator._elk.outputs[output_index]
-            if output and output.name:  # Only add if output has a name
+        # Iterate directly since elkm1_lib collections don't support len()
+        for output in coordinator._elk.outputs:
+            if output and getattr(output, "name", None):
                 entities.append(
                     ElkOutputSwitch(
                         coordinator=coordinator,
                         config_entry=config_entry,
-                        output_index=output_index,
+                        output_index=getattr(output, "index", 0),
                         output=output,
                     )
                 )
