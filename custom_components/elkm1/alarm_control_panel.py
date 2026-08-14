@@ -214,9 +214,10 @@ class ElkAlarmControlPanel(ElkEntity, AlarmControlPanelEntity):
         for zone in self.coordinator._elk.zones:
             if (
                 zone
-                and zone.zone_type
-                and "fire" in zone.zone_type.lower()
-                and (zone.faulted or zone.open)
+                # Definition 9 is standard Fire Alarm, 10 is Fire w/ Verify
+                and getattr(zone, "definition", 0) in (9, 10)
+                # Logical state 2 is violated/faulted
+                and getattr(zone, "logical_status", 0) == 2
             ):
                 return True
         
