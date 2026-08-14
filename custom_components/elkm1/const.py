@@ -37,3 +37,17 @@ DEFAULT_UPDATE_INTERVAL: Final = timedelta(seconds=60)
 # Watchdog settings (detect silent connection loss)
 LIVENESS_CHECK_INTERVAL: Final = timedelta(seconds=30)
 LIVENESS_TIMEOUT: Final = 60  # seconds without traffic = reconnect
+
+# SECURITY
+CONF_INCLUDED_ZONES = "included_zones"
+CONF_SYNC_CLOCK = "sync_clock"
+CONF_ENABLE_TASKS = "enable_tasks"
+CONF_STRICT_PIN = "strict_pin"
+CONF_AUTO_CLEAR_MEMORY = "auto_clear_memory"
+
+# Default values
+DEFAULT_INCLUDED_ZONES = "1-208"
+DEFAULT_SYNC_CLOCK = True
+DEFAULT_ENABLE_TASKS = True
+DEFAULT_STRICT_PIN = True
+DEFAULT_AUTO_CLEAR_MEMORY = False
