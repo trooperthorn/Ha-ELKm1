@@ -50,6 +50,8 @@ class ElkOutputSwitch(ElkEntity, SwitchEntity):
 
     _attr_has_entity_name = True
     _attr_should_poll = False
+    # This disables all outputs by default:
+    _attr_entity_registry_enabled_default = False
 
     def __init__(
         self,
