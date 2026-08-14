@@ -2,17 +2,23 @@
 import logging
 from typing import Final
 
+import voluptuous as vol
+from homeassistant.helpers import config_validation as cv
+
 from homeassistant.config_entries import ConfigEntry, ConfigEntryNotReady
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.helpers.update_coordinator import UpdateFailed
 
 # FIX: Removed PLATFORMS from this import line so it doesn't conflict
-from .const import CONF_SERIAL_PORT, DOMAIN
+from .const import CONF_SERIAL_PORT, CONF_PIN, DOMAIN
 from .coordinator import ElkDataUpdateCoordinator
 from .data import ElkRuntimeData
 
 _LOGGER = logging.getLogger(__name__)
+
+# Make sure PLATFORMS is defined somewhere here, for example:
+# PLATFORMS: list[Platform] = [Platform.ALARM_CONTROL_PANEL, Platform.SENSOR, Platform.BINARY_SENSOR, Platform.SWITCH]
 
 PLATFORMS: Final[list[Platform]] = [
     Platform.ALARM_CONTROL_PANEL,
@@ -25,6 +31,48 @@ PLATFORMS: Final[list[Platform]] = [
     Platform.SWITCH,
     # Platform.TIME,
 ]
+
+async def async_setup_services(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Register custom Elk-M1 services."""
+    # Grab the default PIN saved during the config flow
+    default_pin = entry.data.get(CONF_PIN)
+    
+    # Grab the coordinator so we can talk to the panel
+    coordinator = entry.runtime_data.coordinator
+
+    async def handle_bypass_zone(call: ServiceCall) -> None:
+        """Handle the elkm1.bypass_zone service call."""
+        zone_number = call.data.get("zone_number")
+        
+        # 1. Try to get the code from the service call data
+        # 2. If missing, fall back to the default PIN from device setup
+        code = call.data.get("code") or default_pin
+
+        if not code:
+            _LOGGER.warning(
+                "Cannot bypass zone %s: No PIN provided in service call, "
+                "and no default PIN was saved during device setup.", 
+                zone_number
+            )
+            return
+
+        if coordinator._elk:
+            # elkm1_lib uses 0-based indexing! Zone 1 is index 0.
+            zone_index = zone_number - 1
+            
+            _LOGGER.debug("Bypassing zone %s using PIN", zone_number)
+            coordinator._elk.zones[zone_index].bypass(code)
+
+    # Register the service with Home Assistant
+    hass.services.async_register(
+        DOMAIN,
+        "bypass_zone",
+        handle_bypass_zone,
+        schema=vol.Schema({
+            vol.Required("zone_number"): vol.All(vol.Coerce(int), vol.Range(min=1, max=208)),
+            vol.Optional("code"): cv.string,
+        }),
+    )
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Elk-M1 Control from a config entry."""
@@ -64,7 +112,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     # Register services (only once, even if multiple entries)
     if len(hass.data[DOMAIN]) == 1:
-        await async_setup_services(hass)
+        await async_setup_services(hass, entry)
 
     # Listen for unload
     entry.async_on_unload(coordinator.async_shutdown)
