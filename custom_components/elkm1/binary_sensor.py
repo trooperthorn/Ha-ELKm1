@@ -166,21 +166,18 @@ async def async_setup_entry(
     entities = [] 
     
     if coordinator._elk:
-        # Safely iterate through zones (remember, no len() allowed!)
-        for zone in coordinator._elk.zones:
-            # Definition > 0 means the zone is actually programmed in ElkRP. 
-            # We also check that it has a name.
+        # Use enumerate() to get BOTH the index number and the zone object
+        for index, zone in enumerate(coordinator._elk.zones):
+            
             # Safely get the definition value, defaulting to 0 if it's missing or not an Enum
             definition_val = getattr(getattr(zone, "definition", None), "value", 0)
             
             if zone and definition_val > 0 and getattr(zone, "name", None):
-                
-                # NOTE: Ensure 'ElkBinarySensor' matches the class name defined higher up in this file!
-                # (It might be called ElkZone, ElkZoneSensor, etc.)
                 entities.append(
                     ElkZoneBinarySensor(
                         coordinator=coordinator,
                         config_entry=config_entry,
+                        zone_index=index,  # <--- We are now passing the missing index!
                         zone=zone,
                     )
                 )
