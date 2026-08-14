@@ -116,3 +116,68 @@ set_temperature:
           min: 50
           max: 90
           step: 0.1
+
+display_message:
+  name: Display Keypad Message
+  description: Send a custom text message to Elk keypad LCDs.
+  fields:
+    area:
+      name: Area
+      description: The Area of the keypads (1-8).
+      required: true
+      selector:
+        number:
+          min: 1
+          max: 8
+    line1:
+      name: Line 1 Text
+      description: Max 16 characters.
+      required: true
+      selector:
+        text:
+    line2:
+      name: Line 2 Text
+      description: Max 16 characters. Use ^ to skip.
+      required: false
+      selector:
+        text:
+    beep:
+      name: Beep Keypad
+      description: Beep the keypad when the message arrives.
+      default: false
+      selector:
+        boolean:
+    timeout:
+      name: Timeout
+      description: Seconds to display (0 for indefinite).
+      default: 0
+      selector:
+        number:
+          min: 0
+          max: 65535
+
+speak_phrase:
+  name: Speak Phrase
+  description: Play a native Elk voice phrase over the panel speakers.
+  fields:
+    phrase_number:
+      name: Phrase Number
+      description: Number of the phrase (e.g., 1-319).
+      required: true
+      selector:
+        number:
+          min: 1
+          max: 319
+
+activate_task:
+  name: Activate Automation Task
+  description: Trigger one of the 32 internal Elk automation tasks.
+  fields:
+    task_number:
+      name: Task Number
+      description: Task to activate (1-32).
+      required: true
+      selector:
+        number:
+          min: 1
+          max: 32
