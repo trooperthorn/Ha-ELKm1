@@ -89,7 +89,7 @@ class ElkAlarmControlPanel(ElkEntity, AlarmControlPanelEntity):
         if getattr(self.coordinator._elk.panel, "alarm_state", False):
             return STATE_ALARM_TRIGGERED
 
-        if self.coordinator.data["armed"]:
+        if self.coordinator.data.get("armed", False):
             armed_mode = self.coordinator.data.get("armed_mode", "").lower()
             
             if "stay" in armed_mode or "home" in armed_mode:
