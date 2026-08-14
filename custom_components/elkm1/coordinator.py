@@ -135,6 +135,35 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator):
             # Initialize Elk with the dictionary
             self._elk = Elk(config)
 
+            # --- PHASE 1: REAL-TIME BROADCAST INTERCEPTOR ---
+            def elk_broadcast_handler(msg):
+                """Intercept broadcasts not fully mapped by elkm1_lib."""
+                raw_str = msg.get("raw", "") if isinstance(msg, dict) else str(msg)
+                if len(raw_str) < 4:
+                    return
+                    
+                cmd = raw_str[2:4]
+                
+                # Entry/Exit Timer (EE)[cite: 1]
+                if cmd == "EE":
+                    self.hass.bus.async_fire("elkm1_timer_event", {
+                        "area": int(raw_str[4:5]),
+                        "type": "exit" if raw_str[5:6] == "0" else "entry",
+                        "timer1": int(raw_str[6:9]),
+                        "timer2": int(raw_str[9:12]),
+                        "armed_state": int(raw_str[12:13])
+                    })
+                    
+                # Alarm Memory (AM)[cite: 1]
+                elif cmd == "AM":
+                    self.hass.bus.async_fire("elkm1_alarm_memory", {
+                        "flags": raw_str[4:12]
+                    })
+
+            # Hook into elkm1_lib's fallback handler to catch unrecognized data strings
+            self._elk.add_handler("unknown", elk_broadcast_handler)
+            # ------------------------------------------------
+
             # 1. Create the event tracker to monitor connection state
             connected_event = asyncio.Event()
             
@@ -480,3 +509,57 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator):
     def connection_type(self) -> str:
         """Return connection type (serial or network)."""
         return self._connection_type
+
+    # --- PHASE 2: CUSTOM RAW COMMAND SERVICES ---
+
+    def send_raw_elk_command(self, command: str) -> None:
+        """Format and send a raw ASCII command to the Elk-M1 panel."""
+        if not self._elk or not hasattr(self._elk, '_connection'):
+            _LOGGER.error("Cannot send raw command: Elk instance or connection not found.")
+            return
+
+        # Append the required '00' reserved bytes to the command[cite: 1]
+        payload = f"{command}00" 
+        length = len(payload) + 2
+        packet = f"{length:02X}{payload}"
+        
+        # Calculate Checksum: Modulo 256, Two's Complement[cite: 1]
+        checksum = sum(ord(c) for c in packet) % 256
+        checksum = (checksum ^ 0xFF) + 1
+        
+        # Format to 2 hex digits[cite: 1]
+        final_string = f"{packet}{checksum & 0xFF:02X}\r\n"
+        
+        try:
+            # Bypass the library queue and write directly to the transport
+            self._elk._connection._transport.write(final_string.encode('ascii'))
+            _LOGGER.debug(f"Sent raw Elk command: {final_string.strip()}")
+        except Exception as e:
+            _LOGGER.error(f"Failed to send raw Elk command: {e}")
+
+    async def trigger_zone(self, zone_number: int) -> bool:
+        """Trigger a virtual zone violation."""
+        if not self._elk:
+            return False
+        try:
+            _LOGGER.info(f"Triggering zone {zone_number}")
+            # 'zt' command momentarily violates the zone[cite: 1]
+            self.send_raw_elk_command(f"zt{zone_number:03d}")
+            return True
+        except Exception as err:
+            _LOGGER.error(f"Failed to trigger zone {zone_number}: {err}")
+            return False
+
+    async def force_arm_away(self, area: int) -> bool:
+        """Force arm the system to away mode."""
+        if not self._elk:
+            return False
+        try:
+            _LOGGER.info(f"Force arming away area {area}")
+            pin = str(self._pin).zfill(6)
+            # 'a9' command force arms to Away mode[cite: 1]
+            self.send_raw_elk_command(f"a9{area}{pin}")
+            return True
+        except Exception as err:
+            _LOGGER.error(f"Failed to force arm away area {area}: {err}")
+            return False
