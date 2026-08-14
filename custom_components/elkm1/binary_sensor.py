@@ -170,7 +170,10 @@ async def async_setup_entry(
         for zone in coordinator._elk.zones:
             # Definition > 0 means the zone is actually programmed in ElkRP. 
             # We also check that it has a name.
-            if zone and getattr(zone, "definition", 0) > 0 and getattr(zone, "name", None):
+            # Safely get the definition value, defaulting to 0 if it's missing or not an Enum
+            definition_val = getattr(getattr(zone, "definition", None), "value", 0)
+            
+            if zone and definition_val > 0 and getattr(zone, "name", None):
                 
                 # NOTE: Ensure 'ElkBinarySensor' matches the class name defined higher up in this file!
                 # (It might be called ElkZone, ElkZoneSensor, etc.)
