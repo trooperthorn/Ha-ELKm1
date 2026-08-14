@@ -28,6 +28,12 @@ from .const import (
     DEFAULT_ENABLE_TASKS,
     DEFAULT_STRICT_PIN,
     DEFAULT_AUTO_CLEAR_MEMORY,
+    CONF_CONNECTION_TYPE,
+    CONNECTION_SERIAL,
+    CONNECTION_NETWORK,
+    CONF_SERIAL_PORT,
+    CONF_VERIFY_DEVICE,
+    CONF_PIN,
 )
 from .helpers.usb_discovery import probe_serial_port
 
