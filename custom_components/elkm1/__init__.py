@@ -50,10 +50,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # We use .get(..., "") or similar fallback if your dataclass strictly requires a string
     serial_port_value = entry.data.get(CONF_SERIAL_PORT)
     
-    hass.data[DOMAIN][entry.entry_id] = ElkRuntimeData(
+    runtime_data = ElkRuntimeData(
         coordinator=coordinator,
         serial_port=serial_port_value
     )
+
+    # Store it in both places so legacy services and modern platforms are happy
+    hass.data[DOMAIN][entry.entry_id] = runtime_data
+    entry.runtime_data = runtime_data
 
     # Set up all platforms
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
