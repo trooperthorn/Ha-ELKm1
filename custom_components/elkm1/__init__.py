@@ -56,6 +56,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if len(hass.data[DOMAIN]) == 1:
         await async_setup_services(hass, entry)
 
+    # Register the update listener to reload the integration when options change
+    entry.async_on_unload(entry.add_update_listener(update_listener))
+
     entry.async_on_unload(coordinator.async_shutdown)
 
     return True
@@ -196,3 +199,8 @@ async def async_setup_services(hass: HomeAssistant, entry: ConfigEntry) -> None:
     hass.services.async_register(DOMAIN, "display_message", handle_display_message)
     hass.services.async_register(DOMAIN, "speak_phrase", handle_speak_phrase)
     hass.services.async_register(DOMAIN, "activate_task", handle_activate_task)
+
+async def update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Handle options update when a user changes settings in the UI."""
+    _LOGGER.info("Elk-M1 options updated, reloading integration...")
+    await hass.config_entries.async_reload(entry.entry_id)
