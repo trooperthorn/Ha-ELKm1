@@ -29,7 +29,7 @@ class ElkEntity(CoordinatorEntity[ElkDataUpdateCoordinator], Entity):
         # Set device info
         self._attr_device_info = {
             "identifiers": {(DOMAIN, config_entry.entry_id)},
-            "name": MODEL,
+            "name": "ElkM1",  # <--- Changed from MODEL so your prefix becomes elkm1_
             "manufacturer": MANUFACTURER,
             "model": MODEL,
         }
