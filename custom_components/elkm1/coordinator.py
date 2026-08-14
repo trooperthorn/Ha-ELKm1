@@ -550,15 +550,19 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator):
             _LOGGER.error(f"Failed to trigger zone {zone_number}: {err}")
             return False
 
-    async def force_arm_away(self, area: int) -> bool:
+    async def force_arm_away(self, area: int, pin_code: str = None) -> bool:
         """Force arm the system to away mode."""
         if not self._elk:
             return False
         try:
             _LOGGER.info(f"Force arming away area {area}")
-            pin = str(self._pin).zfill(6)
+            
+            # Use the dynamically provided PIN, or fallback to the config PIN
+            active_pin = pin_code if pin_code else self._pin
+            formatted_pin = str(active_pin).zfill(6)
+            
             # 'a9' command force arms to Away mode[cite: 1]
-            self.send_raw_elk_command(f"a9{area}{pin}")
+            self.send_raw_elk_command(f"a9{area}{formatted_pin}")
             return True
         except Exception as err:
             _LOGGER.error(f"Failed to force arm away area {area}: {err}")
