@@ -66,7 +66,9 @@ class ElkAlarmControlPanel(ElkEntity, AlarmControlPanelEntity):
         | AlarmControlPanelEntityFeature.TRIGGER
     )
     _attr_code_format = CodeFormat.NUMBER
-    _attr_code_arm_required = False
+    
+    # FORCE FRONTEND PIN PROMPT: Set to True so native HA cards require a PIN
+    _attr_code_arm_required = True
 
     def __init__(
         self,
@@ -156,6 +158,7 @@ class ElkAlarmControlPanel(ElkEntity, AlarmControlPanelEntity):
             "alarm_triggered": getattr(panel, "alarm_state", False),
             "fire_alarm": self._get_fire_alarm_status(),
             "panic_alarm": getattr(panel, "panic_state", False),
+            "alarm_memory": self._get_alarm_memory_status(),
             
             # Zone bypass information
             "bypassed_zones": self._get_bypassed_zones(),
@@ -223,6 +226,17 @@ class ElkAlarmControlPanel(ElkEntity, AlarmControlPanelEntity):
         
         return False
 
+    def _get_alarm_memory_status(self) -> bool:
+        """Check if any area has an active alarm memory state."""
+        if not self.coordinator._elk:
+            return False
+            
+        for area in self.coordinator._elk.areas:
+            if area and getattr(area, "alarm_memory", False):
+                return True
+                
+        return False
+
     # ============================================================================
     # End of Part 5 Attributes
     # ============================================================================
@@ -230,12 +244,8 @@ class ElkAlarmControlPanel(ElkEntity, AlarmControlPanelEntity):
     async def async_alarm_disarm(self, code: str | None = None) -> None:
         """Disarm."""
         try:
-            await self._coordinator._serial_queue.async_send_command(
-                "disarm",
-                user=0,
-            )
-            # Refresh state
-            await self.coordinator.async_request_refresh()
+            # Pass the user's PIN code directly to the coordinator
+            await self.coordinator.send_disarm(code)
             _LOGGER.info("Panel disarmed")
         except (OSError, TimeoutError, ValueError, AttributeError) as err:
             _LOGGER.error(f"Error disarming: {err}")
@@ -243,11 +253,8 @@ class ElkAlarmControlPanel(ElkEntity, AlarmControlPanelEntity):
     async def async_alarm_arm_home(self, code: str | None = None) -> None:
         """Arm home (stay mode)."""
         try:
-            await self._coordinator._serial_queue.async_send_command(
-                "arm_stay",
-                user=0,
-            )
-            await self.coordinator.async_request_refresh()
+            # Pass the user's PIN code directly to the coordinator
+            await self.coordinator.send_arm_stay(code)
             _LOGGER.info("Panel armed (stay/home mode)")
         except (OSError, TimeoutError, ValueError, AttributeError) as err:
             _LOGGER.error(f"Error arming home: {err}")
@@ -255,11 +262,8 @@ class ElkAlarmControlPanel(ElkEntity, AlarmControlPanelEntity):
     async def async_alarm_arm_away(self, code: str | None = None) -> None:
         """Arm away."""
         try:
-            await self._coordinator._serial_queue.async_send_command(
-                "arm_away",
-                user=0,
-            )
-            await self.coordinator.async_request_refresh()
+            # Pass the user's PIN code directly to the coordinator
+            await self.coordinator.send_arm_away(code)
             _LOGGER.info("Panel armed (away mode)")
         except (OSError, TimeoutError, ValueError, AttributeError) as err:
             _LOGGER.error(f"Error arming away: {err}")
@@ -267,11 +271,8 @@ class ElkAlarmControlPanel(ElkEntity, AlarmControlPanelEntity):
     async def async_alarm_arm_night(self, code: str | None = None) -> None:
         """Arm night."""
         try:
-            await self._coordinator._serial_queue.async_send_command(
-                "arm_night",
-                user=0,
-            )
-            await self.coordinator.async_request_refresh()
+            # Pass the user's PIN code directly to the coordinator
+            await self.coordinator.send_arm_night(code)
             _LOGGER.info("Panel armed (night mode)")
         except (OSError, TimeoutError, ValueError, AttributeError) as err:
             _LOGGER.error(f"Error arming night: {err}")
@@ -279,11 +280,8 @@ class ElkAlarmControlPanel(ElkEntity, AlarmControlPanelEntity):
     async def async_alarm_trigger(self, code: str | None = None) -> None:
         """Trigger alarm (panic)."""
         try:
-            await self._coordinator._serial_queue.async_send_command(
-                "panic_alarm",
-                panic_type="police",
-            )
-            await self.coordinator.async_request_refresh()
+            # Pass the user's PIN code directly to the coordinator
+            await self.coordinator.panic_alarm(code)
             _LOGGER.warning("Panic alarm triggered")
         except (OSError, TimeoutError, ValueError, AttributeError) as err:
             _LOGGER.error(f"Error triggering panic: {err}")
