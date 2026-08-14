@@ -271,127 +271,118 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator):
     # -------- Service Methods --------
     # These methods are called by services (disarm, bypass, etc.)
 
-    async def send_disarm(self) -> bool:
-        """Send disarm command to panel.
-        
-        Returns:
-            True if successful, False otherwise
-        """
+    async def send_disarm(self, pin_code: str = None) -> bool:
+        """Send disarm command to panel."""
         if not self._elk:
-            _LOGGER.error("Cannot send disarm: not connected")
             return False
-        
         try:
+            active_pin = pin_code if pin_code is not None else self._pin
             _LOGGER.info("Sending disarm command")
-            await self._elk.disarm(pin=self._pin)
+            await self._elk.disarm(pin=active_pin)
             await self.async_request_refresh()
             return True
         except (OSError, AttributeError, ValueError) as err:
             _LOGGER.error(f"Failed to disarm: {err}")
             return False
 
-    async def send_arm_stay(self) -> bool:
+    async def send_arm_stay(self, pin_code: str = None) -> bool:
         """Send arm stay command to panel."""
         if not self._elk:
-            _LOGGER.error("Cannot send arm stay: not connected")
             return False
-        
         try:
+            active_pin = pin_code if pin_code is not None else self._pin
             _LOGGER.info("Sending arm stay command")
-            await self._elk.arm_stay(pin=self._pin)
+            await self._elk.arm_stay(pin=active_pin)
             await self.async_request_refresh()
             return True
         except (OSError, AttributeError, ValueError) as err:
             _LOGGER.error(f"Failed to arm stay: {err}")
             return False
 
-    async def send_arm_away(self) -> bool:
+    async def send_arm_away(self, pin_code: str = None) -> bool:
         """Send arm away command to panel."""
         if not self._elk:
-            _LOGGER.error("Cannot send arm away: not connected")
             return False
-        
         try:
+            active_pin = pin_code if pin_code is not None else self._pin
             _LOGGER.info("Sending arm away command")
-            await self._elk.arm_away(pin=self._pin)
+            await self._elk.arm_away(pin=active_pin)
             await self.async_request_refresh()
             return True
         except (OSError, AttributeError, ValueError) as err:
             _LOGGER.error(f"Failed to arm away: {err}")
             return False
 
-    async def send_arm_night(self) -> bool:
+    async def send_arm_night(self, pin_code: str = None) -> bool:
         """Send arm night command to panel."""
         if not self._elk:
-            _LOGGER.error("Cannot send arm night: not connected")
             return False
-        
         try:
+            active_pin = pin_code if pin_code is not None else self._pin
             _LOGGER.info("Sending arm night command")
-            await self._elk.arm_night(pin=self._pin)
+            await self._elk.arm_night(pin=active_pin)
             await self.async_request_refresh()
             return True
         except (OSError, AttributeError, ValueError) as err:
             _LOGGER.error(f"Failed to arm night: {err}")
             return False
 
-    async def bypass_zone(self, zone_number: int) -> bool:
-        """Bypass a zone.
-        
-        Args:
-            zone_number: Zone number (1-208)
-            
-        Returns:
-            True if successful, False otherwise
-        """
+    async def bypass_zone(self, zone_number: int, pin_code: str = None) -> bool:
+        """Bypass a zone."""
         if not self._elk:
-            _LOGGER.error("Cannot bypass zone: not connected")
             return False
-        
         try:
+            active_pin = pin_code if pin_code is not None else self._pin
             _LOGGER.info(f"Bypassing zone {zone_number}")
-            await self._elk.bypass_zone(zone_number, pin=self._pin)
+            await self._elk.bypass_zone(zone_number, pin=active_pin)
             await self.async_request_refresh()
             return True
         except (OSError, AttributeError, ValueError) as err:
             _LOGGER.error(f"Failed to bypass zone {zone_number}: {err}")
             return False
 
-    async def unbypass_zone(self, zone_number: int) -> bool:
-        """Unbypass a zone.
-        
-        Args:
-            zone_number: Zone number (1-208)
-            
-        Returns:
-            True if successful, False otherwise
-        """
+    async def unbypass_zone(self, zone_number: int, pin_code: str = None) -> bool:
+        """Unbypass a zone."""
         if not self._elk:
-            _LOGGER.error("Cannot unbypass zone: not connected")
             return False
-        
         try:
+            active_pin = pin_code if pin_code is not None else self._pin
             _LOGGER.info(f"Unbypassing zone {zone_number}")
-            await self._elk.unbypass_zone(zone_number, pin=self._pin)
+            await self._elk.unbypass_zone(zone_number, pin=active_pin)
             await self.async_request_refresh()
             return True
         except (OSError, AttributeError, ValueError) as err:
             _LOGGER.error(f"Failed to unbypass zone {zone_number}: {err}")
             return False
 
-    async def panic_alarm(self) -> bool:
+    async def panic_alarm(self, pin_code: str = None) -> bool:
         """Trigger panic alarm."""
         if not self._elk:
-            _LOGGER.error("Cannot trigger panic: not connected")
             return False
-        
         try:
+            active_pin = pin_code if pin_code is not None else self._pin
             _LOGGER.warning("Sending panic alarm command")
-            await self._elk.panic(pin=self._pin)
+            await self._elk.panic(pin=active_pin)
             await self.async_request_refresh()
             return True
         except (OSError, AttributeError, ValueError) as err:
             _LOGGER.error(f"Failed to trigger panic: {err}")
+            return False
+
+    # --- Phase 2 Raw Commands ---
+    async def force_arm_away(self, area: int, pin_code: str = None) -> bool:
+        """Force arm the system to away mode."""
+        if not self._elk:
+            return False
+        try:
+            _LOGGER.info(f"Force arming away area {area}")
+            active_pin = pin_code if pin_code is not None else self._pin
+            # Format the raw command `a9` padded to 6 digits
+            formatted_pin = str(active_pin).zfill(6)
+            self.send_raw_elk_command(f"a9{area}{formatted_pin}")
+            return True
+        except Exception as err:
+            _LOGGER.error(f"Failed to force arm away area {area}: {err}")
             return False
 
     async def set_thermostat_temperature(
