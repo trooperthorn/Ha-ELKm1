@@ -27,10 +27,10 @@ async def async_setup_entry(
     coordinator = runtime_data.coordinator
 
     entities = [
-        ElkPanelTemperatureSensor(coordinator, config_entry),
-        ElkPanelCommunicationStatusSensor(coordinator, config_entry),
-        ElkLastUserSensor(coordinator, config_entry),
-        ElkFaultedZonesSensor(coordinator, config_entry),
+        ElkPanelTemperatureSensor(coordinator, config_entry, "panel_temperature"),
+        ElkPanelCommunicationStatusSensor(coordinator, config_entry, "panel_comm_status"),
+        ElkLastUserSensor(coordinator, config_entry, "last_user"),
+        ElkFaultedZonesSensor(coordinator, config_entry, "faulted_zones_count"),
     ]
 
     async_add_entities(entities)
