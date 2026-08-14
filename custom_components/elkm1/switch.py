@@ -73,8 +73,11 @@ class ElkOutputSwitch(ElkEntity, SwitchEntity):
 
     @property
     def is_on(self) -> bool:
-        """Return true if output is active."""
-        return self._output.status if self._output else False
+        """Return true if output is on."""
+        if not self._output:
+            return False
+        # elkm1_lib typically uses output_on for the boolean state
+        return getattr(self._output, "output_on", False)
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Turn on output."""
