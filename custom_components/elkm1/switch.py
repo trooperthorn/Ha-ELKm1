@@ -30,7 +30,9 @@ async def async_setup_entry(
     if coordinator._elk:
         # Iterate directly since elkm1_lib collections don't support len()
         for output in coordinator._elk.outputs:
-            if output and getattr(output, "name", None):
+            name = getattr(output, "name", "")
+            # Only add the switch if it has a custom name in ElkRP
+            if name and not name.startswith("Output "):
                 entities.append(
                     ElkOutputSwitch(
                         coordinator=coordinator,
@@ -80,26 +82,27 @@ class ElkOutputSwitch(ElkEntity, SwitchEntity):
         return getattr(self._output, "output_on", False)
 
     async def async_turn_on(self, **kwargs: Any) -> None:
-        """Turn on output."""
+        """Turn on the output."""
         try:
-            await self.coordinator._serial_queue.async_send_command(
-                "output_on",
-                output=self._output_index,
-            )
-            await self.coordinator.async_request_refresh()
-        except (OSError, TimeoutError, ValueError, AttributeError) as err:
-            _LOGGER.error(f"Error turning on output {self._output_index}: {err}")
+            if self._output:
+                # '0' tells the Elk-M1 to turn the output on indefinitely
+                self._output.turn_on(0)
+                
+                # Tell HA to update the UI immediately
+                self.async_write_ha_state()
+        except Exception as err:
+            _LOGGER.error(f"Error turning on output: {err}")
 
     async def async_turn_off(self, **kwargs: Any) -> None:
-        """Turn off output."""
+        """Turn off the output."""
         try:
-            await self.coordinator._serial_queue.async_send_command(
-                "output_off",
-                output=self._output_index,
-            )
-            await self.coordinator.async_request_refresh()
-        except (OSError, TimeoutError, ValueError, AttributeError) as err:
-            _LOGGER.error(f"Error turning on output {self._output_index}: {err}")
+            if self._output:
+                self._output.turn_off()
+                
+                # Tell HA to update the UI immediately
+                self.async_write_ha_state()
+        except Exception as err:
+            _LOGGER.error(f"Error turning off output: {err}")
 
     @callback
     def _handle_coordinator_update(self) -> None:
