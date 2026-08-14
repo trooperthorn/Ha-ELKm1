@@ -41,7 +41,9 @@ class ElkZoneBinarySensor(ElkEntity, BinarySensorEntity):
         self._zone = zone
         
         # Map ELK zone type to HA device class
-        self._attr_device_class = self._get_device_class(zone.zone_type)
+        # Safely extract the zone definition as an integer
+        definition_val = getattr(getattr(zone, "definition", None), "value", 0)
+        self._attr_device_class = self._get_device_class(definition_val)
         self._attr_name = zone.name
 
     @property
@@ -75,12 +77,14 @@ class ElkZoneBinarySensor(ElkEntity, BinarySensorEntity):
         
         Updates with every coordinator refresh so data is current.
         """
+        # We use getattr with string conversions so Enums render safely in HA
         return {
             "zone_number": self._zone_index + 1,
-            "zone_type": self._zone.zone_type,
-            "zone_status": self._zone.status,
-            "zone_open": self._zone.open,
-            "zone_faulted": self._zone.faulted,
+            "zone_definition": str(getattr(self._zone, "definition", "Unknown")),
+            "logical_status": str(getattr(self._zone, "logical_status", "Unknown")),
+            "physical_status": str(getattr(self._zone, "physical_status", "Unknown")),
+            "zone_open": getattr(self._zone, "open", False),
+            "zone_faulted": getattr(self._zone, "faulted", False),
         }
 
     @property
@@ -124,34 +128,42 @@ class ElkZoneBinarySensor(ElkEntity, BinarySensorEntity):
         self.async_write_ha_state()
 
     @staticmethod
-    def _get_device_class(zone_type: str) -> BinarySensorDeviceClass | None:
-        """Map ELK zone type to HA device class.
+    def _get_device_class(zone_definition: int) -> BinarySensorDeviceClass | None:
+        """Map ELK zone definition integer to HA device class.
         
         Args:
-            zone_type: ELK zone type string
+            zone_definition: ELK zone definition integer (from ElkRP)
             
         Returns:
             Home Assistant BinarySensorDeviceClass or None
         """
+        # Map official Elk-M1 Zone Definition integers to HA Device Classes
         zone_type_map = {
-            "burglar": BinarySensorDeviceClass.DOOR,
-            "fire": BinarySensorDeviceClass.SMOKE,
-            "gas": BinarySensorDeviceClass.GAS,
-            "water": BinarySensorDeviceClass.MOISTURE,
-            "temp": BinarySensorDeviceClass.TEMPERATURE,
-            "motion": BinarySensorDeviceClass.MOTION,
-            "door": BinarySensorDeviceClass.DOOR,
-            "window": BinarySensorDeviceClass.WINDOW,
-            "glass": BinarySensorDeviceClass.WINDOW,
-            "tamper": BinarySensorDeviceClass.TAMPER,
+            1: BinarySensorDeviceClass.DOOR,       # Burglar Entry/Exit 1
+            2: BinarySensorDeviceClass.DOOR,       # Burglar Entry/Exit 2
+            3: BinarySensorDeviceClass.WINDOW,     # Burglar Perimeter Instant
+            4: BinarySensorDeviceClass.MOTION,     # Burglar Interior
+            5: BinarySensorDeviceClass.MOTION,     # Burglar Interior Follower
+            6: BinarySensorDeviceClass.MOTION,     # Burglar Interior Night
+            7: BinarySensorDeviceClass.MOTION,     # Burglar Interior Night Delay
+            9: BinarySensorDeviceClass.SMOKE,      # Fire Alarm
+            10: BinarySensorDeviceClass.SMOKE,     # Fire Verified
+            17: BinarySensorDeviceClass.CO,        # Carbon Monoxide
+            19: BinarySensorDeviceClass.COLD,      # Freeze
+            20: BinarySensorDeviceClass.GAS,       # Gas
+            21: BinarySensorDeviceClass.HEAT,      # Heat
+            22: BinarySensorDeviceClass.MOISTURE,  # Water
+            25: BinarySensorDeviceClass.TAMPER,    # Tamper
         }
         
-        device_class = zone_type_map.get(zone_type.lower())
+        device_class = zone_type_map.get(zone_definition)
         
         if device_class is None:
-            _LOGGER.warning(f"Unknown zone type: {zone_type}, defaulting to DOOR")
-            return BinarySensorDeviceClass.DOOR
-        
+            # We return None instead of DOOR so that unmapped or generic automation 
+            # zones just show up as a generic sensor (Clear/Detected) in Home Assistant.
+            _LOGGER.debug(f"Unmapped zone definition: {zone_definition}, defaulting to generic sensor")
+            return None
+            
         return device_class
 
 async def async_setup_entry(
