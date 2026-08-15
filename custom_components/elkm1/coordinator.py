@@ -602,3 +602,7 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator):
         except Exception as err:  # noqa: BLE001
             _LOGGER.error(f"Failed to trigger zone {zone_number}: {err}")
             return False
+            
+    def _log_raw_serial_traffic(self, raw_data: Any) -> None:
+        """Log raw frames received from the Elk-M1 serial interface."""
+        _LOGGER.debug(f"RAW SERIAL RECEIVED --> {raw_data}")
