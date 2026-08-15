@@ -609,7 +609,7 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator):
 
     def send_raw_elk_command(self, command: str) -> None:
         """Format and send a raw ASCII command to the Elk-M1 panel."""
-        if not self._elk or not hasattr(self._elk, "_connection"):
+        if not self._elk or getattr(self._elk, "_connection", None) is None:
             _LOGGER.error("Cannot send raw command: Elk connection not found.")
             return
 
@@ -621,26 +621,35 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator):
         # Calculate Checksum: Modulo 256, Two's Complement
         checksum = sum(ord(c) for c in packet) % 256
         checksum = (checksum ^ 0xFF) + 1
-
-        # Combine packet and checksum. 
-        # (write_data automatically appends the \r\n and encodes to bytes)
+        
+        # Combine packet and checksum
         final_string = f"{packet}{checksum & 0xFF:02X}"
+        packet_with_crlf = f"{final_string}\r\n"
 
         try:
-            # Approach 1: Use the library's native write_data method if available
-            if hasattr(self._elk._connection, "write_data"):
-                self._elk._connection.write_data(final_string)
+            conn = self._elk._connection
+            
+            # Approach 1: The standard asyncio StreamWriter used by elkm1_lib
+            writer = getattr(conn, "_writer", None)
+            if writer and hasattr(writer, "write"):
+                writer.write(packet_with_crlf.encode("ascii"))
+                _LOGGER.debug(f"Sent Elk command via _writer: {packet_with_crlf.strip()}")
+                return
+                
+            # Approach 2: If the library natively exposes write_data
+            if hasattr(conn, "write_data"):
+                conn.write_data(final_string)
                 _LOGGER.debug(f"Sent Elk command via write_data: {final_string}")
                 return
-
-            # Approach 2: Fallback to direct asyncio transport injection
-            transport = getattr(self._elk._connection, "transport", None)
-            if transport:
-                packet_with_crlf = f"{final_string}\r\n"
+                
+            # Approach 3: Direct transport access fallback
+            transport = getattr(conn, "transport", getattr(conn, "_transport", None))
+            if transport and hasattr(transport, "write"):
                 transport.write(packet_with_crlf.encode("ascii"))
                 _LOGGER.debug(f"Sent Elk command via transport: {packet_with_crlf.strip()}")
-            else:
-                _LOGGER.error("Cannot send command: Neither write_data nor transport available.")
+                return
+
+            _LOGGER.error("Cannot send command: No valid stream writer found on connection object.")
 
         except Exception as e:  # noqa: BLE001
             _LOGGER.error(f"Failed to send raw Elk command: {e}")
