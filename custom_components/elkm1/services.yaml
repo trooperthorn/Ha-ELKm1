@@ -155,20 +155,7 @@ display_message:
         number:
           min: 0
           max: 65535
-
-speak_phrase:
-  name: Speak Phrase
-  description: Play a native Elk voice phrase over the panel speakers.
-  fields:
-    phrase_number:
-      name: Phrase Number
-      description: Number of the phrase (e.g., 1-319).
-      required: true
-      selector:
-        number:
-          min: 1
-          max: 319
-
+          
 activate_task:
   name: Activate Automation Task
   description: Trigger one of the 32 internal Elk automation tasks.
@@ -181,3 +168,965 @@ activate_task:
         number:
           min: 1
           max: 32
+
+speak_phrase:
+  name: Speak Phrase
+  description: Command the Elk-M1 panel to speak a vocabulary word or phrase.
+  fields:
+    phrase_number:
+      name: Phrase / Word
+      description: The human-readable word to speak (translates to Elk-M1 ID).
+      required: true
+      selector:
+        select:
+          custom_value: true
+          mode: dropdown
+          options:
+            - label: "000 - {Blank}"
+              value: 0
+            - label: "001 - Custom1"
+              value: 1
+            - label: "002 - Custom2"
+              value: 2
+            - label: "003 - Custom3"
+              value: 3
+            - label: "004 - Custom4"
+              value: 4
+            - label: "005 - Custom5"
+              value: 5
+            - label: "006 - Custom6"
+              value: 6
+            - label: "007 - Custom7"
+              value: 7
+            - label: "008 - Custom8"
+              value: 8
+            - label: "009 - Custom9"
+              value: 9
+            - label: "010 - Custom10"
+              value: 10
+            - label: "021 - Zero"
+              value: 21
+            - label: "022 - One"
+              value: 22
+            - label: "023 - Two"
+              value: 23
+            - label: "024 - Three"
+              value: 24
+            - label: "025 - Four"
+              value: 25
+            - label: "026 - Five"
+              value: 26
+            - label: "027 - Six"
+              value: 27
+            - label: "028 - Seven"
+              value: 28
+            - label: "029 - Eight"
+              value: 29
+            - label: "030 - Nine"
+              value: 30
+            - label: "031 - Ten"
+              value: 31
+            - label: "032 - Eleven"
+              value: 32
+            - label: "033 - Twelve"
+              value: 33
+            - label: "034 - Thirteen"
+              value: 34
+            - label: "035 - Fourteen"
+              value: 35
+            - label: "036 - Fifteen"
+              value: 36
+            - label: "037 - Sixteen"
+              value: 37
+            - label: "038 - Seventeen"
+              value: 38
+            - label: "039 - Eighteen"
+              value: 39
+            - label: "040 - Nineteen"
+              value: 40
+            - label: "041 - Twenty"
+              value: 41
+            - label: "042 - Thirty"
+              value: 42
+            - label: "043 - Forty"
+              value: 43
+            - label: "044 - Fifty"
+              value: 44
+            - label: "045 - Sixty"
+              value: 45
+            - label: "046 - Seventy"
+              value: 46
+            - label: "047 - Eighty"
+              value: 47
+            - label: "048 - Ninety"
+              value: 48
+            - label: "049 - Hundred"
+              value: 49
+            - label: "050 - Thousand"
+              value: 50
+            - label: "051 - [200ms Silence]"
+              value: 51
+            - label: "052 - [500ms Silence]"
+              value: 52
+            - label: "053 - [800hz Tone]"
+              value: 53
+            - label: "054 - A"
+              value: 54
+            - label: "055 - Access"
+              value: 55
+            - label: "056 - Acknowledged"
+              value: 56
+            - label: "057 - AC power"
+              value: 57
+            - label: "058 - Activate"
+              value: 58
+            - label: "059 - Activated"
+              value: 59
+            - label: "060 - Active"
+              value: 60
+            - label: "061 - Adjust"
+              value: 61
+            - label: "062 - Air"
+              value: 62
+            - label: "063 - Alarm"
+              value: 63
+            - label: "064 - Alert"
+              value: 64
+            - label: "065 - All"
+              value: 65
+            - label: "066 - AM"
+              value: 66
+            - label: "067 - An"
+              value: 67
+            - label: "068 - And"
+              value: 68
+            - label: "069 - Answer"
+              value: 69
+            - label: "070 - Any"
+              value: 70
+            - label: "071 - Are"
+              value: 71
+            - label: "072 - Area"
+              value: 72
+            - label: "073 - Arm"
+              value: 73
+            - label: "074 - Armed"
+              value: 74
+            - label: "075 - At"
+              value: 75
+            - label: "076 - Attic"
+              value: 76
+            - label: "077 - Audio"
+              value: 77
+            - label: "078 - Auto"
+              value: 78
+            - label: "079 - Authorized"
+              value: 79
+            - label: "080 - Automatic"
+              value: 80
+            - label: "081 - Automation"
+              value: 81
+            - label: "082 - Auxiliary"
+              value: 82
+            - label: "083 - Away"
+              value: 83
+            - label: "084 - B"
+              value: 84
+            - label: "085 - Back"
+              value: 85
+            - label: "086 - Barn"
+              value: 86
+            - label: "087 - Basement"
+              value: 87
+            - label: "088 - Bathroom"
+              value: 88
+            - label: "089 - Battery"
+              value: 89
+            - label: "090 - Bedroom"
+              value: 90
+            - label: "091 - Been"
+              value: 91
+            - label: "092 - Bell"
+              value: 92
+            - label: "093 - Bottom"
+              value: 93
+            - label: "094 - Break"
+              value: 94
+            - label: "095 - Breakfast"
+              value: 95
+            - label: "096 - Bright"
+              value: 96
+            - label: "097 - Building"
+              value: 97
+            - label: "098 - Burglar"
+              value: 98
+            - label: "099 - Button"
+              value: 99
+            - label: "100 - By"
+              value: 100
+            - label: "101 - Bypassed"
+              value: 101
+            - label: "102 - Cabinet"
+              value: 102
+            - label: "103 - Call"
+              value: 103
+            - label: "104 - Camera"
+              value: 104
+            - label: "105 - Cancel"
+              value: 105
+            - label: "106 - Carbon monoxide"
+              value: 106
+            - label: "107 - Card"
+              value: 107
+            - label: "108 - Center"
+              value: 108
+            - label: "109 - Central"
+              value: 109
+            - label: "110 - Change"
+              value: 110
+            - label: "111 - Check"
+              value: 111
+            - label: "112 - Chime"
+              value: 112
+            - label: "113 - Circuit"
+              value: 113
+            - label: "114 - Clear"
+              value: 114
+            - label: "115 - Closed"
+              value: 115
+            - label: "116 - Closet"
+              value: 116
+            - label: "117 - Code"
+              value: 117
+            - label: "118 - Cold"
+              value: 118
+            - label: "119 - Condition"
+              value: 119
+            - label: "120 - Connect"
+              value: 120
+            - label: "121 - Control"
+              value: 121
+            - label: "122 - Cool"
+              value: 122
+            - label: "123 - Cooling"
+              value: 123
+            - label: "124 - Corner"
+              value: 124
+            - label: "125 - Crawlspace"
+              value: 125
+            - label: "126 - Danger"
+              value: 126
+            - label: "127 - Day"
+              value: 127
+            - label: "128 - Deck"
+              value: 128
+            - label: "129 - Decrease"
+              value: 129
+            - label: "130 - Defective"
+              value: 130
+            - label: "131 - Degrees"
+              value: 131
+            - label: "132 - Delay"
+              value: 132
+            - label: "133 - Den"
+              value: 133
+            - label: "134 - Denied"
+              value: 134
+            - label: "135 - Detected"
+              value: 135
+            - label: "136 - Detector"
+              value: 136
+            - label: "137 - Device"
+              value: 137
+            - label: "138 - Dial"
+              value: 138
+            - label: "139 - Dialing"
+              value: 139
+            - label: "140 - Dim"
+              value: 140
+            - label: "141 - Dining room"
+              value: 141
+            - label: "142 - Disable"
+              value: 142
+            - label: "143 - Disarm"
+              value: 143
+            - label: "144 - Disarmed"
+              value: 144
+            - label: "145 - Dock"
+              value: 145
+            - label: "146 - Door"
+              value: 146
+            - label: "147 - Doors"
+              value: 147
+            - label: "148 - Down"
+              value: 148
+            - label: "149 - Driveway"
+              value: 149
+            - label: "150 - East"
+              value: 150
+            - label: "151 - Emergency"
+              value: 151
+            - label: "152 - Enable"
+              value: 152
+            - label: "153 - End"
+              value: 153
+            - label: "154 - Energy"
+              value: 154
+            - label: "155 - Enrollment"
+              value: 155
+            - label: "156 - Enter"
+              value: 156
+            - label: "157 - Entering"
+              value: 157
+            - label: "158 - Entertainment"
+              value: 158
+            - label: "159 - Enter the"
+              value: 159
+            - label: "160 - Entry"
+              value: 160
+            - label: "161 - Environment"
+              value: 161
+            - label: "162 - Equipment"
+              value: 162
+            - label: "163 - Error"
+              value: 163
+            - label: "164 - Evacuate"
+              value: 164
+            - label: "165 - Event"
+              value: 165
+            - label: "166 - Exercise"
+              value: 166
+            - label: "167 - Expander"
+              value: 167
+            - label: "168 - Exit"
+              value: 168
+            - label: "169 - Exterior"
+              value: 169
+            - label: "170 - F"
+              value: 170
+            - label: "171 - Fail"
+              value: 171
+            - label: "172 - Failure"
+              value: 172
+            - label: "173 - Family room"
+              value: 173
+            - label: "174 - Fan"
+              value: 174
+            - label: "175 - Feed"
+              value: 175
+            - label: "176 - Fence"
+              value: 176
+            - label: "177 - Fire"
+              value: 177
+            - label: "178 - First"
+              value: 178
+            - label: "179 - Flood"
+              value: 179
+            - label: "180 - Floor"
+              value: 180
+            - label: "181 - Followed"
+              value: 181
+            - label: "182 - Force"
+              value: 182
+            - label: "183 - Fountain"
+              value: 183
+            - label: "184 - Foyer"
+              value: 184
+            - label: "185 - Freeze"
+              value: 185
+            - label: "186 - Front"
+              value: 186
+            - label: "187 - Full"
+              value: 187
+            - label: "188 - Furnace"
+              value: 188
+            - label: "189 - Fuse"
+              value: 189
+            - label: "190 - Game"
+              value: 190
+            - label: "191 - Garage"
+              value: 191
+            - label: "192 - Gas"
+              value: 192
+            - label: "193 - Gate"
+              value: 193
+            - label: "194 - Glass"
+              value: 194
+            - label: "195 - Go"
+              value: 195
+            - label: "196 - Good"
+              value: 196
+            - label: "197 - Good-bye"
+              value: 197
+            - label: "198 - Great"
+              value: 198
+            - label: "199 - Group"
+              value: 199
+            - label: "200 - Guest"
+              value: 200
+            - label: "201 - Gun"
+              value: 201
+            - label: "202 - Hall"
+              value: 202
+            - label: "203 - Hallway"
+              value: 203
+            - label: "204 - Hanging up"
+              value: 204
+            - label: "205 - Hang up"
+              value: 205
+            - label: "206 - Has"
+              value: 206
+            - label: "207 - Has Expired"
+              value: 207
+            - label: "208 - Have"
+              value: 208
+            - label: "209 - Hear menu options"
+              value: 209
+            - label: "210 - Heat"
+              value: 210
+            - label: "211 - Help"
+              value: 211
+            - label: "212 - High"
+              value: 212
+            - label: "213 - Hold"
+              value: 213
+            - label: "214 - Home"
+              value: 214
+            - label: "215 - Hot"
+              value: 215
+            - label: "216 - Hot tub"
+              value: 216
+            - label: "217 - House"
+              value: 217
+            - label: "218 - Humidity"
+              value: 218
+            - label: "219 - HVAC"
+              value: 219
+            - label: "220 - If"
+              value: 220
+            - label: "221 - Immediately"
+              value: 221
+            - label: "222 - In"
+              value: 222
+            - label: "223 - Inches"
+              value: 223
+            - label: "224 - Increase"
+              value: 224
+            - label: "225 - Inner"
+              value: 225
+            - label: "226 - Input"
+              value: 226
+            - label: "227 - Inside"
+              value: 227
+            - label: "228 - Instant"
+              value: 228
+            - label: "229 - Interior"
+              value: 229
+            - label: "230 - In The"
+              value: 230
+            - label: "231 - Intruder"
+              value: 231
+            - label: "232 - Intrusion"
+              value: 232
+            - label: "233 - Invalid"
+              value: 233
+            - label: "234 - Is"
+              value: 234
+            - label: "235 - Is about to expire"
+              value: 235
+            - label: "236 - Is active"
+              value: 236
+            - label: "237 - Is armed"
+              value: 237
+            - label: "238 - Is canceled"
+              value: 238
+            - label: "239 - Is closed"
+              value: 239
+            - label: "240 - Is disarmed"
+              value: 240
+            - label: "241 - Is low"
+              value: 241
+            - label: "242 - Is off"
+              value: 242
+            - label: "243 - Is OK"
+              value: 243
+            - label: "244 - Is on"
+              value: 244
+            - label: "245 - Is open"
+              value: 245
+            - label: "246 - Jacuzzi"
+              value: 246
+            - label: "247 - Jewelry"
+              value: 247
+            - label: "248 - Keep"
+              value: 248
+            - label: "249 - Key"
+              value: 249
+            - label: "250 - Keypad"
+              value: 250
+            - label: "251 - Kitchen"
+              value: 251
+            - label: "252 - Lamp"
+              value: 252
+            - label: "253 - Laundry"
+              value: 253
+            - label: "254 - Lawn"
+              value: 254
+            - label: "255 - Leak"
+              value: 255
+            - label: "256 - Leave"
+              value: 256
+            - label: "257 - Left"
+              value: 257
+            - label: "258 - Less"
+              value: 258
+            - label: "259 - Level"
+              value: 259
+            - label: "260 - Library"
+              value: 260
+            - label: "261 - Light"
+              value: 261
+            - label: "262 - Lights"
+              value: 262
+            - label: "263 - Line"
+              value: 263
+            - label: "264 - Living room"
+              value: 264
+            - label: "265 - Loading"
+              value: 265
+            - label: "266 - Lobby"
+              value: 266
+            - label: "267 - Location"
+              value: 267
+            - label: "268 - Lock"
+              value: 268
+            - label: "269 - Low"
+              value: 269
+            - label: "270 - Lower"
+              value: 270
+            - label: "271 - M"
+              value: 271
+            - label: "272 - Machine"
+              value: 272
+            - label: "273 - Mail"
+              value: 273
+            - label: "274 - Main"
+              value: 274
+            - label: "275 - Mains"
+              value: 275
+            - label: "276 - Manual"
+              value: 276
+            - label: "277 - Master"
+              value: 277
+            - label: "278 - Max"
+              value: 278
+            - label: "279 - Media"
+              value: 279
+            - label: "280 - Medical"
+              value: 280
+            - label: "281 - Medicine"
+              value: 281
+            - label: "282 - Memory"
+              value: 282
+            - label: "283 - Menu"
+              value: 283
+            - label: "284 - Message"
+              value: 284
+            - label: "285 - Middle"
+              value: 285
+            - label: "286 - Minute"
+              value: 286
+            - label: "287 - Missing"
+              value: 287
+            - label: "288 - Mode"
+              value: 288
+            - label: "289 - Module"
+              value: 289
+            - label: "290 - Monitor"
+              value: 290
+            - label: "291 - More"
+              value: 291
+            - label: "292 - Motion"
+              value: 292
+            - label: "293 - Motor"
+              value: 293
+            - label: "294 - Next"
+              value: 294
+            - label: "295 - Night"
+              value: 295
+            - label: "296 - No"
+              value: 296
+            - label: "297 - Normal"
+              value: 297
+            - label: "298 - North"
+              value: 298
+            - label: "299 - Not"
+              value: 299
+            - label: "300 - Notified"
+              value: 300
+            - label: "301 - Now"
+              value: 301
+            - label: "302 - Number"
+              value: 302
+            - label: "303 - Nursery"
+              value: 303
+            - label: "304 - Of"
+              value: 304
+            - label: "305 - Off"
+              value: 305
+            - label: "306 - Office"
+              value: 306
+            - label: "307 - Oh"
+              value: 307
+            - label: "308 - OK"
+              value: 308
+            - label: "309 - On"
+              value: 309
+            - label: "310 - On-line"
+              value: 310
+            - label: "311 - Only"
+              value: 311
+            - label: "312 - Open"
+              value: 312
+            - label: "313 - Operating"
+              value: 313
+            - label: "314 - Option"
+              value: 314
+            - label: "315 - Or"
+              value: 315
+            - label: "316 - Other"
+              value: 316
+            - label: "317 - Out"
+              value: 317
+            - label: "318 - Outlet"
+              value: 318
+            - label: "319 - Output"
+              value: 319
+            - label: "320 - Outside"
+              value: 320
+            - label: "321 - Over"
+              value: 321
+            - label: "322 - Overhead"
+              value: 322
+            - label: "323 - Panel"
+              value: 323
+            - label: "324 - Panic"
+              value: 324
+            - label: "325 - Parking"
+              value: 325
+            - label: "326 - Partition"
+              value: 326
+            - label: "327 - Patio"
+              value: 327
+            - label: "328 - Pause"
+              value: 328
+            - label: "329 - Perimeter"
+              value: 329
+            - label: "330 - Personal"
+              value: 330
+            - label: "331 - Phone"
+              value: 331
+            - label: "332 - Place"
+              value: 332
+            - label: "333 - Play"
+              value: 333
+            - label: "334 - Please"
+              value: 334
+            - label: "335 - Plus"
+              value: 335
+            - label: "336 - PM"
+              value: 336
+            - label: "337 - Police"
+              value: 337
+            - label: "338 - Pool"
+              value: 338
+            - label: "339 - Porch"
+              value: 339
+            - label: "340 - Port"
+              value: 340
+            - label: "341 - Pound"
+              value: 341
+            - label: "342 - Pounds"
+              value: 342
+            - label: "343 - Power"
+              value: 343
+            - label: "344 - Press"
+              value: 344
+            - label: "345 - Pressure"
+              value: 345
+            - label: "346 - Problem"
+              value: 346
+            - label: "347 - Program"
+              value: 347
+            - label: "348 - Protected"
+              value: 348
+            - label: "349 - Pump"
+              value: 349
+            - label: "350 - Radio"
+              value: 350
+            - label: "351 - Raise"
+              value: 351
+            - label: "352 - Ready"
+              value: 352
+            - label: "353 - Rear"
+              value: 353
+            - label: "354 - Receiver"
+              value: 354
+            - label: "355 - Record"
+              value: 355
+            - label: "356 - Recreation"
+              value: 356
+            - label: "357 - Relay"
+              value: 357
+            - label: "358 - Remain calm"
+              value: 358
+            - label: "359 - Remote"
+              value: 359
+            - label: "360 - Repeat"
+              value: 360
+            - label: "361 - Report"
+              value: 361
+            - label: "362 - Reporting"
+              value: 362
+            - label: "363 - Reset"
+              value: 363
+            - label: "364 - Restored"
+              value: 364
+            - label: "365 - Return"
+              value: 365
+            - label: "366 - Right"
+              value: 366
+            - label: "367 - Roof"
+              value: 367
+            - label: "368 - Room"
+              value: 368
+            - label: "369 - Running"
+              value: 369
+            - label: "370 - Safe"
+              value: 370
+            - label: "371 - Save"
+              value: 371
+            - label: "372 - Screen"
+              value: 372
+            - label: "373 - Second"
+              value: 373
+            - label: "374 - Secure"
+              value: 374
+            - label: "375 - Security"
+              value: 375
+            - label: "376 - Select"
+              value: 376
+            - label: "377 - Sensor"
+              value: 377
+            - label: "378 - Serial"
+              value: 378
+            - label: "379 - Service"
+              value: 379
+            - label: "380 - Set"
+              value: 380
+            - label: "381 - Setback"
+              value: 381
+            - label: "382 - Set point"
+              value: 382
+            - label: "383 - Setting"
+              value: 383
+            - label: "384 - Shed"
+              value: 384
+            - label: "385 - Shipping"
+              value: 385
+            - label: "386 - Shock"
+              value: 386
+            - label: "387 - Shop"
+              value: 387
+            - label: "388 - Shorted"
+              value: 388
+            - label: "389 - Shunted"
+              value: 389
+            - label: "390 - Side"
+              value: 390
+            - label: "391 - Silence"
+              value: 391
+            - label: "392 - Siren"
+              value: 392
+            - label: "393 - Sliding"
+              value: 393
+            - label: "394 - Smoke"
+              value: 394
+            - label: "395 - Someone"
+              value: 395
+            - label: "396 - South"
+              value: 396
+            - label: "397 - Spare"
+              value: 397
+            - label: "398 - Speaker"
+              value: 398
+            - label: "399 - Sprinkler"
+              value: 399
+            - label: "400 - Stairs"
+              value: 400
+            - label: "401 - Stairway"
+              value: 401
+            - label: "402 - Star"
+              value: 402
+            - label: "403 - Start"
+              value: 403
+            - label: "404 - Status"
+              value: 404
+            - label: "405 - Stay"
+              value: 405
+            - label: "406 - Stock"
+              value: 406
+            - label: "407 - Stop"
+              value: 407
+            - label: "408 - Storage"
+              value: 408
+            - label: "409 - Storm"
+              value: 409
+            - label: "410 - Studio"
+              value: 410
+            - label: "411 - Study"
+              value: 411
+            - label: "412 - Sump"
+              value: 412
+            - label: "413 - Sun"
+              value: 413
+            - label: "414 - Switch"
+              value: 414
+            - label: "415 - System"
+              value: 415
+            - label: "416 - Tamper"
+              value: 416
+            - label: "417 - Tank"
+              value: 417
+            - label: "418 - Task"
+              value: 418
+            - label: "419 - Telephone"
+              value: 419
+            - label: "420 - Television"
+              value: 420
+            - label: "421 - Temperature"
+              value: 421
+            - label: "422 - Test"
+              value: 422
+            - label: "423 - Thank you"
+              value: 423
+            - label: "424 - That"
+              value: 424
+            - label: "425 - The"
+              value: 425
+            - label: "426 - Theater"
+              value: 426
+            - label: "427 - Thermostat"
+              value: 427
+            - label: "428 - Third"
+              value: 428
+            - label: "429 - Time"
+              value: 429
+            - label: "430 - Toggle"
+              value: 430
+            - label: "431 - Top"
+              value: 431
+            - label: "432 - Transformer"
+              value: 432
+            - label: "433 - Transmitter"
+              value: 433
+            - label: "434 - Trespassing"
+              value: 434
+            - label: "435 - Trouble"
+              value: 435
+            - label: "436 - Turn"
+              value: 436
+            - label: "437 - Twice"
+              value: 437
+            - label: "438 - Type"
+              value: 438
+            - label: "439 - Under"
+              value: 439
+            - label: "440 - Unit"
+              value: 440
+            - label: "441 - Unlocked"
+              value: 441
+            - label: "442 - Unoccupied"
+              value: 442
+            - label: "443 - Up"
+              value: 443
+            - label: "444 - User"
+              value: 444
+            - label: "445 - Utility"
+              value: 445
+            - label: "446 - Vacation"
+              value: 446
+            - label: "447 - Valve"
+              value: 447
+            - label: "448 - Video"
+              value: 448
+            - label: "449 - Violated"
+              value: 449
+            - label: "450 - Visitor"
+              value: 450
+            - label: "451 - Wake up"
+              value: 451
+            - label: "452 - Walk"
+              value: 452
+            - label: "453 - Wall"
+              value: 453
+            - label: "454 - Warehouse"
+              value: 454
+            - label: "455 - Warning"
+              value: 455
+            - label: "456 - Water"
+              value: 456
+            - label: "457 - Way"
+              value: 457
+            - label: "458 - Welcome"
+              value: 458
+            - label: "459 - West"
+              value: 459
+            - label: "460 - What"
+              value: 460
+            - label: "461 - When"
+              value: 461
+            - label: "462 - Where"
+              value: 462
+            - label: "463 - Will"
+              value: 463
+            - label: "464 - Window"
+              value: 464
+            - label: "465 - Windows"
+              value: 465
+            - label: "466 - With"
+              value: 466
+            - label: "467 - Work"
+              value: 467
+            - label: "468 - Yard"
+              value: 468
+            - label: "469 - Year"
+              value: 469
+            - label: "470 - You"
+              value: 470
+            - label: "471 - Zone"
+              value: 471
+            - label: "472 - Zones"
+              value: 472
+            - label: "473 - [Intruder Message]"
+              value: 473
+            - label: "495 - [Say Unlocked/Locked]"
+              value: 495
+            - label: "496 - [Say Locked/Unlocked]"
+              value: 496
+            - label: "505 - [Say Not Secure/Secure]"
+              value: 505
+            - label: "506 - [Say Secure/Not Secure]"
+              value: 506
+            - label: "507 - [Say Down/Up]"
+              value: 507
+            - label: "508 - [Say Up/Down]"
+              value: 508
+            - label: "509 - [Say Closed/Open]"
+              value: 509
+            - label: "510 - [Say Open/Closed]"
+              value: 510
+            - label: "511 - [Say Off/On]"
+              value: 511
+            - label: "512 - [Say On/Off]"
+              value: 512
