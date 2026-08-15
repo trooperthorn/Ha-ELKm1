@@ -1,4 +1,7 @@
-# vocabulary.py
+import logging
+
+_LOGGER = logging.getLogger(__name__)
+
 
 ELK_VOICE_VOCABULARY = {
     0: "{Blank}",
