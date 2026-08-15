@@ -139,8 +139,18 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator):
             # Initialize Elk with the dictionary
             self._elk = Elk(config)
 
-            if hasattr(self._elk, 'panel') and hasattr(self._elk.panel, 'add_callback'):
-                self._elk.panel.add_callback("word", self._handle_voice_message)
+            # --- SAFE CALLBACK REGISTRATION ---
+            # Instead of calling .panel.add_callback with raw string types which 
+            # breaks the library's positional argument count, we safely check 
+            # if the panel supports standard handler registration or element callbacks.
+            if hasattr(self._elk, "panel") and self._elk.panel is not None:
+                if hasattr(self._elk.panel, "add_callback"):
+                    # If it accepts a single callable or different signature, 
+                    # we wrap it safely or fallback to our raw parser.
+                    try:
+                        self._elk.panel.add_callback(self._handle_voice_message)
+                    except TypeError:
+                        _LOGGER.debug("Panel add_callback expects 2 arguments; relying on raw VN parser.")
 
             # --- PHASE 1: REAL-TIME BROADCAST INTERCEPTOR ---
             def elk_broadcast_handler(msg):
@@ -535,10 +545,12 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator):
 
     def _handle_voice_message(self, words: list[int]) -> None:
         """Process incoming voice command arrays and fire a Home Assistant event."""
+        _LOGGER.debug(f"Received raw voice message IDs: {words}")
         try:
             readable_message = translate_elk_voice(words)
             
             if readable_message:
+                _LOGGER.debug(f"Elk-M1 Voice Message Translated: '{readable_message}' (Raw IDs: {words})")
                 self.hass.bus.async_fire(
                     "elkm1_voice_announcement",
                     {
