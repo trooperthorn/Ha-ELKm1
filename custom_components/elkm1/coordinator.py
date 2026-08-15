@@ -123,6 +123,10 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator):
         try:
             _LOGGER.info(f"Connecting to ELK-M1 at {self._obfuscated_url()}")
 
+            # Give the OS/USB subsystem a brief moment to release handles 
+            # left over from usb_discovery probing.
+            await asyncio.sleep(5.0)
+
             # Create the config dictionary
             config = {"url": self._url}
             
