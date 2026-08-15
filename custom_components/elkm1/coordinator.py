@@ -543,14 +543,22 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator):
         """Return connection type (serial or network)."""
         return self._connection_type
 
-    def _handle_voice_message(self, words: list[int]) -> None:
+    def _handle_voice_message(self, *args: Any) -> None:
         """Process incoming voice command arrays and fire a Home Assistant event."""
-        _LOGGER.debug(f"Received raw voice message IDs: {words}")
+        _LOGGER.debug(f"Received voice callback arguments: args={args}")
         try:
+            # elkm1_lib may pass (element, changes) or direct payload depending on context.
+            # We isolate the actual data payload safely from the args array.
+            words = args[0] if len(args) == 1 else args[-1]
+            
+            if not isinstance(words, (list, tuple)):
+                # If it's not a word list, it might be an element change notification object
+                return
+
             readable_message = translate_elk_voice(words)
             
             if readable_message:
-                _LOGGER.debug(f"Elk-M1 Voice Message Translated: '{readable_message}' (Raw IDs: {words})")
+                _LOGGER.info(f"Elk-M1 Voice Message Translated: '{readable_message}' (Raw IDs: {words})")
                 self.hass.bus.async_fire(
                     "elkm1_voice_announcement",
                     {
@@ -561,7 +569,7 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator):
                 )
                 _LOGGER.debug(f"Fired Elk voice event: {readable_message}")
         except Exception as err:  # noqa: BLE001
-            _LOGGER.error(f"Failed to translate and fire Elk voice message: {err}")
+            _LOGGER.error(f"Failed to translate and fire Elk voice message: {err}", exc_info=True)
 
     # --- PHASE 2: CUSTOM RAW COMMAND SERVICES ---
 
