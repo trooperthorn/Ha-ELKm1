@@ -24,6 +24,9 @@ from .const import (
     CONNECTION_SERIAL,
     COORDINATOR_UPDATE_INTERVAL,
 )
+from .data import ElkRuntimeData
+from .vocabulary import translate_elk_voice
+
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -135,6 +138,11 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator):
             # Initialize Elk with the dictionary
             self._elk = Elk(config)
 
+            # --- ADD THIS: Standard library callback registration ---
+            if hasattr(self._elk, 'panel') and hasattr(self._elk.panel, 'add_callback'):
+                self._elk.panel.add_callback("word", self._handle_voice_message)
+            # ------------------------------------------------------
+
             # --- PHASE 1: REAL-TIME BROADCAST INTERCEPTOR ---
             def elk_broadcast_handler(msg):
                 """Intercept broadcasts not fully mapped by elkm1_lib."""
@@ -159,6 +167,17 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator):
                     self.hass.bus.async_fire("elkm1_alarm_memory", {
                         "flags": raw_str[4:12]
                     })
+
+                # --- ADD THIS: Raw ASCII fallback for Voice (VN) commands ---
+                elif cmd == "VN":
+                    try:
+                        # VN command format is VN + 6 words (each 3 digits)
+                        word_str = raw_str[4:22]
+                        words = [int(word_str[i:i+3]) for i in range(0, 18, 3)]
+                        self._handle_voice_message(words)
+                    except ValueError:
+                        pass
+                # ------------------------------------------------------------
 
             # Hook into elkm1_lib's fallback handler to catch unrecognized data strings
             self._elk.add_handler("unknown", elk_broadcast_handler)
@@ -515,6 +534,25 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator):
     def connection_type(self) -> str:
         """Return connection type (serial or network)."""
         return self._connection_type
+
+    # --- VOICE MESSAGE see vocabulary.py for value translation---
+    def _handle_voice_message(self, words: list[int]) -> None:
+        """Process incoming voice command arrays and fire a Home Assistant event."""
+        try:
+            readable_message = translate_elk_voice(words)
+            
+            if readable_message:
+                self.hass.bus.async_fire(
+                    "elkm1_voice_announcement",
+                    {
+                        "source": "elk_m1",
+                        "raw_ids": words,
+                        "message": readable_message
+                    }
+                )
+                _LOGGER.debug(f"Fired Elk voice event: {readable_message}")
+        except Exception as err:
+            _LOGGER.error(f"Failed to translate and fire Elk voice message: {err}")
 
     # --- PHASE 2: CUSTOM RAW COMMAND SERVICES ---
 
