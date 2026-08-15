@@ -609,10 +609,11 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator):
 
     def send_raw_elk_command(self, command: str) -> None:
         """Format and send a raw ASCII command to the Elk-M1 panel."""
-        if not self._elk or getattr(self._elk, "_connection", None) is None:
+        if not self._elk or not hasattr(self._elk, "_connection"):
             _LOGGER.error("Cannot send raw command: Elk connection not found.")
             return
 
+        # Append the required '00' reserved bytes to the command
         payload = f"{command}00"
         length = len(payload) + 2
         packet = f"{length:02X}{payload}"
@@ -621,19 +622,26 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator):
         checksum = sum(ord(c) for c in packet) % 256
         checksum = (checksum ^ 0xFF) + 1
 
-        final_string = f"{packet}{checksum & 0xFF:02X}\r\n"
+        # Combine packet and checksum. 
+        # (write_data automatically appends the \r\n and encodes to bytes)
+        final_string = f"{packet}{checksum & 0xFF:02X}"
 
         try:
-            # Grab the standard asyncio transport layer (no underscore)
-            transport = getattr(self._elk._connection, "transport", None)
-            
-            if transport is None:
-                _LOGGER.error("Cannot send raw command: connection transport is not ready.")
+            # Approach 1: Use the library's native write_data method if available
+            if hasattr(self._elk._connection, "write_data"):
+                self._elk._connection.write_data(final_string)
+                _LOGGER.debug(f"Sent Elk command via write_data: {final_string}")
                 return
-                
-            transport.write(final_string.encode("ascii"))
-            _LOGGER.debug(f"Sent raw Elk command: {final_string.strip()}")
-            
+
+            # Approach 2: Fallback to direct asyncio transport injection
+            transport = getattr(self._elk._connection, "transport", None)
+            if transport:
+                packet_with_crlf = f"{final_string}\r\n"
+                transport.write(packet_with_crlf.encode("ascii"))
+                _LOGGER.debug(f"Sent Elk command via transport: {packet_with_crlf.strip()}")
+            else:
+                _LOGGER.error("Cannot send command: Neither write_data nor transport available.")
+
         except Exception as e:  # noqa: BLE001
             _LOGGER.error(f"Failed to send raw Elk command: {e}")
 
