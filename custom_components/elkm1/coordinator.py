@@ -609,10 +609,8 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator):
 
     def send_raw_elk_command(self, command: str) -> None:
         """Format and send a raw ASCII command to the Elk-M1 panel."""
-        if not self._elk or not hasattr(self._elk, "_connection"):
-            _LOGGER.error(
-                "Cannot send raw command: Elk instance or connection not found."
-            )
+        if not self._elk or getattr(self._elk, "_connection", None) is None:
+            _LOGGER.error("Cannot send raw command: Elk connection not found.")
             return
 
         payload = f"{command}00"
@@ -626,8 +624,16 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator):
         final_string = f"{packet}{checksum & 0xFF:02X}\r\n"
 
         try:
-            self._elk._connection._transport.write(final_string.encode("ascii"))
+            # Grab the standard asyncio transport layer (no underscore)
+            transport = getattr(self._elk._connection, "transport", None)
+            
+            if transport is None:
+                _LOGGER.error("Cannot send raw command: connection transport is not ready.")
+                return
+                
+            transport.write(final_string.encode("ascii"))
             _LOGGER.debug(f"Sent raw Elk command: {final_string.strip()}")
+            
         except Exception as e:  # noqa: BLE001
             _LOGGER.error(f"Failed to send raw Elk command: {e}")
 
