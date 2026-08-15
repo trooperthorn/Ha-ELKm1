@@ -555,12 +555,22 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator):
         """Return connection type (serial or network)."""
         return self._connection_type
 
-    def _handle_voice_message(self, *args: Any) -> None:
+    def _handle_voice_message(self, *args: Any, **kwargs: Any) -> None:
         """Process incoming voice command arrays and fire a Home Assistant event."""
-        _LOGGER.debug(f"Received voice callback arguments: args={args}")
+        _LOGGER.debug(f"Received voice callback: args={args}, kwargs={kwargs}")
         try:
-            words = args[0] if len(args) == 1 else args[-1]
-
+            # elkm1_lib may pass (element, changes) positionally or via kwargs.
+            # We isolate the actual data payload safely regardless of how it arrives.
+            words = None
+            
+            if args:
+                # If positional arguments exist, the last one is usually the payload/changeset
+                words = args[0] if len(args) == 1 else args[-1]
+            elif "words" in kwargs:
+                words = kwargs["words"]
+            elif "changeset" in kwargs:
+                words = kwargs["changeset"]
+                
             if not isinstance(words, (list, tuple)):
                 return
 
@@ -580,10 +590,22 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator):
                 )
                 _LOGGER.debug(f"Fired Elk voice event: {readable_message}")
         except Exception:
-            _LOGGER.exception("Failed to translate and fire Elk voice message {err}")
-            )
+            _LOGGER.exception("Failed to translate and fire Elk voice message")
 
     # --- PHASE 2: CUSTOM RAW COMMAND SERVICES ---
+
+    async def speak_phrase(self, phrase_number: int) -> bool:
+        """Command the Elk-M1 panel to speak a vocabulary word/phrase."""
+        if not self._elk:
+            return False
+        try:
+            _LOGGER.info(f"Commanding Elk-M1 to speak phrase ID {phrase_number}")
+            # 'sw' is the Elk ASCII command for Speak Word, followed by the 3-digit ID
+            self.send_raw_elk_command(f"sw{phrase_number:03d}")
+            return True
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.error(f"Failed to speak phrase {phrase_number}: {err}")
+            return False
 
     def send_raw_elk_command(self, command: str) -> None:
         """Format and send a raw ASCII command to the Elk-M1 panel."""
@@ -619,6 +641,33 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator):
             return True
         except Exception as err:  # noqa: BLE001
             _LOGGER.error(f"Failed to trigger zone {zone_number}: {err}")
+            return False
+
+    async def display_message(
+        self, area: int, clear_type: int, beep: bool, timeout: int, line1: str, line2: str
+    ) -> bool:
+        """Command the Elk-M1 panel to display a message on keypads."""
+        if not self._elk:
+            return False
+        try:
+            _LOGGER.info(f"Displaying message on Area {area}: '{line1}' / '{line2}'")
+            
+            # Adjust the clear/display type based on the beep boolean.
+            # Elk modes: 0: clear, 1: clear+beep, 2: timeout, 3: timeout+beep, 4: hold, 5: hold+beep
+            mode = clear_type
+            if beep and mode in (0, 2, 4):
+                mode += 1
+                
+            # Elk requires exactly 16 characters per line; pad or truncate as needed
+            padded_line1 = f"{line1:<16}"[:16]
+            padded_line2 = f"{line2:<16}"[:16]
+            
+            # Format: dm + area (1) + mode (1) + timeout (5) + line1 (16) + line2 (16)
+            command = f"dm{area}{mode}{timeout:05d}{padded_line1}{padded_line2}"
+            self.send_raw_elk_command(command)
+            return True
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.error(f"Failed to display message: {err}")
             return False
 
     def _log_raw_serial_traffic(self, raw_data: Any) -> None:
