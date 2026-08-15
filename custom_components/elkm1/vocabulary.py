@@ -465,3 +465,19 @@ ELK_VOICE_VOCABULARY = {
     511: "[Say Off/On]",
     512: "[Say On/Off]"
 }
+
+
+def translate_elk_voice(word_ids: list[int]) -> str:
+    """Translate a list of Elk-M1 voice IDs into a readable string."""
+    translated_words = []
+    
+    for word_id in word_ids:
+        # Ignore blanks, silences, and tones
+        if word_id in (0, 51, 52, 53):
+            continue
+            
+        word = ELK_VOICE_VOCABULARY.get(word_id)
+        if word:
+            translated_words.append(word)
+            
+    return " ".join(translated_words).strip()
