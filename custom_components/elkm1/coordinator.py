@@ -175,7 +175,6 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator):
             # Hook into elkm1_lib's fallback handler to catch unrecognized data strings
             self._elk.add_handler("unknown", elk_broadcast_handler)
             # ------------------------------------------------
-
             # 1. Create the event tracker to monitor connection state
             connected_event = asyncio.Event()
             
@@ -183,6 +182,13 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator):
                 connected_event.set()
                 
             self._elk.add_handler("connected", on_connected)
+
+            # --- ADD THIS: OS Serial Port Release Buffer ---
+            # Give the Linux kernel a moment to release the serial port file descriptor 
+            # if it was just closed by the config flow's usb_discovery check.
+            if self._connection_type == CONNECTION_SERIAL:
+                await asyncio.sleep(2.0)
+            # -----------------------------------------------
 
             # 2. Call connect synchronously (NO AWAIT)
             self._elk.connect()
