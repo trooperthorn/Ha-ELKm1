@@ -1,4 +1,5 @@
 """Binary sensor platform for Elk-M1 zones and sensors."""
+
 import logging
 from typing import Any
 
@@ -7,11 +8,11 @@ from homeassistant.components.binary_sensor import (
     BinarySensorEntity,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import callback, HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .data import ElkRuntimeData
 from .coordinator import ElkDataUpdateCoordinator
+from .data import ElkRuntimeData
 from .entity import ElkEntity
 
 _LOGGER = logging.getLogger(__name__)
