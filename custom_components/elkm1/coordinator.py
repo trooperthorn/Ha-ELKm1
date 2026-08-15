@@ -1,11 +1,10 @@
 """Data update coordinator for Elk-M1 Control integration."""
 
-from datetime import timedelta
 import logging
+from datetime import timedelta
 from typing import Any
 
 from elkm1_lib import Elk
-
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import (
     DataUpdateCoordinator,
@@ -312,7 +311,7 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator):
             self.send_raw_elk_command(f"a0{area}{formatted_pin}")
             await self.async_request_refresh()
             return True
-        except Exception as err:
+        except Exception as err:  # noqa: BLE001
             _LOGGER.error(f"Failed to disarm: {err}")
             return False
 
@@ -331,7 +330,7 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator):
             self.send_raw_elk_command(f"a2{area}{formatted_pin}")
             await self.async_request_refresh()
             return True
-        except Exception as err:
+        except Exception as err:  # noqa: BLE001
             _LOGGER.error(f"Failed to arm stay: {err}")
             return False
 
@@ -350,7 +349,7 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator):
             self.send_raw_elk_command(f"a1{area}{formatted_pin}")
             await self.async_request_refresh()
             return True
-        except Exception as err:
+        except Exception as err:  # noqa: BLE001
             _LOGGER.error(f"Failed to arm away: {err}")
             return False
 
@@ -369,7 +368,7 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator):
             self.send_raw_elk_command(f"a4{area}{formatted_pin}")
             await self.async_request_refresh()
             return True
-        except Exception as err:
+        except Exception as err:  # noqa: BLE001
             _LOGGER.error(f"Failed to arm night: {err}")
             return False
 
@@ -434,7 +433,7 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator):
             formatted_pin = str(active_pin).zfill(6)
             self.send_raw_elk_command(f"a9{area}{formatted_pin}")
             return True
-        except Exception as err:
+        except Exception as err:  # noqa: BLE001
             _LOGGER.error(f"Failed to force arm away area {area}: {err}")
             return False
 
@@ -580,9 +579,8 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator):
                     },
                 )
                 _LOGGER.debug(f"Fired Elk voice event: {readable_message}")
-        except Exception as err:
-            _LOGGER.exception(
-                f"Failed to translate and fire Elk voice message: {err}"
+        except Exception:
+            _LOGGER.exception("Failed to translate and fire Elk voice message {err}")
             )
 
     # --- PHASE 2: CUSTOM RAW COMMAND SERVICES ---
@@ -608,7 +606,7 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator):
         try:
             self._elk._connection._transport.write(final_string.encode("ascii"))
             _LOGGER.debug(f"Sent raw Elk command: {final_string.strip()}")
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             _LOGGER.error(f"Failed to send raw Elk command: {e}")
 
     async def trigger_zone(self, zone_number: int) -> bool:
@@ -619,7 +617,7 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator):
             _LOGGER.info(f"Triggering zone {zone_number}")
             self.send_raw_elk_command(f"zt{zone_number:03d}")
             return True
-        except Exception as err:
+        except Exception as err:  # noqa: BLE001
             _LOGGER.error(f"Failed to trigger zone {zone_number}: {err}")
             return False
 
