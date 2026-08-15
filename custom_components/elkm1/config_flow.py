@@ -8,7 +8,6 @@ from typing import Any
 
 import serial.tools.list_ports
 import voluptuous as vol  # type: ignore[import-untyped]
-
 from homeassistant import config_entries
 from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_PORT, CONF_USERNAME
 from homeassistant.core import callback
