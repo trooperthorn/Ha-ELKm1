@@ -264,7 +264,7 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator):
                 "tasks": tasks,
                 "thermostat": thermostat,
             }
-        except Exception as err:  # noqa: BLE001
+        except Exception as err:
             _LOGGER.exception("Error fetching coordinator data")
             raise UpdateFailed(f"Failed to fetch data: {err}") from err
 
@@ -273,13 +273,9 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator):
         try:
             await self.async_connect()
             await super().async_request_refresh()
-        except Exception:  # noqa: BLE001
+        except Exception:
             await self.async_disconnect()
             raise
-
-    async def async_shutdown(self) -> None:
-        """Shutdown coordinator and disconnect."""
-        await self.async_disconnect()
 
     # ----ARMING---- Service Methods --------
     # These methods are called by services (disarm, bypass, etc.)
