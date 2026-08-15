@@ -4,81 +4,60 @@
 ![HACS](https://img.shields.io/badge/HACS-Custom-orange.svg?style=for-the-badge)
 ![Home Assistant](https://img.shields.io/badge/Home_Assistant-2024.4+-blue.svg?style=for-the-badge)
 
-A fully-featured custom integration for Home Assistant to monitor and control **Elk-M1 Gold** and **Elk-M1 EZ8** alarm and automation panels. 
+A fully-featured custom integration for Home Assistant to monitor and control **Elk-M1 Gold** and **Elk-M1 EZ8** alarm and automation panels. A robust, asynchronous custom integration for the Elk-M1 Gold and Elk-M1 EZ8 security/automation panels in Home Assistant. This integration communicates directly with your Elk panel via serial or network connections, providing real-time state updates and advanced control.
 
 This integration uses the modern [elkm1_lib](https://github.com/bdraco/elkm1_lib) Python library and supports both direct Serial/USB connections and Network connections via the Elk M1XEP.
 
-## ✨ Features
 
-PLEASE MAKE SURE TO DELETE YOUR EXISTING ELKM1 Integration. This is designed to take over its place and properly register everything. 
-* **DESIGNED FOR ALARMO:** Has auto registration to automatically set the sensors to Alarmo. No more extra YAML for support.
-* **UI Configuration:** Fully configurable via the Home Assistant UI (no `configuration.yaml` required).
-* **Dual Connection Support:** Connect via Network (M1XEP) or direct Serial/USB.
-* **Auto-Discovery:** Automatically scans and suggests available USB/Serial ports during setup.
-* **Setup Wizard:** Automatically verifies panel compatibility and checks required global settings during installation.
-* **Instant Updates:** Uses asyncio for rapid, real-time state updates.
-* **Supported Entities:**
-  * 🛡️ **Alarm Control Panel:** Monitor and control Areas (Arm, Disarm, Night, Stay, Away).
-  * 🚪 **Sensors & Binary Sensors:** Real-time state of all Zones (Open, Closed, Bypassed, Faulted).
-  * 💡 **Switches:** Control and monitor panel Outputs.
-  * 🌡️ **Climate:** Monitor and control attached Thermostats.
-  * 🔘 **Buttons:** Trigger panel Automation Tasks.
+## Features
 
----
+* **Alarm Control Panel:** Full support for Arming (Away, Stay, Night) and Disarming with secure PIN validation.
+* **Zones & Sensors:** Real-time monitoring of all hardwired and wireless zones via Binary Sensors.
+* **Outputs:** Control Elk relays and voltage outputs via HA Switches.
+* **Tasks:** Trigger programmed Elk tasks directly from Home Assistant.
+* **Thermostats & Lighting:** Integration with Elk-managed automation devices.
+* **Voice Announcements:** Native interception of Elk voice broadcasts, translated into human-readable text events for HA automations.
 
-## 📥 Installation
+## Installation
 
-### Option 1: HACS (Recommended)
+### Method 1: HACS (Recommended)
 1. Open HACS in Home Assistant.
-2. Click the 3-dots menu in the top right and select **Custom repositories**.
+2. Click the 3-dots in the top right corner and select **Custom repositories**.
 3. Add the URL of this repository and select **Integration** as the category.
-4. Click **Download** on the Elk-M1 Control repository.
+4. Click **Install** on the Elk-M1 Control card.
 5. Restart Home Assistant.
 
-### Option 2: Manual Installation
+### Method 2: Manual
 1. Download the latest release from this repository.
-2. Copy the `custom_components/elkm1` folder into your Home Assistant `config/custom_components/` directory.
+2. Extract the `custom_components/elkm1` folder into your Home Assistant `custom_components` directory.
 3. Restart Home Assistant.
 
+## Configuration
+
+This integration is configured entirely via the Home Assistant UI (Config Flow). 
+
+1. Go to **Settings > Devices & Services**.
+2. Click **+ Add Integration** and search for **Elk-M1 Control**.
+3. Select your connection method:
+   * **Serial:** Provide the port path (e.g., `/dev/serial/by-id/...`).
+   * **Network:** Provide the IP address/Hostname and Port.
+4. Enter your Elk User PIN (used for security actions).
+
+
+## Services
+
+This integration exposes several custom services to interact with the panel. Security-sensitive actions require a PIN code to execute.
+
+* `elkm1.arm_away` / `elkm1.arm_stay` / `elkm1.arm_night`
+* `elkm1.disarm`
+* `elkm1.bypass_zone` / `elkm1.unbypass_zone`
+* `elkm1.trigger_zone` (Momentary virtual violation)
+* `elkm1.speak_phrase`
+
+For advanced configuration, automations, and custom events, please see the [Wiki](https://github.com/trooperthorn/ha_int_elkm1/wiki).
+
 ---
-
-## ⚙️ Configuration
-
-1. In Home Assistant, go to **Settings > Devices & Services**.
-2. Click **+ Add Integration** in the bottom right corner.
-3. Search for **Elk-M1 Control**.
-4. Choose your connection type:
-   * **Serial/USB:** Select your serial port from the discovered list (or enter manually) and optionally provide a PIN for alarm control.
-   * **Network (M1XEP):** Enter your panel's IP Address (Host), Port (default 2101), Username, Password, and optionally a PIN.
-5. The integration will test the connection. If successful, it will verify your panel settings and add your devices!
-
-### ⚠️ Important Panel Settings
-For Home Assistant to receive real-time updates from your Elk-M1, the panel **must** be configured to transmit state changes. The setup wizard will attempt to verify and enable these automatically, but if you have issues, ensure the following **Global Settings (35-40)** are checked in ElkRP2:
-
-* Transmit Event Log
-* Transmit Zone Changes
-* Transmit Output Changes
-* Transmit Automation Task Changes
-* Transmit Light Changes
-* Transmit Keypad Changes
-
----
-
-## 🛠️ Custom Services
-
-This integration provides several custom services that can be used in Home Assistant automations and scripts:
-
-
-
-| Service | Description | Data Parameters |
-| :--- | :--- | :--- |
-| `elkm1.bypass_zone` | Bypass a specific zone | `zone_number` (int) |
-| `elkm1.unbypass_zone` | Unbypass a specific zone | `zone_number` (int) |
-| `elkm1.activate_task` | Trigger an Elk automation task | `task_number` (int) |
-| `elkm1.panic_alarm` | Trigger the panel's panic alarm | None |
-
-*(Standard alarm services like `alarm_control_panel.alarm_arm_away` are also fully supported via the generated Alarm Control Panel entities).*
-
+*Disclaimer: This is a community-developed custom component and is not officially affiliated with Elk Products, Inc.*
 ---
 
 ## 🐛 Troubleshooting & Debugging
