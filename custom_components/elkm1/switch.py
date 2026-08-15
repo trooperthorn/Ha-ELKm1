@@ -92,7 +92,7 @@ class ElkOutputSwitch(ElkEntity, SwitchEntity):
                 
                 # Tell HA to update the UI immediately
                 self.async_write_ha_state()
-        except Exception as err:
+        except Exception as err: # noqa: BLE001
             _LOGGER.error(f"Error turning on output: {err}")
 
     async def async_turn_off(self, **kwargs: Any) -> None:
@@ -103,7 +103,7 @@ class ElkOutputSwitch(ElkEntity, SwitchEntity):
                 
                 # Tell HA to update the UI immediately
                 self.async_write_ha_state()
-        except Exception as err:
+        except Exception as err: # noqa: BLE001
             _LOGGER.error(f"Error turning off output: {err}")
 
     @callback

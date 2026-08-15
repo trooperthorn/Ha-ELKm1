@@ -7,33 +7,31 @@ import os
 from typing import Any
 
 import serial.tools.list_ports
-
 import voluptuous as vol  # type: ignore[import-untyped]
-
 from homeassistant import config_entries
 from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_PORT, CONF_USERNAME
+from homeassistant.core import callback
 from homeassistant.data_entry_flow import FlowResult
 from homeassistant.helpers import selector
-from homeassistant.core import callback
 
 from .const import (
-    DOMAIN,
-    CONF_INCLUDED_ZONES,
-    CONF_SYNC_CLOCK,
-    CONF_ENABLE_TASKS,
-    CONF_STRICT_PIN,
     CONF_AUTO_CLEAR_MEMORY,
-    DEFAULT_INCLUDED_ZONES,
-    DEFAULT_SYNC_CLOCK,
-    DEFAULT_ENABLE_TASKS,
-    DEFAULT_STRICT_PIN,
-    DEFAULT_AUTO_CLEAR_MEMORY,
     CONF_CONNECTION_TYPE,
-    CONNECTION_SERIAL,
-    CONNECTION_NETWORK,
-    CONF_SERIAL_PORT,
-    CONF_VERIFY_DEVICE,
+    CONF_ENABLE_TASKS,
+    CONF_INCLUDED_ZONES,
     CONF_PIN,
+    CONF_SERIAL_PORT,
+    CONF_STRICT_PIN,
+    CONF_SYNC_CLOCK,
+    CONF_VERIFY_DEVICE,
+    CONNECTION_NETWORK,
+    CONNECTION_SERIAL,
+    DEFAULT_AUTO_CLEAR_MEMORY,
+    DEFAULT_ENABLE_TASKS,
+    DEFAULT_INCLUDED_ZONES,
+    DEFAULT_STRICT_PIN,
+    DEFAULT_SYNC_CLOCK,
+    DOMAIN,
 )
 from .helpers.usb_discovery import probe_serial_port
 
