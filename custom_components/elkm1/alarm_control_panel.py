@@ -11,7 +11,9 @@ from homeassistant.components.alarm_control_panel import (
 
 # Safe imports for optional alarm panel features/formats across HA versions
 try:
-    from homeassistant.components.alarm_control_panel import AlarmControlPanelEntityFeature
+    from homeassistant.components.alarm_control_panel import (
+        AlarmControlPanelEntityFeature,
+    )
 except ImportError:
     AlarmControlPanelEntityFeature = None
 
