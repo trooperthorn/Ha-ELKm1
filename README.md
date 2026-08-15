@@ -6,7 +6,7 @@
 
 A fully-featured custom integration for Home Assistant to monitor and control **Elk-M1 Gold** and **Elk-M1 EZ8** alarm and automation panels. A robust, asynchronous custom integration for the Elk-M1 Gold and Elk-M1 EZ8 security/automation panels in Home Assistant. This integration communicates directly with your Elk panel via serial or network connections, providing real-time state updates and advanced control.
 
-This integration uses the modern [elkm1_lib](https://github.com/bdraco/elkm1_lib) Python library and supports both direct Serial/USB connections and Network connections via the Elk M1XEP.
+This integration uses the modern [elkm1_lib](https://github.com/gwww/elkm1) Python library and supports both direct Serial/USB connections and Network connections via the Elk M1XEP.
 
 
 ## Features
