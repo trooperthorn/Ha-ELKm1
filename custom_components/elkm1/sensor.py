@@ -10,14 +10,13 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN
+from .coordinator import ElkDataUpdateCoordinator
 from .data import ElkRuntimeData
 from .entity import ElkEntity
-from .helpers.troublestatus import get_trouble_status_string
 
-_LOGGER: logging.Logger = logging.getLogger(__name__)
+_LOGGER = logging.getLogger(__name__)
 
 
 async def async_setup_entry(
@@ -96,16 +95,22 @@ class ElkLastUserSensor(ElkEntity, SensorEntity):
 class ElkZoneGroupSensor(ElkEntity, SensorEntity):
     """Sensor that counts open zones dynamically by looking at the Home Assistant Entity Registry."""
 
-    def __init__(self, coordinator, config_entry, sensor_type, name, icon, target_device_class):
+    def __init__(
+        self,
+        coordinator: ElkDataUpdateCoordinator,
+        config_entry: ConfigEntry,
+        sensor_type: str,
+        name: str,
+        icon: str,
+        target_device_class: str,
+    ) -> None:
+        """Initialize the zone group sensor."""
         super().__init__(coordinator, config_entry, sensor_type)
         self._attr_name = name
         self._attr_icon = icon
-        # target_device_class is now "door" or "window" instead of an array of numbers
-        self._target_device_class = target_device_class 
+        self._target_device_class = target_device_class
         self._attr_has_entity_name = True
-        
-        from homeassistant.helpers.device_registry import DeviceInfo
-        from .const import DOMAIN
+
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, "elk_m1_main_panel")},
             name="Elk-M1 Control Panel",
