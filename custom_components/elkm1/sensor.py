@@ -34,16 +34,16 @@ async def async_setup_entry(
         ElkPanelCommunicationStatusSensor(coordinator, config_entry, "panel_comm_status"),
         ElkLastUserSensor(coordinator, config_entry, "last_user"),
         
-        # Matches any configured zone with "window" in its name
+        # Window Group (Dynamically counts ANY binary sensor shown as a "window")
         ElkZoneGroupSensor(
             coordinator, config_entry, "windows_count", "Open Windows", 
-            "mdi:window-closed", ["window"]
+            "mdi:window-closed", "window"
         ),
         
-        # Matches any configured zone with "door" or "slider" in its name
+        # Door Group (Dynamically counts ANY binary sensor shown as a "door")
         ElkZoneGroupSensor(
             coordinator, config_entry, "doors_count", "Open Doors", 
-            "mdi:door-closed", ["door", "slider"]
+            "mdi:door-closed", "door"
         ),
     ]
 
