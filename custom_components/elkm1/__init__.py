@@ -5,7 +5,7 @@ from typing import Final
 
 from homeassistant.config_entries import ConfigEntry, ConfigEntryNotReady
 from homeassistant.const import Platform
-from homeassistant.core import HomeAssistant, ServiceCall
+from homeassistant.core import HomeAssistant, ServiceCallServiceResponse, SupportsResponse
 from homeassistant.helpers.update_coordinator import UpdateFailed
 
 from .const import CONF_SERIAL_PORT, DOMAIN
@@ -60,8 +60,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     entry.async_on_unload(coordinator.async_shutdown)
 
     return True
-
-
+    
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
     _LOGGER.info(f"Unloading Elk-M1 entry: {entry.entry_id}")
@@ -184,6 +183,19 @@ async def async_setup_services(hass: HomeAssistant, entry: ConfigEntry) -> None:
         if task_number:
             await coordinator.activate_task(int(task_number))
 
+    # --- QUERY SERVICES (RETURNS DATA) ---
+    
+    async def handle_get_security_summary(call: ServiceCall) -> ServiceResponse:
+        """Handle the service call and return data to the automation/script."""
+        faulted = coordinator.data.get("zones_faulted", [])
+        active_zones = [z + 1 for z in faulted]
+        
+        return {
+            "total_faulted": len(faulted),
+            "is_ready_to_arm": len(faulted) == 0,
+            "faulted_zone_numbers": active_zones,
+        }
+
     # Register all services
     hass.services.async_register(DOMAIN, "bypass_zone", handle_bypass_zone)
     hass.services.async_register(DOMAIN, "unbypass_zone", handle_unbypass_zone)
@@ -197,6 +209,14 @@ async def async_setup_services(hass: HomeAssistant, entry: ConfigEntry) -> None:
     hass.services.async_register(DOMAIN, "display_message", handle_display_message)
     hass.services.async_register(DOMAIN, "speak_phrase", handle_speak_phrase)
     hass.services.async_register(DOMAIN, "activate_task", handle_activate_task)
+    
+    # Register the response service specifically defining the supports_response parameter
+    hass.services.async_register(
+        DOMAIN, 
+        "get_security_summary", 
+        handle_get_security_summary,
+        supports_response=SupportsResponse.ONLY,
+    )
 
 async def update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """Handle options update when a user changes settings in the UI."""
