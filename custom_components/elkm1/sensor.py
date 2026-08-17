@@ -30,7 +30,18 @@ async def async_setup_entry(
         ElkPanelTemperatureSensor(coordinator, config_entry, "panel_temperature"),
         ElkPanelCommunicationStatusSensor(coordinator, config_entry, "panel_comm_status"),
         ElkLastUserSensor(coordinator, config_entry, "last_user"),
-        ElkFaultedZonesSensor(coordinator, config_entry, "faulted_zones_count"),
+        
+        # The new Window Group (Replace 1, 2, 3, 4 with your window zone numbers)
+        ElkZoneGroupSensor(
+            coordinator, config_entry, "windows_count", "Open Windows", 
+            "mdi:window-closed", [1, 2, 3, 4, 5, 6, 7, 8]
+        ),
+        
+        # The new Door Group (Replace 9, 10, 11 with your door zone numbers)
+        ElkZoneGroupSensor(
+            coordinator, config_entry, "doors_count", "Open Doors", 
+            "mdi:door-closed", [9, 10, 11]
+        ),
     ]
 
     async_add_entities(entities)
@@ -79,23 +90,56 @@ class ElkLastUserSensor(ElkEntity, SensorEntity):
         return self.coordinator.data.get("last_user_name")
 
 
-class ElkFaultedZonesSensor(ElkEntity, SensorEntity):
-    """Sensor listing faulted zones."""
-    
-    _attr_name = "Faulted Zones"
-    _attr_has_entity_name = True
+class ElkZoneGroupSensor(ElkEntity, SensorEntity):
+    """Sensor that counts faulted zones for a specific group and lists them."""
+
+    def __init__(self, coordinator, config_entry, sensor_type, name, icon, zone_list):
+        super().__init__(coordinator, config_entry, sensor_type)
+        self._attr_name = name
+        self._attr_icon = icon
+        self._zone_list = zone_list
+        self._attr_has_entity_name = True
 
     @property
-    def native_value(self) -> str:
-        """Return comma-separated list of faulted zone numbers."""
+    def native_value(self) -> int:
+        """Return the count of faulted zones in this group."""
         if not self.coordinator.data:
-            return "None"
+            return 0
         
-        zones = self.coordinator.data.get("zones_faulted", [])
-        if not zones:
-            return "None"
+        faulted_zones = self.coordinator.data.get("zones_faulted", [])
         
-        return ", ".join(str(z + 1) for z in zones)
+        # Count how many faulted zones (adjusted for 0-indexing) are in our filter list
+        count = sum(1 for z in faulted_zones if (z + 1) in self._zone_list)
+        
+        # Optionally toggle icon dynamically
+        if self._attr_name == "Open Windows":
+            self._attr_icon = "mdi:window-open" if count > 0 else "mdi:window-closed"
+        elif self._attr_name == "Open Doors":
+            self._attr_icon = "mdi:door-open" if count > 0 else "mdi:door-closed"
+            
+        return count
+
+    @property
+    def extra_state_attributes(self):
+        """Return attributes including a readable list of open zones."""
+        if not self.coordinator.data:
+            return {"open_entities": "None"}
+
+        faulted_zones = self.coordinator.data.get("zones_faulted", [])
+        
+        # Get the actual zone numbers that are currently open and in this group
+        active_zones = [z + 1 for z in faulted_zones if (z + 1) in self._zone_list]
+        
+        if not active_zones:
+            return {"open_entities": "None"}
+            
+        # Format them nicely. If your coordinator has a dictionary of names, 
+        # you could map them here. Otherwise, it defaults to "Zone 1, Zone 3"
+        zone_strings = [f"Zone {z}" for z in active_zones]
+        
+        return {
+            "open_entities": ", ".join(zone_strings)
+        }
 
 
 
