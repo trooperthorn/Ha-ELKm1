@@ -1,0 +1,129 @@
+blueprint:
+  name: "Elk-M1: Atmospheric Pre-Arm Check"
+  description: >-
+    Intercepts an arming request. If the Elk-M1 reports open windows and the 
+    Davis Vantage weather station reports incoming rain or high winds, it blocks 
+    the arming sequence and broadcasts a Text-to-Speech warning.
+  domain: automation
+  
+  input:
+    arm_request_toggle:
+      name: Arming Request Toggle
+      description: The input_boolean helper used on your dashboard to request system arming.
+      selector:
+        entity:
+          domain: input_boolean
+
+    windows_sensor:
+      name: Elk-M1 Open Windows Sensor
+      description: The dynamic sensor tracking open windows (e.g., sensor.open_windows).
+      selector:
+        entity:
+          domain: sensor
+
+    wind_sensor:
+      name: Davis Vantage Wind Speed Sensor
+      description: The sensor tracking current wind speed.
+      selector:
+        entity:
+          domain: sensor
+          device_class: wind_speed
+
+    wind_threshold:
+      name: Wind Speed Threshold (mph)
+      description: If wind speed is above this value and windows are open, trigger the warning.
+      default: 15
+      selector:
+        number:
+          min: 0
+          max: 100
+          step: 1
+
+    rain_sensor:
+      name: Davis Vantage Rain Rate Sensor
+      description: The sensor tracking current precipitation intensity.
+      selector:
+        entity:
+          domain: sensor
+          device_class: precipitation_intensity
+
+    rain_threshold:
+      name: Rain Rate Threshold (in/hr)
+      description: If rain rate is above this value and windows are open, trigger the warning.
+      default: 0.1
+      selector:
+        number:
+          min: 0
+          max: 10
+          step: 0.1
+
+    tts_provider:
+      name: Text-to-Speech Provider
+      description: The TTS service entity (e.g., your Gemini AI TTS provider).
+      selector:
+        entity:
+          domain: tts
+
+    media_player:
+      name: Target Media Player
+      description: The speaker to broadcast the warning to (e.g., Yamaha A3080 or Google Home).
+      selector:
+        entity:
+          domain: media_player
+
+    arming_action:
+      name: Arm System Action
+      description: The action to execute if the weather is clear or windows are closed (e.g., elkm1.arm_away).
+      selector:
+        action: {}
+
+# Trigger when the proxy toggle is turned on
+trigger:
+  - platform: state
+    entity_id: !input arm_request_toggle
+    to: "on"
+
+# Map inputs to variables so they can be evaluated in Jinja templates
+variables:
+  windows_entity: !input windows_sensor
+  wind_entity: !input wind_sensor
+  rain_entity: !input rain_sensor
+  wind_thresh: !input wind_threshold
+  rain_thresh: !input rain_threshold
+  
+  # Extract live states
+  open_windows_count: "{{ states(windows_entity) | int(0) }}"
+  open_window_names: "{{ state_attr(windows_entity, 'open_entities') | default('Unknown') }}"
+  current_wind: "{{ states(wind_entity) | float(0) }}"
+  current_rain: "{{ states(rain_entity) | float(0) }}"
+  
+  # Determine if atmospheric conditions exceed our defined safety thresholds
+  is_weather_hazardous: >-
+    {{ current_wind >= wind_thresh or current_rain >= rain_thresh }}
+
+action:
+  - choose:
+      # SCENARIO 1: Hazardous Weather + Open Windows
+      - conditions:
+          - condition: template
+            value_template: "{{ open_windows_count > 0 and is_weather_hazardous }}"
+        sequence:
+          # Broadcast the detailed warning using your TTS integration
+          - action: tts.speak
+            target:
+              entity_id: !input tts_provider
+            data:
+              media_player_entity_id: !input media_player
+              message: >-
+                Warning. The security system cannot be armed. Atmospheric conditions 
+                are deteriorating and {{ open_windows_count }} windows are currently open. 
+                Please close the following windows to prevent damage: {{ open_window_names }}.
+          
+          # Reset the dashboard toggle back to off since the arming was rejected
+          - action: input_boolean.turn_off
+            target:
+              entity_id: !input arm_request_toggle
+
+    # SCENARIO 2: Safe to Arm (Either weather is fine, or all windows are closed)
+    default:
+      - sequence: !input arming_action
