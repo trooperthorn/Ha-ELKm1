@@ -10,6 +10,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN
 from .coordinator import ElkDataUpdateCoordinator
@@ -192,6 +193,20 @@ class ElkZoneGroupSensor(ElkEntity, SensorEntity):
         return {
             "open_entities": ", ".join(open_zones) if open_zones else "None"
         }
+
+
+def get_trouble_status_string(panel: Any) -> str:
+    """Parse the Elk panel trouble status into a readable string."""
+    if not panel:
+        return "Unknown"
+    
+    # elkm1_lib exposes trouble status, which we safely extract
+    status = getattr(panel, "system_trouble_status", "")
+    
+    if not status:
+        return "Normal"
+        
+    return str(status)
 
 class ElkPanelSensor(CoordinatorEntity, SensorEntity):
     """Sensor for ELK panel information."""
