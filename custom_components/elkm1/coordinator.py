@@ -574,23 +574,28 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator):
             if not isinstance(words, (list, tuple)):
                 return
 
-            readable_message = translate_elk_voice(words)
+            # Safely cast the generic list/tuple into a strict list of integers for Mypy
+            try:
+                word_ints = [int(w) for w in words]
+            except (ValueError, TypeError):
+                _LOGGER.error(f"Received non-integer data in voice message callback: {words}")
+                return
+
+            readable_message = translate_elk_voice(word_ints)
 
             if readable_message:
                 _LOGGER.info(
-                    f"Elk-M1 Voice Message Translated: '{readable_message}' (Raw IDs: {words})"
+                    f"Elk-M1 Voice Message Translated: '{readable_message}' (Raw IDs: {word_ints})"
                 )
                 self.hass.bus.async_fire(
                     "elkm1_voice_announcement",
                     {
                         "source": "elk_m1",
-                        "raw_ids": words,
+                        "raw_ids": word_ints,
                         "message": readable_message,
                     },
                 )
                 _LOGGER.debug(f"Fired Elk voice event: {readable_message}")
-        except Exception:
-            _LOGGER.exception("Failed to translate and fire Elk voice message")
 
     # --- PHASE 2: CUSTOM RAW COMMAND SERVICES ---
 
