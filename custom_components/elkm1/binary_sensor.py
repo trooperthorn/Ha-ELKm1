@@ -10,7 +10,9 @@ from homeassistant.components.binary_sensor import (
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.device_registry import DeviceInfo
 
+from .const import DOMAIN
 from .coordinator import ElkDataUpdateCoordinator
 from .data import ElkRuntimeData
 from .entity import ElkEntity
@@ -46,6 +48,14 @@ class ElkZoneBinarySensor(ElkEntity, BinarySensorEntity):
         definition_val = getattr(getattr(zone, "definition", None), "value", 0)
         self._attr_device_class = self._get_device_class(definition_val)
         self._attr_name = zone.name
+
+        # Bind this binary sensor to the main Elk-M1 device
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, "elk_m1_main_panel")},
+            name="Elk-M1 Control Panel",
+            manufacturer="Elk Products",
+            model="M1 Gold",
+        )
 
     @property
     def is_on(self) -> bool | None:
