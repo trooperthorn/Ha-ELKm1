@@ -1,3 +1,18 @@
+get_security_summary:
+  name: Get Security Summary
+  description: Returns a summary of all currently faulted zones, including if the system is ready to arm.
+  # No fields required for this specific action, but you must define the response:
+  response:
+    total_faulted:
+      description: The total number of open zones.
+      example: 2
+    is_ready_to_arm:
+      description: Boolean indicating if the panel can be armed.
+      example: false
+    faulted_zone_numbers:
+      description: A list of the open zone numbers.
+      example: [1, 4]
+      
 trigger_zone:
   name: Trigger Zone
   description: Momentarily violate a hardwired zone.
