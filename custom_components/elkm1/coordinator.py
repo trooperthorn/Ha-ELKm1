@@ -596,6 +596,8 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator):
                     },
                 )
                 _LOGGER.debug(f"Fired Elk voice event: {readable_message}")
+        except Exception:
+            _LOGGER.exception("Failed to translate and fire Elk voice message")
 
     # --- PHASE 2: CUSTOM RAW COMMAND SERVICES ---
 
