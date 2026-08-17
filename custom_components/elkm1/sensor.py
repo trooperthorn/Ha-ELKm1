@@ -7,6 +7,7 @@ from typing import Any
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
@@ -33,16 +34,16 @@ async def async_setup_entry(
         ElkPanelCommunicationStatusSensor(coordinator, config_entry, "panel_comm_status"),
         ElkLastUserSensor(coordinator, config_entry, "last_user"),
         
-        # Replace with your ACTUAL window zone IDs
+        # Matches any configured zone with "window" in its name
         ElkZoneGroupSensor(
             coordinator, config_entry, "windows_count", "Open Windows", 
-            "mdi:window-closed", [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14] 
+            "mdi:window-closed", ["window"]
         ),
         
-        # Replace with your ACTUAL door zone IDs
+        # Matches any configured zone with "door" or "slider" in its name
         ElkZoneGroupSensor(
             coordinator, config_entry, "doors_count", "Open Doors", 
-            "mdi:door-closed", [1, 2, 3, 15, 16] 
+            "mdi:door-closed", ["door", "slider"]
         ),
     ]
 
@@ -93,16 +94,18 @@ class ElkLastUserSensor(ElkEntity, SensorEntity):
 
 
 class ElkZoneGroupSensor(ElkEntity, SensorEntity):
-    """Sensor that counts open zones for a specific group using live physical/logical status."""
+    """Sensor that counts open zones dynamically by looking at the Home Assistant Entity Registry."""
 
-    def __init__(self, coordinator, config_entry, sensor_type, name, icon, zone_list):
+    def __init__(self, coordinator, config_entry, sensor_type, name, icon, target_device_class):
         super().__init__(coordinator, config_entry, sensor_type)
         self._attr_name = name
         self._attr_icon = icon
-        self._zone_list = zone_list
+        # target_device_class is now "door" or "window" instead of an array of numbers
+        self._target_device_class = target_device_class 
         self._attr_has_entity_name = True
         
-        # Bind this sensor to the main Elk-M1 device
+        from homeassistant.helpers.device_registry import DeviceInfo
+        from .const import DOMAIN
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, "elk_m1_main_panel")},
             name="Elk-M1 Control Panel",
@@ -111,34 +114,68 @@ class ElkZoneGroupSensor(ElkEntity, SensorEntity):
         )
 
     def _is_zone_open(self, zone) -> bool:
-        """Helper to match the exact logic used by ElkZoneBinarySensor."""
+        """Helper to match the exact physical/logical logic."""
         if not zone:
             return False
-            
         logical_val = getattr(getattr(zone, "logical_status", None), "value", 0)
         physical_val = getattr(getattr(zone, "physical_status", None), "value", 0)
-        
-        # 2 = Violated (Logical), 1 = Open, 3 = Short (Physical)
         return logical_val == 2 or physical_val in (1, 3)
+
+    def _get_matching_open_zones(self):
+        """Cross-references the UI Entity Registry with the live hardware state."""
+        open_zones = []
+        
+        if not self.coordinator._elk or not hasattr(self.coordinator._elk, "zones"):
+            return open_zones
+            
+        # Tap into the Home Assistant Entity Registry
+        entity_reg = er.async_get(self.hass)
+        entries = er.async_entries_for_config_entry(entity_reg, self.config_entry.entry_id)
+        
+        for entry in entries:
+            # We only care about the binary_sensors (the actual zones)
+            if entry.domain != "binary_sensor":
+                continue
+                
+            # Check the effective device class.
+            # entry.device_class is what the user sets in the UI ("Show as").
+            # entry.original_device_class is the default we assigned in code.
+            device_class = entry.device_class or entry.original_device_class
+            if device_class != self._target_device_class:
+                continue
+                
+            # Extract the actual hardware zone number from the unique_id (e.g., "elk_123_zone_14")
+            try:
+                if "zone_" in entry.unique_id:
+                    zone_index = int(entry.unique_id.split("zone_")[-1])
+                else:
+                    continue
+            except (ValueError, TypeError):
+                continue
+                
+            # Instantly check the hardware without waiting for HA state machines to catch up
+            try:
+                zone = self.coordinator._elk.zones[zone_index]
+            except IndexError:
+                continue
+                
+            if self._is_zone_open(zone):
+                # Major Bonus: If you rename the entity in HA, it uses that name! 
+                # Otherwise it falls back to the Elk name, then generic "Zone X"
+                name = entry.name or entry.original_name or getattr(zone, "name", f"Zone {zone_index + 1}")
+                open_zones.append(name)
+                
+        return open_zones
 
     @property
     def native_value(self) -> int:
-        """Return the live count of open zones in this group."""
-        if not self.coordinator._elk or not hasattr(self.coordinator._elk, "zones"):
-            return 0
+        """Return the live count of open zones."""
+        open_zones = self._get_matching_open_zones()
+        count = len(open_zones)
         
-        count = 0
-        # Iterate through all zones provided by the Elk-M1 panel
-        for i, zone in enumerate(self.coordinator._elk.zones):
-            # i is 0-indexed, so the actual zone number is i + 1
-            if (i + 1) in self._zone_list:
-                if self._is_zone_open(zone):
-                    count += 1
-        
-        # Dynamically change the icon based on the count
-        if self._attr_name == "Open Windows":
+        if self._target_device_class == "window":
             self._attr_icon = "mdi:window-open" if count > 0 else "mdi:window-closed"
-        elif self._attr_name == "Open Doors":
+        elif self._target_device_class == "door":
             self._attr_icon = "mdi:door-open" if count > 0 else "mdi:door-closed"
             
         return count
@@ -146,22 +183,10 @@ class ElkZoneGroupSensor(ElkEntity, SensorEntity):
     @property
     def extra_state_attributes(self):
         """Return attributes including a readable list of open zones."""
-        if not self.coordinator._elk or not hasattr(self.coordinator._elk, "zones"):
-            return {"open_entities": "None"}
-
-        open_zones = []
-        for i, zone in enumerate(self.coordinator._elk.zones):
-            if (i + 1) in self._zone_list:
-                if self._is_zone_open(zone):
-                    # Get the friendly name of the zone, fallback to "Zone X" if name is missing
-                    name = getattr(zone, "name", f"Zone {i + 1}")
-                    open_zones.append(name)
-        
+        open_zones = self._get_matching_open_zones()
         return {
             "open_entities": ", ".join(open_zones) if open_zones else "None"
         }
-
-
 
 class ElkPanelSensor(CoordinatorEntity, SensorEntity):
     """Sensor for ELK panel information."""
