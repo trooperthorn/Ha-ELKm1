@@ -1,4 +1,4 @@
-"""Switch platform for Elk-M1 outputs/relays."""
+"""Switch platform for Elk-M1 outputs/relays and proxy switches."""
 from __future__ import annotations
 
 import logging
@@ -7,8 +7,10 @@ from typing import Any
 from homeassistant.components.switch import SwitchDeviceClass, SwitchEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
+from .const import DOMAIN
 from .coordinator import ElkDataUpdateCoordinator
 from .data import ElkRuntimeData
 from .entity import ElkEntity
@@ -24,9 +26,13 @@ async def async_setup_entry(
     runtime_data: ElkRuntimeData = config_entry.runtime_data
     coordinator = runtime_data.coordinator
 
-    entities: list[ElkOutputSwitch] = []
+    # Type as a generic list of SwitchEntity so it accepts both output switches and our proxy switch
+    entities: list[SwitchEntity] = []
 
-    # Create a switch for each output safely
+    # 1. Add the native proxy switch for the Atmospheric Pre-Arm Check blueprint
+    entities.append(ElkArmRequestSwitch(coordinator, config_entry))
+
+    # 2. Create a switch for each physical Elk-M1 output safely
     if coordinator._elk:
         # Iterate directly since elkm1_lib collections don't support len()
         for output in coordinator._elk.outputs:
@@ -43,6 +49,43 @@ async def async_setup_entry(
                 )
 
     async_add_entities(entities)
+
+
+class ElkArmRequestSwitch(ElkEntity, SwitchEntity):
+    """Native proxy switch for triggering pre-arm validation automations."""
+
+    def __init__(self, coordinator: ElkDataUpdateCoordinator, config_entry: ConfigEntry) -> None:
+        """Initialize the arm request proxy switch."""
+        # Passes "arm_system_request" as the unique_id suffix to the base ElkEntity
+        super().__init__(coordinator, config_entry, "arm_system_request")
+        
+        self._attr_name = "Arm System Request"
+        self._attr_icon = "mdi:shield-sync"
+        self._attr_is_on = False
+        self._attr_has_entity_name = True
+        
+        # Binds this switch directly to the main hardware panel in the UI
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, "elk_m1_main_panel")},
+            name="Elk-M1 Control Panel",
+            manufacturer="Elk Products",
+            model="M1 Gold",
+        )
+
+    @property
+    def is_on(self) -> bool:
+        """Return the state of the switch."""
+        return self._attr_is_on
+
+    async def async_turn_on(self, **kwargs: Any) -> None:
+        """Turn the switch on (Triggers the HA Pre-Arm Blueprint)."""
+        self._attr_is_on = True
+        self.async_write_ha_state()
+
+    async def async_turn_off(self, **kwargs: Any) -> None:
+        """Turn the switch off (Reset by the Blueprint or manually)."""
+        self._attr_is_on = False
+        self.async_write_ha_state()
 
 
 class ElkOutputSwitch(ElkEntity, SwitchEntity):
