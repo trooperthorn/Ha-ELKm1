@@ -7,9 +7,11 @@ from typing import Any
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
+from .const import DOMAIN
 from .data import ElkRuntimeData
 from .entity import ElkEntity
 from .helpers.troublestatus import get_trouble_status_string
@@ -99,6 +101,14 @@ class ElkZoneGroupSensor(ElkEntity, SensorEntity):
         self._attr_icon = icon
         self._zone_list = zone_list
         self._attr_has_entity_name = True
+        
+        # Bind this sensor to the main Elk-M1 device
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, "elk_m1_main_panel")},
+            name="Elk-M1 Control Panel",
+            manufacturer="Elk Products",
+            model="M1 Gold",
+        )
 
     @property
     def native_value(self) -> int:
