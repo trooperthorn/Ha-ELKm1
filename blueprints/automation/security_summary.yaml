@@ -1,0 +1,10 @@
+sequence:
+  - action: elkm1.get_security_summary
+    response_variable: security_status
+  - if:
+      - condition: template
+        value_template: "{{ security_status.is_ready_to_arm == false }}"
+    then:
+      - action: tts.speak
+        data:
+          message: "The alarm cannot be armed. You have {{ security_status.total_faulted }} zones open."
