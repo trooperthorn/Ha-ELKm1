@@ -15,7 +15,15 @@ jobs:
       
       - name: Install dependencies
         run: |
-          pip install -r requirements-dev.txt
+          python -m pip install --upgrade pip
+          pip install pytest pytest-cov pytest-asyncio
+          
+          # This line reads manifest.json and installs elkm1_lib automatically
+          jq -r '.requirements[]' custom_components/elkm1/manifest.json | xargs pip install
+          
+      - name: Run Pytest with Coverage
+        run: |
+          pytest tests --cov=custom_components/elkm1 --cov-report=term-missing
       
       - name: Lint with ruff
         run: ruff check custom_components/elkm1
