@@ -5,7 +5,12 @@ from typing import Final
 
 from homeassistant.config_entries import ConfigEntry, ConfigEntryNotReady
 from homeassistant.const import Platform
-from homeassistant.core import HomeAssistant, ServiceCallServiceResponse, SupportsResponse
+from homeassistant.core import (
+    HomeAssistant,
+    ServiceCall,
+    ServiceResponse,
+    SupportsResponse,
+)
 from homeassistant.helpers.update_coordinator import UpdateFailed
 
 from .const import CONF_SERIAL_PORT, DOMAIN
