@@ -1,5 +1,10 @@
 """Support for control of ElkM1 sensors."""
+
+from __future__ import annotations
+
 from typing import Any, cast, override
+
+import voluptuous as vol
 
 from elkm1_lib.const import SettingFormat, ZoneType
 from elkm1_lib.counters import Counter
@@ -10,7 +15,6 @@ from elkm1_lib.panel import Panel
 from elkm1_lib.settings import Setting
 from elkm1_lib.util import pretty_const
 from elkm1_lib.zones import Zone
-import voluptuous as vol
 
 from homeassistant.components.sensor import (
     SensorDeviceClass,
@@ -20,7 +24,8 @@ from homeassistant.components.sensor import (
 from homeassistant.const import EntityCategory, UnitOfElectricPotential
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
-from homeassistant.helpers import entity_platform, entity_registry as er
+from homeassistant.helpers import entity_platform
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.typing import VolDictType
