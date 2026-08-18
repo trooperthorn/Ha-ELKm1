@@ -35,13 +35,13 @@ async def async_setup_entry(
         ElkLastUserSensor(coordinator, config_entry, "last_user"),
         
         # Window Group (Dynamically counts ANY binary sensor shown as a "window")
-        ElkZoneGroupSensor(
+        (
             coordinator, config_entry, "windows_count", "Open Windows", 
             "mdi:window-closed", "window"
         ),
         
         # Door Group (Dynamically counts ANY binary sensor shown as a "door")
-        ElkZoneGroupSensor(
+        (
             coordinator, config_entry, "doors_count", "Open Doors", 
             "mdi:door-closed", "door"
         ),
@@ -112,12 +112,6 @@ class ElkZoneGroupSensor(ElkEntity, SensorEntity):
         self._target_device_class = target_device_class
         self._attr_has_entity_name = True
 
-        self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, config_entry.entry_id)}, # Uses the integration ID as the glue
-            name="Elk-M1", 
-            manufacturer=MANUFACTURER,
-            model=MODEL,
-        )
 
     def _is_zone_open(self, zone) -> bool:
         """Helper to match the exact physical/logical logic."""
