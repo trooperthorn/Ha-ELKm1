@@ -1,20 +1,25 @@
 """Support for control of ElkM1 outputs (relays) and proxy switches."""
 
+from __future__ import annotations
+
 from datetime import timedelta
 from math import ceil
 from typing import Any, override
+
+import voluptuous as vol
 
 from elkm1_lib.const import ThermostatMode, ThermostatSetting
 from elkm1_lib.elements import Element
 from elkm1_lib.elk import Elk
 from elkm1_lib.outputs import Output
 from elkm1_lib.thermostats import Thermostat
-import voluptuous as vol
 
-from homeassistant.components.switch import DOMAIN as SWITCH_DOMAIN, SwitchEntity
+from homeassistant.components.switch import DOMAIN as SWITCH_DOMAIN
+from homeassistant.components.switch import SwitchEntity
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
-from homeassistant.helpers import config_validation as cv, service
+from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers import service
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.typing import VolDictType
@@ -22,10 +27,10 @@ from homeassistant.helpers.typing import VolDictType
 from . import ElkM1ConfigEntry
 from .const import ATTR_DURATION, DOMAIN
 from .entity import (
-    ElkAttachedEntity, 
-    ElkEntity, 
-    create_elk_entities, 
-    create_elk_system_device_info
+    ElkAttachedEntity,
+    ElkEntity,
+    create_elk_entities,
+    create_elk_system_device_info,
 )
 from .models import ELKM1Data
 
