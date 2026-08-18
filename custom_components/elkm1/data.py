@@ -1,34 +1,18 @@
-"""Data models for Elk-M1 integration."""
-from __future__ import annotations
+"""The elkm1 integration models."""
 
 from dataclasses import dataclass
-from typing import TypedDict
+from typing import Any
 
-from homeassistant.config_entries import ConfigEntry
-
-from .coordinator import ElkDataUpdateCoordinator
+from elkm1_lib import Elk
 
 
-class ElkConfigEntry(ConfigEntry):
-    """Typed ConfigEntry for Elk integration."""
+@dataclass(slots=True)
+class ELKM1Data:
+    """Data for the elkm1 integration."""
 
-    runtime_data: ElkRuntimeData
-
-
-@dataclass
-class ElkRuntimeData:
-    """Runtime data for Elk integration."""
-
-    coordinator: ElkDataUpdateCoordinator
-    serial_port: str
-
-
-class ElkPanelStatus(TypedDict):
-    """Panel status data."""
-
-    armed: bool
-    armed_mode: str
-    last_user: int
-    last_user_name: str
-    zones_faulted: list[int]
-    outputs_active: list[int]
+    elk: Elk
+    prefix: str
+    mac: str | None
+    auto_configure: bool
+    config: dict[str, Any]
+    keypads: dict[str, Any]
