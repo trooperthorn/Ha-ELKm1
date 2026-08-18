@@ -1,11 +1,9 @@
 """Test config flow."""
-import pytest
 from homeassistant.core import HomeAssistant
 
 from custom_components.elkm1.const import DOMAIN
 
 
-@pytest.mark.asyncio
 async def test_config_flow_user_step_with_discovery(hass: HomeAssistant) -> None:
     """Test user step with auto-discovery."""
     result = await hass.config_entries.flow.async_init(
@@ -16,7 +14,6 @@ async def test_config_flow_user_step_with_discovery(hass: HomeAssistant) -> None
     assert result["step_id"] == "user"
 
 
-@pytest.mark.asyncio
 async def test_config_flow_connection_error(hass: HomeAssistant) -> None:
     """Test handling of connection errors."""
     result = await hass.config_entries.flow.async_init(
