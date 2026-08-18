@@ -1,5 +1,6 @@
 automation:
   - alias: "Chime: Front Door Opened"
+    description: "Plays an Elk-M1 vocabulary announcement when the front door opens while disarmed."
     trigger:
       - platform: state
         entity_id: binary_sensor.elk_m1_front_door
@@ -11,4 +12,4 @@ automation:
     action:
       - service: elkm1.speak_phrase
         data:
-          phrase: "Front door open"
+          number: 146
