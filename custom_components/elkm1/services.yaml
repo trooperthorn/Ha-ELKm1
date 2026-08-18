@@ -1,7 +1,148 @@
+alarm_bypass:
+  name: Alarm bypass
+  description: Bypasses all zones for the area.
+  target:
+    entity:
+      integration: elkm1
+      domain: alarm_control_panel
+  fields:
+    code:
+      name: Code
+      description: Alarm code to authorize the bypass of the alarm control panel.
+      required: true
+      example: 4242
+      selector:
+        text:
+
+alarm_clear_bypass:
+  name: Alarm clear bypass
+  description: Removes bypass on all zones for the area.
+  target:
+    entity:
+      integration: elkm1
+      domain: alarm_control_panel
+  fields:
+    code:
+      name: Code
+      description: Alarm code to authorize the bypass clear of the alarm control panel.
+      required: true
+      example: 4242
+      selector:
+        text:
+
+alarm_arm_home_instant:
+  name: Alarm arm home instant
+  description: Arms the Elk-M1 in home instant mode.
+  target:
+    entity:
+      integration: elkm1
+      domain: alarm_control_panel
+  fields:
+    code:
+      name: Code
+      description: Alarm code to arm the alarm control panel.
+      required: true
+      example: 1234
+      selector:
+        text:
+
+alarm_arm_night_instant:
+  name: Alarm arm night instant
+  description: Arms the Elk-M1 in night instant mode.
+  target:
+    entity:
+      integration: elkm1
+      domain: alarm_control_panel
+  fields:
+    code:
+      name: Code
+      description: Alarm code to arm the alarm control panel.
+      required: true
+      example: 1234
+      selector:
+        text:
+
+alarm_arm_vacation:
+  name: Alarm arm vacation
+  description: Arms the Elk-M1 in vacation mode.
+  target:
+    entity:
+      integration: elkm1
+      domain: alarm_control_panel
+  fields:
+    code:
+      name: Code
+      description: Alarm code to arm the alarm control panel.
+      required: true
+      example: 1234
+      selector:
+        text:
+
+alarm_display_message:
+  name: Alarm display message
+  description: Displays a message on all of the Elk-M1 keypads for an area.
+  target:
+    entity:
+      integration: elkm1
+      domain: alarm_control_panel
+  fields:
+    clear:
+      name: Clear
+      description: 0=clear message, 1=clear message with * key, 2=Display until timeout.
+      default: 2
+      selector:
+        number:
+          min: 0
+          max: 2
+    beep:
+      name: Beep
+      description: 0=no beep, 1=beep.
+      default: false
+      selector:
+        boolean:
+    timeout:
+      name: Timeout
+      description: Time to display message, 0=forever, max 65535.
+      default: 0
+      selector:
+        number:
+          min: 0
+          max: 65535
+    line1:
+      name: Line 1
+      description: Up to 16 characters of text (truncated if too long).
+      example: The answer to life.
+      default: ""
+      selector:
+        text:
+    line2:
+      name: Line 2
+      description: Up to 16 characters of text (truncated if too long).
+      example: the universe, and everything.
+      default: ""
+      selector:
+        text:
+
+set_time:
+  name: Set time
+  description: Sets the time for the panel.
+  fields:
+    prefix:
+      name: Prefix
+      description: Prefix for the panel.
+      example: gatehouse
+      selector:
+        text:
+
 get_security_summary:
   name: Get Security Summary
-  description: Returns a summary of all currently faulted zones, including if the system is ready to arm.
-  # No fields required for this specific action, but you must define the response:
+  description: Returns live security data (faulted zones, ready to arm status) to an automation or script.
+  fields:
+    prefix:
+      name: Prefix
+      description: Prefix for the panel.
+      selector:
+        text:
   response:
     total_faulted:
       description: The total number of open zones.
@@ -12,188 +153,17 @@ get_security_summary:
     faulted_zone_numbers:
       description: A list of the open zone numbers.
       example: [1, 4]
-      
-trigger_zone:
-  name: Trigger Zone
-  description: Momentarily violate a hardwired zone.
-  fields:
-    zone_number:
-      name: Zone Number
-      description: The Elk zone number (1-208) to trigger.
-      required: true
-      selector:
-        number:
-          min: 1
-          max: 208
-
-force_arm_away:
-  name: Force Arm Away
-  description: Force arm the system to Away mode, bypassing open zones.
-  fields:
-    area:
-      name: Area
-      description: The Area to arm (1-8).
-      required: true
-      selector:
-        number:
-          min: 1
-          max: 8
-    pin_code:
-      name: PIN Code
-      description: 4 or 6 digit user PIN code.
-      required: true
-      selector:
-        text:
-
-bypass_zone:
-  name: Bypass Zone
-  description: Bypass or unbypass a specific zone.
-  fields:
-    zone_number:
-      name: Zone Number
-      description: Zone to bypass (1-208).
-      required: true
-      selector:
-        number:
-          min: 1
-          max: 208
-    pin_code:
-      name: PIN Code
-      description: Valid user PIN code.
-      required: true
-      selector:
-        text:
-
-unbypass_zone:
-  name: Unbypass Zone
-  description: Unbypass a zone
-  fields:
-    zone:
-      name: Zone
-      description: Zone number or name to unbypass
-      required: true
-      selector:
-        number:
-          min: 1
-          max: 208
-
-panic_alarm:
-  name: Trigger Panic Alarm
-  description: Trigger a panic alarm
-  fields:
-    panic_type:
-      name: Panic Type
-      description: Type of panic alarm (police/fire/ambulance)
-      required: true
-      selector:
-        select:
-          options:
-            - police
-            - fire
-            - ambulance
-
-arm_stay:
-  name: Arm Stay
-  description: Arm panel in stay mode
-  fields:
-    user_code:
-      name: User Code
-      description: Optional user code
-      required: false
-      selector:
-        number:
-          min: 0
-          max: 999999
-
-disarm:
-  name: Disarm Panel
-  description: Disarm the alarm panel
-  fields:
-    user_code:
-      name: User Code
-      description: Disarm code
-      required: true
-      selector:
-        number:
-          min: 0
-          max: 999999
-
-set_temperature:
-  name: Set Thermostat Temperature
-  description: Set the thermostat to a target temperature
-  fields:
-    temperature:
-      name: Temperature
-      description: Target temperature in degrees
-      required: true
-      selector:
-        number:
-          min: 50
-          max: 90
-          step: 0.1
-
-display_message:
-  name: Display Keypad Message
-  description: Send a custom text message to Elk keypad LCDs.
-  fields:
-    area:
-      name: Area
-      description: The Area of the keypads (1-8).
-      required: true
-      selector:
-        number:
-          min: 1
-          max: 8
-    line1:
-      name: Line 1 Text
-      description: Max 16 characters.
-      required: true
-      selector:
-        text:
-    line2:
-      name: Line 2 Text
-      description: Max 16 characters. Use ^ to skip.
-      required: false
-      selector:
-        text:
-    beep:
-      name: Beep Keypad
-      description: Beep the keypad when the message arrives.
-      default: false
-      selector:
-        boolean:
-    timeout:
-      name: Timeout
-      description: Seconds to display (0 for indefinite).
-      default: 0
-      selector:
-        number:
-          min: 0
-          max: 65535
-          
-activate_task:
-  name: Activate Automation Task
-  description: Trigger one of the 32 internal Elk automation tasks.
-  fields:
-    task_number:
-      name: Task Number
-      description: Task to activate (1-32).
-      required: true
-      selector:
-        number:
-          min: 1
-          max: 32
 
 alarmo_auto_setup:
   name: "Alarmo Auto-Setup"
   description: "Auto-configure Alarmo with discovered ELK-M1 zones."
 
 speak_phrase:
-  name: Speak Phrase
+  name: Speak phrase
   description: Command the Elk-M1 panel to speak a vocabulary word or phrase.
   fields:
-    phrase_number:
-      name: Phrase / Word
+    number:
+      name: Phrase number
       description: The human-readable word to speak (translates to Elk-M1 ID).
       required: true
       selector:
@@ -201,28 +171,6 @@ speak_phrase:
           custom_value: true
           mode: dropdown
           options:
-           # - label: "000 - {Blank}"
-           #   value: "0"
-           # - label: "001 - Custom1"
-           #   value: "1"
-           # - label: "002 - Custom2"
-           #   value: "2"
-           # - label: "003 - Custom3"
-           #   value: "3"
-           # - label: "004 - Custom4"
-           #   value: "4"
-           # - label: "005 - Custom5"
-           #   value: "5"
-           # - label: "006 - Custom6"
-           #   value: "6"
-           # - label: "007 - Custom7"
-           #   value: "7"
-           # - label: "008 - Custom8"
-           #   value: "8"
-           # - label: "009 - Custom9"
-           #   value: "9"
-           # - label: "010 - Custom10"
-           #   value: "10"
             - label: "021 - Zero"
               value: "21"
             - label: "022 - One"
@@ -1149,3 +1097,95 @@ speak_phrase:
               value: "511"
             - label: "512 - [Say On/Off]"
               value: "512"
+    prefix:
+      name: Prefix
+      description: Prefix to identify panel when multiple panels configured.
+      example: gatehouse
+      default: ""
+      selector:
+        text:
+
+speak_word:
+  name: Speak word
+  description: Speaks a word. See list of words in Elk-M1 ASCII Protocol documentation.
+  fields:
+    number:
+      name: Word number
+      description: Word number to speak.
+      required: true
+      selector:
+        number:
+          min: 1
+          max: 473
+    prefix:
+      name: Prefix
+      description: Prefix to identify panel when multiple panels configured.
+      example: gatehouse
+      default: ""
+      selector:
+        text:
+
+sensor_counter_refresh:
+  name: Sensor counter refresh
+  description: Refreshes the value of a counter from the panel.
+  target:
+    entity:
+      integration: elkm1
+      domain: sensor
+
+sensor_counter_set:
+  name: Sensor counter set
+  description: Sets the value of a counter on the panel.
+  target:
+    entity:
+      integration: elkm1
+      domain: sensor
+  fields:
+    value:
+      name: Value
+      description: Value to set the counter to.
+      required: true
+      selector:
+        number:
+          min: 0
+          max: 65536
+
+sensor_zone_bypass:
+  name: Sensor zone bypass
+  description: Bypasses zone.
+  target:
+    entity:
+      integration: elkm1
+      domain: sensor
+  fields:
+    code:
+      name: Code
+      description: Alarm code to authorize the bypass of the zone.
+      required: true
+      example: 4242
+      selector:
+        text:
+
+sensor_zone_trigger:
+  name: Sensor zone trigger
+  description: Triggers zone.
+  target:
+    entity:
+      integration: elkm1
+      domain: sensor
+
+switch_output_turn_on_for:
+  name: Switch output turn on for
+  description: Turns on an output for a specified length of time.
+  target:
+    entity:
+      integration: elkm1
+      domain: switch
+  fields:
+    duration:
+      name: Duration
+      description: Length of time to turn the output on for.
+      required: true
+      example: 42
+      selector:
+        duration:
