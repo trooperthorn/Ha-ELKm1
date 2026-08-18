@@ -114,12 +114,24 @@ class ElkZoneGroupSensor(ElkEntity, SensorEntity):
         self._attr_has_entity_name = True
 
 
+    def _get_enum_value(self, obj, default=0) -> int:
+        """Safely extract the raw integer value from elkm1_lib Enum objects."""
+        try:
+            val = obj.value if hasattr(obj, "value") else obj
+            if isinstance(val, int):
+                return val
+            if isinstance(val, str) and val.lstrip('-').isdigit():
+                return int(val)
+        except Exception:
+            pass
+        return default
+
     def _is_zone_open(self, zone) -> bool:
-        """Helper to match the exact physical/logical logic."""
+        """Helper to match the exact physical/logical logic safely."""
         if not zone:
             return False
-        logical_val = getattr(getattr(zone, "logical_status", None), "value", 0)
-        physical_val = getattr(getattr(zone, "physical_status", None), "value", 0)
+        logical_val = self._get_enum_value(getattr(zone, "logical_status", 0))
+        physical_val = self._get_enum_value(getattr(zone, "physical_status", 0))
         return logical_val == 2 or physical_val in (1, 3)
 
     def _get_matching_open_zones(self):
