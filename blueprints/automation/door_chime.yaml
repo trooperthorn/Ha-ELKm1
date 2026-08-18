@@ -1,0 +1,14 @@
+automation:
+  - alias: "Chime: Front Door Opened"
+    trigger:
+      - platform: state
+        entity_id: binary_sensor.elk_m1_front_door
+        to: "on"
+    condition:
+      - condition: state
+        entity_id: alarm_control_panel.alarm_panel
+        state: "disarmed"
+    action:
+      - service: elkm1.speak_phrase
+        data:
+          phrase: "Front door open"
