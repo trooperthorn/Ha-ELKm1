@@ -1,6 +1,8 @@
 """Elk-M1 Control integration."""
 
-import asyncio
+from __future__ import annotations
+
+asyncio
 import logging
 import re
 from typing import Any
@@ -60,6 +62,7 @@ from .discovery import (
 )
 from .entity import create_elk_system_device_info
 from .models import ELKM1Data
+from .platforms.setup_wizard import run_panel_setup_wizard
 from .services import async_setup_services
 
 # Hook for Alarmo Auto-Config
@@ -123,9 +126,7 @@ def _elk_range_validator(rng: str) -> tuple[int, int]:
 
 
 def _has_all_unique_prefixes(value: list[dict[str, str]]) -> list[dict[str, str]]:
-    """Validate that each m1 configured has a unique prefix.
-    Uniqueness is determined case-independently.
-    """
+    """Validate that each m1 configured has a unique prefix."""
     prefixes = [device[CONF_PREFIX] for device in value]
     schema = vol.Schema(vol.Unique())
     schema(prefixes)
@@ -219,17 +220,14 @@ def _async_find_matching_config_entry(
 async def async_setup_entry(hass: HomeAssistant, entry: ElkM1ConfigEntry) -> bool:
     """Set up Elk-M1 Control from a config entry."""
     conf = entry.data
-    
-    # ---------------------------------------------------------
-    # INJECTED USB/SERIAL REGISTRATION LOGIC
-    # ---------------------------------------------------------
-    # If the user utilized the UI USB flow, CONF_SERIAL_PORT exists.
-    # Convert it to the required elkm1_lib serial:// string.
+
     serial_port = conf.get("serial_port")
     if serial_port:
         connection_url = f"serial://{serial_port}"
+        connection_type = "serial"
     else:
         connection_url = conf.get(CONF_HOST, "")
+        connection_type = "serial" if connection_url.startswith("serial://") else "network"
         
     host = hostname_from_url(connection_url)
     _LOGGER.info(f"Setting up elkm1 at {connection_url}")
@@ -246,10 +244,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ElkM1ConfigEntry) -> boo
     if not conf.get(CONF_AUTO_CONFIGURE, False):
         config["panel"] = {"enabled": True, "included": [True]}
         for item, max_ in ELK_ELEMENTS.items():
-            
-            # Use defaults if migrating from older config formats
             item_conf = conf.get(item, {"enabled": True, "include": [], "exclude": []})
-            
             config[item] = {
                 "enabled": item_conf.get("enabled", True),
                 "included": [not item_conf.get("include", [])] * max_,
@@ -269,9 +264,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ElkM1ConfigEntry) -> boo
         }
     )
 
-    # ---------------------------------------------------------
-    # PLATINUM FEATURE: RAW SERIAL EVENT INTERCEPTOR
-    # ---------------------------------------------------------
     def elk_broadcast_handler(msg: Any) -> None:
         """Intercept broadcasts not fully mapped by elkm1_lib."""
         raw_str = msg.get("raw", "") if isinstance(msg, dict) else str(msg)
@@ -304,10 +296,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ElkM1ConfigEntry) -> boo
             try:
                 word_str = raw_str[4:22]
                 words = [int(word_str[i : i + 3]) for i in range(0, 18, 3)]
-                
-                # If you kept vocabulary.py from the AI, you can translate here:
-                # readable_message = translate_elk_voice(words)
-                
                 hass.bus.async_fire(
                     "elkm1_voice_announcement",
                     {
@@ -318,10 +306,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ElkM1ConfigEntry) -> boo
             except ValueError:
                 pass
 
-    # Hook into elkm1_lib's fallback handler
     elk.add_handler("unknown", elk_broadcast_handler)
-
-    # Now connect natively
     elk.connect() 
     
     def _keypad_changed(keypad: Element, changeset: dict[str, Any]) -> None:
@@ -353,6 +338,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ElkM1ConfigEntry) -> boo
         if not sync_success:
             elk.disconnect()
 
+    # Run the setup wizard to verify panel version and configure global settings if serial
+    if sync_success:
+        try:
+            await run_panel_setup_wizard(elk, connection_type)
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.warning(f"Setup wizard encountered non-fatal error: {err}")
+
     elk_temp_unit = elk.panel.temperature_units
     if elk_temp_unit == "C":
         temperature_unit = UnitOfTemperature.CELSIUS
@@ -379,9 +371,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ElkM1ConfigEntry) -> boo
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
-    # ---------------------------------------------------------
-    # INJECTED ALARMO HOOK
-    # ---------------------------------------------------------
     if async_setup_alarmo_auto_config is not None:
         await async_setup_alarmo_auto_config(hass)
 
@@ -398,7 +387,6 @@ def _included(ranges: list[tuple[int, int]], set_to: bool, values: list[bool]) -
 async def async_unload_entry(hass: HomeAssistant, entry: ElkM1ConfigEntry) -> bool:
     """Unload a config entry."""
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
-    # disconnect cleanly
     entry.runtime_data.elk.disconnect()
     return unload_ok
 
