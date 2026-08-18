@@ -1,5 +1,7 @@
 """Data update coordinator for Elk-M1 Control integration."""
 
+from __future__ import annotations
+
 import logging
 from datetime import timedelta
 from typing import Any
@@ -23,12 +25,13 @@ from .const import (
     CONNECTION_SERIAL,
     COORDINATOR_UPDATE_INTERVAL,
 )
+from .helpers import ElkSerialQueue
 from .vocabulary import translate_elk_voice
 
 _LOGGER = logging.getLogger(__name__)
 
 
-class ElkDataUpdateCoordinator(DataUpdateCoordinator):
+class ElkDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     """Custom coordinator for Elk-M1 panel data updates."""
 
     def __init__(
@@ -51,6 +54,7 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator):
 
         self._config_data = config_entry_data
         self._elk: Elk | None = None
+        self.serial_queue: ElkSerialQueue | None = None
         self._connection_type: str = config_entry_data[CONF_CONNECTION_TYPE]
         self._pin = config_entry_data.get(CONF_PIN, "")
 
@@ -63,13 +67,7 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator):
         )
 
     def _build_connection_url(self) -> str:
-        """Build connection URL based on connection type.
-
-        Returns:
-            Connection URL for Elk
-            - Serial: "serial:///dev/serial/by-id/...?baud=115200"
-            - Network: "elk://192.168.1.100:2101"
-        """
+        """Build connection URL based on connection type."""
         if self._connection_type == CONNECTION_SERIAL:
             serial_port = self._config_data.get(CONF_SERIAL_PORT)
             if not serial_port:
@@ -114,9 +112,8 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator):
             _LOGGER.info(f"Connecting to ELK-M1 at {self._obfuscated_url()}")
 
             # Give the OS/USB subsystem a brief moment to release handles
-            await asyncio.sleep(5.0)
+            await asyncio.sleep(2.0)
 
-            # Create the config dictionary
             config = {"url": self._url}
 
             if self._connection_type == CONNECTION_NETWORK:
@@ -127,6 +124,12 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator):
 
             # Initialize Elk with the dictionary
             self._elk = Elk(config)
+
+            # Initialize serial queue worker if connection is serial/USB
+            self.serial_queue = ElkSerialQueue(self._elk, interval=0.1)
+            self.hass.async_create_background_task(
+                self.serial_queue.start(), "elkm1_serial_queue_worker"
+            )
 
             # Safe callback registration
             if (
@@ -141,7 +144,7 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator):
                         "Panel add_callback expects 2 arguments; relying on raw VN parser."
                     )
 
-            # --- PHASE 1: REAL-TIME BROADCAST INTERCEPTOR ---
+            # --- REAL-TIME BROADCAST INTERCEPTOR ---
             def elk_broadcast_handler(msg: Any) -> None:
                 """Intercept broadcasts not fully mapped by elkm1_lib."""
                 raw_str = (
@@ -152,7 +155,6 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator):
 
                 cmd = raw_str[2:4]
 
-                # Entry/Exit Timer (EE)
                 if cmd == "EE":
                     self.hass.bus.async_fire(
                         "elkm1_timer_event",
@@ -164,14 +166,10 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator):
                             "armed_state": int(raw_str[12:13]),
                         },
                     )
-
-                # Alarm Memory (AM)
                 elif cmd == "AM":
                     self.hass.bus.async_fire(
                         "elkm1_alarm_memory", {"flags": raw_str[4:12]}
                     )
-
-                # Raw ASCII fallback for Voice (VN) commands
                 elif cmd == "VN":
                     try:
                         word_str = raw_str[4:22]
@@ -182,10 +180,8 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator):
                     except ValueError:
                         pass
 
-            # Hook into elkm1_lib's fallback handler to catch unrecognized data strings
             self._elk.add_handler("unknown", elk_broadcast_handler)
 
-            # 1. Create the event tracker to monitor connection state
             connected_event = asyncio.Event()
 
             def on_connected(*args: Any, **kwargs: Any) -> None:
@@ -193,17 +189,12 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator):
 
             self._elk.add_handler("connected", on_connected)
 
-            # Release buffer for serial descriptors
             if self._connection_type == CONNECTION_SERIAL:
-                await asyncio.sleep(2.0)
+                await asyncio.sleep(1.0)
 
-            # 2. Call connect synchronously
             self._elk.connect()
 
-            # 3. Wait for the event to trigger, up to a 10 second timeout
             await asyncio.wait_for(connected_event.wait(), timeout=10.0)
-
-            # 4. Wait a brief moment for the initial sync data to populate
             await asyncio.sleep(1.5)
 
             _LOGGER.info(f"Connected to ELK-M1 at {self._obfuscated_url()}")
@@ -211,12 +202,8 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator):
             await check_panel_version(self._elk)
 
             if self._connection_type == CONNECTION_SERIAL:
-                _LOGGER.info(
-                    "Serial connection detected - checking panel settings..."
-                )
-                configured, details = await verify_panel_configuration(
-                    self._elk
-                )
+                _LOGGER.info("Serial connection detected - checking panel settings...")
+                configured, details = await verify_panel_configuration(self._elk)
                 if not configured:
                     for setting_num, status in details["settings"].items():
                         if status["enabled"] is False:
@@ -227,10 +214,16 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator):
 
         except (OSError, TimeoutError, ValueError, asyncio.TimeoutError) as err:
             _LOGGER.error(f"Failed to connect to ELK-M1: {err}")
+            if self.serial_queue:
+                await self.serial_queue.stop()
             raise UpdateFailed(f"Connection failed: {err}") from err
 
     async def async_disconnect(self) -> None:
-        """Disconnect from ELK-M1 panel."""
+        """Disconnect from ELK-M1 panel and stop queue worker."""
+        if self.serial_queue:
+            await self.serial_queue.stop()
+            self.serial_queue = None
+
         if self._elk:
             try:
                 self._elk.disconnect()
@@ -276,81 +269,58 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator):
             await self.async_disconnect()
             raise
 
-    # ----ARMING---- Service Methods --------
+    # ---- ARMING SERVICE METHODS ----
 
     async def send_disarm(
         self, pin_code: str | None = None, area: int = 1
     ) -> bool:
         """Send disarm command to panel."""
-        if not self._elk:
-            return False
-        try:
-            active_pin = pin_code if pin_code is not None else self._pin
-            formatted_pin = str(active_pin).zfill(6)
-            _LOGGER.info(f"Sending disarm command to Area {area}")
-
-            await self.send_raw_elk_command(f"a0{area}{formatted_pin}")
-            await self.async_request_refresh()
-            return True
-        except Exception as err:  # noqa: BLE001
-            _LOGGER.error(f"Failed to disarm: {err}")
-            return False
+        return await self._execute_arming_command("disarm", area, pin_code)
 
     async def send_arm_stay(
         self, pin_code: str | None = None, area: int = 1
     ) -> bool:
         """Send arm stay command to panel."""
-        if not self._elk:
-            return False
-        try:
-            active_pin = pin_code if pin_code is not None else self._pin
-            formatted_pin = str(active_pin).zfill(6)
-            _LOGGER.info(f"Sending arm stay command to Area {area}")
-
-            await self.send_raw_elk_command(f"a2{area}{formatted_pin}")
-            await self.async_request_refresh()
-            return True
-        except Exception as err:  # noqa: BLE001
-            _LOGGER.error(f"Failed to arm stay: {err}")
-            return False
+        return await self._execute_arming_command("arm_stay", area, pin_code)
 
     async def send_arm_away(
         self, pin_code: str | None = None, area: int = 1
     ) -> bool:
         """Send arm away command to panel."""
-        if not self._elk:
-            return False
-        try:
-            active_pin = pin_code if pin_code is not None else self._pin
-            formatted_pin = str(active_pin).zfill(6)
-            _LOGGER.info(f"Sending arm away command to Area {area}")
-
-            await self.send_raw_elk_command(f"a1{area}{formatted_pin}")
-            await self.async_request_refresh()
-            return True
-        except Exception as err:  # noqa: BLE001
-            _LOGGER.error(f"Failed to arm away: {err}")
-            return False
+        return await self._execute_arming_command("arm_away", area, pin_code)
 
     async def send_arm_night(
         self, pin_code: str | None = None, area: int = 1
     ) -> bool:
         """Send arm night command to panel."""
+        return await self._execute_arming_command("arm_night", area, pin_code)
+
+    async def _execute_arming_command(
+        self, cmd_type: str, area_num: int, pin_code: str | None
+    ) -> bool:
+        """Helper to route arming actions safely through queue or raw command."""
         if not self._elk:
             return False
         try:
             active_pin = pin_code if pin_code is not None else self._pin
             formatted_pin = str(active_pin).zfill(6)
-            _LOGGER.info(f"Sending arm night command to Area {area}")
+            
+            cmd_map = {
+                "disarm": f"a0{area_num}{formatted_pin}",
+                "arm_stay": f"a2{area_num}{formatted_pin}",
+                "arm_away": f"a1{area_num}{formatted_pin}",
+                "arm_night": f"a4{area_num}{formatted_pin}",
+            }
+            raw_cmd = cmd_map.get(cmd_type)
+            if raw_cmd:
+                await self.send_raw_elk_command(raw_cmd)
+                await self.async_request_refresh()
+                return True
+        except Exception as err:
+            _LOGGER.error(f"Failed to execute {cmd_type} on Area {area_num}: {err}")
+        return False
 
-            await self.send_raw_elk_command(f"a4{area}{formatted_pin}")
-            await self.async_request_refresh()
-            return True
-        except Exception as err:  # noqa: BLE001
-            _LOGGER.error(f"Failed to arm night: {err}")
-            return False
-
-    # ------BYPASS-- Service Methods --------
+    # ---- BYPASS & OTHER METHODS ----
 
     async def bypass_zone(
         self, zone_number: int, pin_code: str | None = None
@@ -410,7 +380,7 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator):
             formatted_pin = str(active_pin).zfill(6)
             await self.send_raw_elk_command(f"a9{area}{formatted_pin}")
             return True
-        except Exception as err:  # noqa: BLE001
+        except Exception as err:
             _LOGGER.error(f"Failed to force arm away area {area}: {err}")
             return False
 
@@ -423,9 +393,7 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator):
             return False
 
         try:
-            _LOGGER.info(
-                f"Setting thermostat {thermostat_id} to {temperature}°"
-            )
+            _LOGGER.info(f"Setting thermostat {thermostat_id} to {temperature}°")
             await self._elk.set_temperature(thermostat_id, temperature)
             await self.async_request_refresh()
             return True
@@ -452,46 +420,37 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator):
         """Get zone object by number."""
         if not self._elk or not self.data:
             return None
-
         try:
-            zones = self.data.get("zones", [])
-            for zone in zones:
-                if zone.number == zone_number:
+            for zone in self.data.get("zones", []):
+                if getattr(zone, "number", None) == zone_number:
                     return zone
-            return None
         except (AttributeError, KeyError) as err:
             _LOGGER.error(f"Error getting zone {zone_number}: {err}")
-            return None
+        return None
 
     def get_area(self, area_number: int) -> Any | None:
         """Get area object by number."""
         if not self._elk or not self.data:
             return None
-
         try:
-            areas = self.data.get("areas", [])
-            for area in areas:
-                if area.number == area_number:
+            for area in self.data.get("areas", []):
+                if getattr(area, "number", None) == area_number:
                     return area
-            return None
         except (AttributeError, KeyError) as err:
             _LOGGER.error(f"Error getting area {area_number}: {err}")
-            return None
+        return None
 
     def get_output(self, output_number: int) -> Any | None:
         """Get output object by number."""
         if not self._elk or not self.data:
             return None
-
         try:
-            outputs = self.data.get("outputs", [])
-            for output in outputs:
-                if output.number == output_number:
+            for output in self.data.get("outputs", []):
+                if getattr(output, "number", None) == output_number:
                     return output
-            return None
         except (AttributeError, KeyError) as err:
             _LOGGER.error(f"Error getting output {output_number}: {err}")
-            return None
+        return None
 
     @property
     def connected(self) -> bool:
@@ -505,7 +464,6 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator):
 
     def _handle_voice_message(self, *args: Any, **kwargs: Any) -> None:
         """Process incoming voice command arrays and fire a Home Assistant event."""
-        _LOGGER.debug(f"Received voice callback: args={args}, kwargs={kwargs}")
         try:
             words = None
             if args:
@@ -518,12 +476,7 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator):
             if not isinstance(words, (list, tuple)):
                 return
 
-            try:
-                word_ints = [int(w) for w in words]
-            except (ValueError, TypeError):
-                _LOGGER.error(f"Received non-integer data in voice message callback: {words}")
-                return
-
+            word_ints = [int(w) for w in words]
             readable_message = translate_elk_voice(word_ints)
 
             if readable_message:
@@ -543,20 +496,12 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator):
 
     async def speak_phrase(self, phrase_number: int) -> bool:
         """Command the Elk-M1 panel to speak a vocabulary word/phrase."""
-        if not self._elk:
-            return False
-        try:
-            _LOGGER.info(f"Commanding Elk-M1 to speak phrase ID {phrase_number}")
-            await self.send_raw_elk_command(f"sw{phrase_number:03d}")
-            return True
-        except Exception as err:  # noqa: BLE001
-            _LOGGER.error(f"Failed to speak phrase {phrase_number}: {err}")
-            return False
+        return await self.send_raw_elk_command(f"sw{phrase_number:03d}")
 
     async def send_raw_elk_command(self, command: str) -> None:
-        """Format and send a raw ASCII command to the Elk-M1 panel."""
-        if not self._elk or getattr(self._elk, "_connection", None) is None:
-            _LOGGER.error("Cannot send raw command: Elk connection not found.")
+        """Format and send a raw ASCII command to the Elk-M1 panel via queue."""
+        if not self._elk:
+            _LOGGER.error("Cannot send raw command: Elk instance not found.")
             return
 
         payload = f"{command}00"
@@ -569,42 +514,49 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator):
         final_string = f"{packet}{checksum & 0xFF:02X}"
         packet_with_crlf = f"{final_string}\r\n"
 
+        # If serial queue is initialized, route write through it for rate limiting
+        if self.serial_queue:
+            try:
+                await self.serial_queue.async_send_command(
+                    "send_raw_command", raw_data=packet_with_crlf
+                )
+                _LOGGER.debug(f"Sent Elk command via SerialQueue: {packet_with_crlf.strip()}")
+                return
+            except Exception as queue_err:
+                _LOGGER.debug(f"SerialQueue dispatch failed, falling back to direct write: {queue_err}")
+
+        # Fallback direct socket/transport write
         try:
-            conn = self._elk._connection
-            
+            conn = getattr(self._elk, "_connection", None)
+            if not conn:
+                return
+
             writer = getattr(conn, "_writer", None)
             if writer and hasattr(writer, "write"):
                 writer.write(packet_with_crlf.encode("ascii"))
                 if hasattr(writer, "drain"):
                     await writer.drain()
-                _LOGGER.debug(f"Sent Elk command via _writer: {packet_with_crlf.strip()}")
                 return
                 
             if hasattr(conn, "write_data"):
                 conn.write_data(final_string)
-                _LOGGER.debug(f"Sent Elk command via write_data: {final_string}")
                 return
                 
             transport = getattr(conn, "transport", getattr(conn, "_transport", None))
             if transport and hasattr(transport, "write"):
                 transport.write(packet_with_crlf.encode("ascii"))
-                _LOGGER.debug(f"Sent Elk command via transport: {packet_with_crlf.strip()}")
                 return
 
-            _LOGGER.error("Cannot send command: No valid stream writer found on connection object.")
-
-        except Exception as e:  # noqa: BLE001
+            _LOGGER.error("Cannot send command: No valid stream writer found.")
+        except Exception as e:
             _LOGGER.error(f"Failed to send raw Elk command: {e}")
 
     async def trigger_zone(self, zone_number: int) -> bool:
         """Trigger a virtual zone violation."""
-        if not self._elk:
-            return False
         try:
-            _LOGGER.info(f"Triggering zone {zone_number}")
             await self.send_raw_elk_command(f"zt{zone_number:03d}")
             return True
-        except Exception as err:  # noqa: BLE001
+        except Exception as err:
             _LOGGER.error(f"Failed to trigger zone {zone_number}: {err}")
             return False
 
@@ -612,11 +564,7 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator):
         self, area: int, clear_type: int, beep: bool, timeout: int, line1: str, line2: str
     ) -> bool:
         """Command the Elk-M1 panel to display a message on keypads."""
-        if not self._elk:
-            return False
         try:
-            _LOGGER.info(f"Displaying message on Area {area}: '{line1}' / '{line2}'")
-            
             mode = clear_type
             if beep and mode in (0, 2, 4):
                 mode += 1
@@ -627,6 +575,6 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator):
             command = f"dm{area}{mode}{timeout:05d}{padded_line1}{padded_line2}"
             await self.send_raw_elk_command(command)
             return True
-        except Exception as err:  # noqa: BLE001
+        except Exception as err:
             _LOGGER.error(f"Failed to display message: {err}")
             return False
