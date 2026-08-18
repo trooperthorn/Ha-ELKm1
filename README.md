@@ -20,6 +20,8 @@ A high-performance, asynchronous Home Assistant integration for ELK-M1 Gold secu
 
 ## Features
 
+- Integration 5 other Integrations: Automate with Davis Weather, Unifi Protect, Better Thermostat, Browser Mod, and ESP32 Bluetooth Proxy
+  
 - **Full Area Partition Control**: Arm in Home, Away, Night, Vacation, or Custom Bypass modes, disarm with PIN enforcement, and manually trigger emergency panics[cite: 1].
 - **Live Hardware Scanning**: Real-time evaluation of faulted, bypassed, and troubled zones directly from panel memory buffers.
 - **Dynamic Group Sensors**: Aggregate sensors that scan your Home Assistant Entity Registry to report live counts and formatted lists of open windows and doors.
@@ -28,6 +30,19 @@ A high-performance, asynchronous Home Assistant integration for ELK-M1 Gold secu
 - **Better Thermostat Ready**: Proper `device_class` attributes on all contact sensors to enable automatic HVAC suspension when windows or doors are opened.
 
 ---
+
+##  Integration Ecosystem & Automation Blueprints
+- Alarmo & Better Thermostat Compatibility: Standardized binary sensor device classes enable automatic Alarmo zone mapping and HVAC cut-off when doors or windows open.
+
+- UniFi Protect Integration: Bridges panel states and zone triggers with camera recording, motion snapshots, push notifications, and full perimeter lockdowns.
+
+- Atmospheric Pre-Arm Check: Intercepts arming requests, cross-referencing Elk window sensors with Davis Vantage weather telemetry (wind speed and precipitation rate) to prevent storm damage.
+
+- Smart Chimes & Perimeter Guards: Dynamic hardware vocabulary speech synthesis that reads out door/window counts and individual open sensor names with precise timing delays.
+
+- Presence & Kiosk Control: ESPHome Bluetooth proxy presence tracking for automated departure/arrival arming, combined with Browser-Mod for emergency wall kiosk video popups.
+
+- TODO: Codebase Integrity (Watchman): Automated startup audits scanning all YAML configurations, scripts, and blueprints for missing entities or broken service calls.
 
 
 ### Method 1: HACS (Recommended)
