@@ -71,7 +71,12 @@ try:
 except ImportError:
     async_setup_alarmo_auto_config = None
 
-ElkM1ConfigEntry = ConfigEntry[ELKM1Data]
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    ElkM1ConfigEntry = ConfigEntry[ELKM1Data]
+else:
+    ElkM1ConfigEntry = ConfigEntry
 
 SYNC_TIMEOUT = 120
 
