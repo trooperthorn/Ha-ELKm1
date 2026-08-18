@@ -107,6 +107,7 @@ class ElkZoneGroupSensor(ElkEntity, SensorEntity):
     ) -> None:
         """Initialize the zone group sensor."""
         super().__init__(coordinator, config_entry, sensor_type)
+        self.config_entry = config_entry
         self._attr_name = name
         self._attr_icon = icon
         self._target_device_class = target_device_class
