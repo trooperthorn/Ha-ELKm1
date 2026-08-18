@@ -34,6 +34,7 @@ from homeassistant.helpers.event import async_track_time_interval
 from homeassistant.helpers.typing import ConfigType
 from homeassistant.util.network import is_ip_address
 
+from .alarmo_integration import async_setup_alarmo_auto_config
 from .const import (
     ATTR_KEY,
     ATTR_KEY_NAME,
