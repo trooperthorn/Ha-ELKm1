@@ -1,15 +1,51 @@
-automation:
-  - alias: "Chime: Front Door Opened"
-    description: "Plays an Elk-M1 vocabulary announcement when the front door opens while disarmed."
-    trigger:
-      - platform: state
-        entity_id: binary_sensor.elk_m1_front_door
-        to: "on"
-    condition:
-      - condition: state
-        entity_id: alarm_control_panel.alarm_panel
-        state: "disarmed"
-    action:
-      - service: elkm1.speak_phrase
-        data:
-          number: 146
+blueprint:
+  name: "ELK-M1: Dynamic Zone Open Chime"
+  description: |
+    Automatically detects which door or window opened and speaks the corresponding 
+    Elk-M1 hardware vocabulary announcement through the panel speaker when disarmed.
+  domain: automation
+  source_url: https://github.com/trooperthorn/ha_int_elkm1/blob/main/blueprints/automation/door_chime.yaml
+
+  input:
+    door_sensor:
+      name: Door or Window Sensor
+      description: The binary sensor tracking the door or window opening.
+      selector:
+        entity:
+          domain: binary_sensor
+    
+    alarm_panel:
+      name: ELK-M1 Alarm Panel
+      description: The alarm control panel entity used to check if the system is disarmed.
+      selector:
+        entity:
+          domain: alarm_control_panel
+
+trigger:
+  - platform: state
+    entity_id: !input door_sensor
+    to: "on"
+
+condition:
+  - condition: state
+    entity_id: !input alarm_panel
+    state: "disarmed"
+
+variables:
+  sensor_entity: !input door_sensor
+  sensor_name: "{{ state_attr(sensor_entity, 'friendly_name') | default(sensor_entity) | lower }}"
+  
+  # Dynamically map sensor keywords to Elk-M1 hardware vocabulary IDs
+  vocabulary_number: >
+    {% if 'front' in sensor_name %}186
+    {% elif 'back' in sensor_name %}23
+    {% elif 'garage' in sensor_name %}150
+    {% elif 'side' in sensor_name %}350
+    {% elif 'window' in sensor_name %}464
+    {% else %}146
+    {% endif %}
+
+action:
+  - action: elkm1.speak_phrase
+    data:
+      number: "{{ vocabulary_number | int }}"
