@@ -15,8 +15,19 @@ MANUFACTURER = "Elk Products"
 MODEL = "M1 Gold / M1EZ8"
 LOGIN_TIMEOUT = 20
 
-# Config flow keys injected for USB/Serial discovery UI
+# Connection Configuration Keys & Types
+CONF_CONNECTION_TYPE = "connection_type"
 CONF_SERIAL_PORT = "serial_port"
+CONF_HOST = "host"
+CONF_PORT = "port"
+CONF_USERNAME = "username"
+CONF_PASSWORD = "password"
+CONF_PIN = "pin"
+
+CONNECTION_SERIAL = "serial"
+CONNECTION_NETWORK = "network"
+
+COORDINATOR_UPDATE_INTERVAL = 30
 
 CONF_AUTO_CONFIGURE = "auto_configure"
 CONF_AREA = "area"
