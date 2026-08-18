@@ -13,6 +13,7 @@ from homeassistant.core import (
 )
 from homeassistant.helpers.update_coordinator import UpdateFailed
 
+from .alarmo_integration import async_setup_alarmo_auto_config
 from .const import CONF_SERIAL_PORT, DOMAIN
 from .coordinator import ElkDataUpdateCoordinator
 from .data import ElkRuntimeData
@@ -63,6 +64,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     entry.async_on_unload(entry.add_update_listener(update_listener))
 
     entry.async_on_unload(coordinator.async_shutdown)
+
+    # Register Alarmo auto-setup utility service
+    await async_setup_alarmo_auto_config(hass)
 
     return True
     
