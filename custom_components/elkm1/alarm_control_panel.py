@@ -11,6 +11,13 @@ from homeassistant.components.alarm_control_panel import (
     AlarmControlPanelEntity,
     AlarmControlPanelState,
 )
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
+
+from .coordinator import ElkDataUpdateCoordinator
+from .data import ElkRuntimeData
+from .entity import ElkEntity
 
 # Safe imports for optional alarm panel features/formats across HA versions
 try:
@@ -25,20 +32,12 @@ try:
 except ImportError:
     CodeFormat = None
 
-from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
-
 # Map modern enum states
 STATE_ALARM_TRIGGERED = AlarmControlPanelState.TRIGGERED
 STATE_ARMED_AWAY = AlarmControlPanelState.ARMED_AWAY
 STATE_ARMED_HOME = AlarmControlPanelState.ARMED_HOME
 STATE_ARMED_NIGHT = AlarmControlPanelState.ARMED_NIGHT
 STATE_DISARMED = AlarmControlPanelState.DISARMED
-
-from .coordinator import ElkDataUpdateCoordinator
-from .data import ElkRuntimeData
-from .entity import ElkEntity
 
 _LOGGER: logging.Logger = logging.getLogger(__name__)
 
