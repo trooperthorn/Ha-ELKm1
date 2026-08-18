@@ -134,10 +134,14 @@ class ElkZoneGroupSensor(ElkEntity, SensorEntity):
         if not self.coordinator._elk or not hasattr(self.coordinator._elk, "zones"):
             return open_zones
             
+        # NEW GUARD: Ensure the entity is fully attached to HA before checking the registry
+        if not self.hass:
+            return open_zones
+            
         # Tap into the Home Assistant Entity Registry
         entity_reg = er.async_get(self.hass)
         entries = er.async_entries_for_config_entry(entity_reg, self.config_entry.entry_id)
-        
+                
         for entry in entries:
             # We only care about the binary_sensors (the actual zones)
             if entry.domain != "binary_sensor":
