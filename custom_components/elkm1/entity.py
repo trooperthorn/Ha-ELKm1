@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity import Entity
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
@@ -26,13 +27,13 @@ class ElkEntity(CoordinatorEntity[ElkDataUpdateCoordinator], Entity):
         self.entity_key = entity_key
         self._config_entry = config_entry
 
-        # Set device info
-        self._attr_device_info = {
-            "identifiers": {(DOMAIN, config_entry.entry_id)},
-            "name": "ElkM1",  # <--- Changed from MODEL so your prefix becomes elkm1_
-            "manufacturer": MANUFACTURER,
-            "model": MODEL,
-        }
+       # EVERY entity that inherits ElkEntity will now share this exact device
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, config_entry.entry_id)}, # Uses the integration ID as the glue
+            name="Elk-M1",                   # The cleaner name you wanted
+            manufacturer=MANUFACTURER,
+            model=MODEL,
+        )
 
         # Unique ID
         self._attr_unique_id = f"{config_entry.entry_id}_{entity_key}"
