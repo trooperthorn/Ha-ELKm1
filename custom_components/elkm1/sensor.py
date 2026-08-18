@@ -35,13 +35,13 @@ async def async_setup_entry(
         ElkLastUserSensor(coordinator, config_entry, "last_user"),
         
         # Window Group (Dynamically counts ANY binary sensor shown as a "window")
-        ElkGroupSensor(
+        ElkZoneGroupSensor(
             coordinator, config_entry, "windows_count", "Open Windows", 
             "mdi:window-closed", "window"
         ),
         
         # Door Group (Dynamically counts ANY binary sensor shown as a "door")
-        ElkGroupSensor(
+        ElkZoneGroupSensor(
             coordinator, config_entry, "doors_count", "Open Doors", 
             "mdi:door-closed", "door"
         ),
