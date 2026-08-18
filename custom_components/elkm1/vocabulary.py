@@ -1,5 +1,9 @@
 """Vocabulary and translation for Elk-M1 voice announcements."""
 
+from __future__ import annotations
+
+from typing import Iterable, Union
+
 ELK_VOICE_VOCABULARY = {
     0: "{Blank}",
     1: "Custom1",
@@ -111,16 +115,32 @@ ELK_VOICE_VOCABULARY = {
     510: "[Say Open/Closed]", 511: "[Say Off/On]", 512: "[Say On/Off]"
 }
 
-def translate_elk_voice(word_ids: list[int]) -> str:
-    """Translate a list of Elk-M1 voice IDs into a readable string."""
-    translated_words = []
-    
-    for word_id in word_ids:
+
+def translate_elk_voice(word_ids: Iterable[Union[int, str]]) -> str:
+    """Translate a list of Elk-M1 voice IDs into a readable string.
+
+    Args:
+        word_ids: Iterable of integers or numeric strings representing vocabulary ROM IDs.
+
+    Returns:
+        Space-separated human-readable translated phrase string.
+    """
+    translated_words: list[str] = []
+
+    for raw_id in word_ids:
+        try:
+            word_id = int(raw_id)
+        except (ValueError, TypeError):
+            continue
+
+        # Skip blanks and internal silence/tone identifiers
         if word_id in (0, 51, 52, 53):
             continue
-            
+
         word = ELK_VOICE_VOCABULARY.get(word_id)
         if word:
             translated_words.append(word)
-            
+        else:
+            translated_words.append(f"[Unknown ID: {word_id}]")
+
     return " ".join(translated_words).strip()
