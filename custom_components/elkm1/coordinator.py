@@ -114,7 +114,6 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator):
             _LOGGER.info(f"Connecting to ELK-M1 at {self._obfuscated_url()}")
 
             # Give the OS/USB subsystem a brief moment to release handles
-            # left over from usb_discovery probing.
             await asyncio.sleep(5.0)
 
             # Create the config dictionary
@@ -242,24 +241,7 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator):
                 self._elk = None
 
     async def _async_update_data(self) -> dict[str, Any]:
-        """Fetch data from the ELK-M1 panel.
-
-        This is called periodically by the coordinator framework.
-
-        Returns:
-            dictionary with panel data:
-            {
-                "zones": {...},
-                "panel": {...},
-                "areas": {...},
-                "outputs": {...},
-                "tasks": {...},
-                "thermostat": {...},
-            }
-
-        Raises:
-            UpdateFailed: If data fetch fails
-        """
+        """Fetch data from the ELK-M1 panel."""
         if not self._elk:
             raise UpdateFailed("Not connected to ELK-M1")
 
@@ -307,8 +289,7 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator):
             formatted_pin = str(active_pin).zfill(6)
             _LOGGER.info(f"Sending disarm command to Area {area}")
 
-            # 'a0' is the ASCII command for Disarm
-            self.send_raw_elk_command(f"a0{area}{formatted_pin}")
+            await self.send_raw_elk_command(f"a0{area}{formatted_pin}")
             await self.async_request_refresh()
             return True
         except Exception as err:  # noqa: BLE001
@@ -326,8 +307,7 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator):
             formatted_pin = str(active_pin).zfill(6)
             _LOGGER.info(f"Sending arm stay command to Area {area}")
 
-            # 'a2' is the ASCII command for Arm Stay
-            self.send_raw_elk_command(f"a2{area}{formatted_pin}")
+            await self.send_raw_elk_command(f"a2{area}{formatted_pin}")
             await self.async_request_refresh()
             return True
         except Exception as err:  # noqa: BLE001
@@ -345,8 +325,7 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator):
             formatted_pin = str(active_pin).zfill(6)
             _LOGGER.info(f"Sending arm away command to Area {area}")
 
-            # 'a1' is the ASCII command for Arm Away
-            self.send_raw_elk_command(f"a1{area}{formatted_pin}")
+            await self.send_raw_elk_command(f"a1{area}{formatted_pin}")
             await self.async_request_refresh()
             return True
         except Exception as err:  # noqa: BLE001
@@ -364,8 +343,7 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator):
             formatted_pin = str(active_pin).zfill(6)
             _LOGGER.info(f"Sending arm night command to Area {area}")
 
-            # 'a4' is the ASCII command for Arm Night
-            self.send_raw_elk_command(f"a4{area}{formatted_pin}")
+            await self.send_raw_elk_command(f"a4{area}{formatted_pin}")
             await self.async_request_refresh()
             return True
         except Exception as err:  # noqa: BLE001
@@ -420,7 +398,6 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator):
             _LOGGER.error(f"Failed to trigger panic: {err}")
             return False
 
-    # --- Phase 2 Raw Commands ---
     async def force_arm_away(
         self, area: int, pin_code: str | None = None
     ) -> bool:
@@ -431,7 +408,7 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator):
             _LOGGER.info(f"Force arming away area {area}")
             active_pin = pin_code if pin_code is not None else self._pin
             formatted_pin = str(active_pin).zfill(6)
-            self.send_raw_elk_command(f"a9{area}{formatted_pin}")
+            await self.send_raw_elk_command(f"a9{area}{formatted_pin}")
             return True
         except Exception as err:  # noqa: BLE001
             _LOGGER.error(f"Failed to force arm away area {area}: {err}")
@@ -440,15 +417,7 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator):
     async def set_thermostat_temperature(
         self, thermostat_id: int, temperature: float
     ) -> bool:
-        """Set thermostat temperature.
-
-        Args:
-            thermostat_id: Thermostat ID
-            temperature: Temperature in degrees
-
-        Returns:
-            True if successful, False otherwise
-        """
+        """Set thermostat temperature."""
         if not self._elk:
             _LOGGER.error("Cannot set thermostat: not connected")
             return False
@@ -465,14 +434,7 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator):
             return False
 
     async def activate_task(self, task_number: int) -> bool:
-        """Activate a task.
-
-        Args:
-            task_number: Task number (1-32)
-
-        Returns:
-            True if successful, False otherwise
-        """
+        """Activate a task."""
         if not self._elk:
             _LOGGER.error("Cannot activate task: not connected")
             return False
@@ -487,14 +449,7 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator):
             return False
 
     def get_zone(self, zone_number: int) -> Any | None:
-        """Get zone object by number.
-
-        Args:
-            zone_number: Zone number (1-208)
-
-        Returns:
-            Zone object or None if not found
-        """
+        """Get zone object by number."""
         if not self._elk or not self.data:
             return None
 
@@ -509,14 +464,7 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator):
             return None
 
     def get_area(self, area_number: int) -> Any | None:
-        """Get area object by number.
-
-        Args:
-            area_number: Area number (1-8)
-
-        Returns:
-            Area object or None if not found
-        """
+        """Get area object by number."""
         if not self._elk or not self.data:
             return None
 
@@ -559,22 +507,17 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator):
         """Process incoming voice command arrays and fire a Home Assistant event."""
         _LOGGER.debug(f"Received voice callback: args={args}, kwargs={kwargs}")
         try:
-            # elkm1_lib may pass (element, changes) positionally or via kwargs.
-            # We isolate the actual data payload safely regardless of how it arrives.
             words = None
-            
             if args:
-                # If positional arguments exist, the last one is usually the payload/changeset
                 words = args[0] if len(args) == 1 else args[-1]
             elif "words" in kwargs:
                 words = kwargs["words"]
             elif "changeset" in kwargs:
                 words = kwargs["changeset"]
-                
+
             if not isinstance(words, (list, tuple)):
                 return
 
-            # Safely cast the generic list/tuple into a strict list of integers for Mypy
             try:
                 word_ints = [int(w) for w in words]
             except (ValueError, TypeError):
@@ -595,11 +538,8 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator):
                         "message": readable_message,
                     },
                 )
-                _LOGGER.debug(f"Fired Elk voice event: {readable_message}")
         except Exception:
             _LOGGER.exception("Failed to translate and fire Elk voice message")
-
-    # --- PHASE 2: CUSTOM RAW COMMAND SERVICES ---
 
     async def speak_phrase(self, phrase_number: int) -> bool:
         """Command the Elk-M1 panel to speak a vocabulary word/phrase."""
@@ -607,49 +547,44 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator):
             return False
         try:
             _LOGGER.info(f"Commanding Elk-M1 to speak phrase ID {phrase_number}")
-            # 'sw' is the Elk ASCII command for Speak Word, followed by the 3-digit ID
-            self.send_raw_elk_command(f"sw{phrase_number:03d}")
+            await self.send_raw_elk_command(f"sw{phrase_number:03d}")
             return True
         except Exception as err:  # noqa: BLE001
             _LOGGER.error(f"Failed to speak phrase {phrase_number}: {err}")
             return False
 
-    def send_raw_elk_command(self, command: str) -> None:
+    async def send_raw_elk_command(self, command: str) -> None:
         """Format and send a raw ASCII command to the Elk-M1 panel."""
         if not self._elk or getattr(self._elk, "_connection", None) is None:
             _LOGGER.error("Cannot send raw command: Elk connection not found.")
             return
 
-        # Append the required '00' reserved bytes to the command
         payload = f"{command}00"
         length = len(payload) + 2
         packet = f"{length:02X}{payload}"
 
-        # Calculate Checksum: Modulo 256, Two's Complement
         checksum = sum(ord(c) for c in packet) % 256
         checksum = (checksum ^ 0xFF) + 1
         
-        # Combine packet and checksum
         final_string = f"{packet}{checksum & 0xFF:02X}"
         packet_with_crlf = f"{final_string}\r\n"
 
         try:
             conn = self._elk._connection
             
-            # Approach 1: The standard asyncio StreamWriter used by elkm1_lib
             writer = getattr(conn, "_writer", None)
             if writer and hasattr(writer, "write"):
                 writer.write(packet_with_crlf.encode("ascii"))
+                if hasattr(writer, "drain"):
+                    await writer.drain()
                 _LOGGER.debug(f"Sent Elk command via _writer: {packet_with_crlf.strip()}")
                 return
                 
-            # Approach 2: If the library natively exposes write_data
             if hasattr(conn, "write_data"):
                 conn.write_data(final_string)
                 _LOGGER.debug(f"Sent Elk command via write_data: {final_string}")
                 return
                 
-            # Approach 3: Direct transport access fallback
             transport = getattr(conn, "transport", getattr(conn, "_transport", None))
             if transport and hasattr(transport, "write"):
                 transport.write(packet_with_crlf.encode("ascii"))
@@ -667,7 +602,7 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator):
             return False
         try:
             _LOGGER.info(f"Triggering zone {zone_number}")
-            self.send_raw_elk_command(f"zt{zone_number:03d}")
+            await self.send_raw_elk_command(f"zt{zone_number:03d}")
             return True
         except Exception as err:  # noqa: BLE001
             _LOGGER.error(f"Failed to trigger zone {zone_number}: {err}")
@@ -682,24 +617,16 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator):
         try:
             _LOGGER.info(f"Displaying message on Area {area}: '{line1}' / '{line2}'")
             
-            # Adjust the clear/display type based on the beep boolean.
-            # Elk modes: 0: clear, 1: clear+beep, 2: timeout, 3: timeout+beep, 4: hold, 5: hold+beep
             mode = clear_type
             if beep and mode in (0, 2, 4):
                 mode += 1
                 
-            # Elk requires exactly 16 characters per line; pad or truncate as needed
             padded_line1 = f"{line1:<16}"[:16]
             padded_line2 = f"{line2:<16}"[:16]
             
-            # Format: dm + area (1) + mode (1) + timeout (5) + line1 (16) + line2 (16)
             command = f"dm{area}{mode}{timeout:05d}{padded_line1}{padded_line2}"
-            self.send_raw_elk_command(command)
+            await self.send_raw_elk_command(command)
             return True
         except Exception as err:  # noqa: BLE001
             _LOGGER.error(f"Failed to display message: {err}")
             return False
-
-    def _log_raw_serial_traffic(self, raw_data: Any) -> None:
-        """Log raw frames received from the Elk-M1 serial interface."""
-        _LOGGER.debug(f"RAW SERIAL RECEIVED --> {raw_data}")
