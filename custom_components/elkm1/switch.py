@@ -1,150 +1,172 @@
-"""Switch platform for Elk-M1 outputs/relays and proxy switches."""
-from __future__ import annotations
+"""Support for control of ElkM1 outputs (relays) and proxy switches."""
 
-import logging
-from typing import Any
+from datetime import timedelta
+from math import ceil
+from typing import Any, override
 
-from homeassistant.components.switch import SwitchDeviceClass, SwitchEntity
-from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant, callback
+from elkm1_lib.const import ThermostatMode, ThermostatSetting
+from elkm1_lib.elements import Element
+from elkm1_lib.elk import Elk
+from elkm1_lib.outputs import Output
+from elkm1_lib.thermostats import Thermostat
+import voluptuous as vol
+
+from homeassistant.components.switch import DOMAIN as SWITCH_DOMAIN, SwitchEntity
+from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers import config_validation as cv, service
 from homeassistant.helpers.device_registry import DeviceInfo
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
+from homeassistant.helpers.typing import VolDictType
 
-from .const import DOMAIN
-from .coordinator import ElkDataUpdateCoordinator
-from .data import ElkRuntimeData
-from .entity import ElkEntity
+from . import ElkM1ConfigEntry
+from .const import ATTR_DURATION, DOMAIN
+from .entity import (
+    ElkAttachedEntity, 
+    ElkEntity, 
+    create_elk_entities, 
+    create_elk_system_device_info
+)
+from .models import ELKM1Data
 
-_LOGGER: logging.Logger = logging.getLogger(__name__)
+SERVICE_SWITCH_OUTPUT_TURN_ON_FOR = "switch_output_turn_on_for"
+
+ELK_OUTPUT_TURN_ON_FOR_SERVICE_SCHEMA: VolDictType = {
+    vol.Required(ATTR_DURATION): vol.All(
+        cv.time_period,
+        vol.Range(min=timedelta(seconds=1), max=timedelta(seconds=65535)),
+    ),
+}
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    config_entry: ConfigEntry,
-    async_add_entities: AddEntitiesCallback,
+    config_entry: ElkM1ConfigEntry,
+    async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
-    """Set up switch platform from a config entry."""
-    runtime_data: ElkRuntimeData = config_entry.runtime_data
-    coordinator = runtime_data.coordinator
+    """Create the Elk-M1 switch platform."""
+    elk_data = config_entry.runtime_data
+    elk = elk_data.elk
+    entities: list[ElkEntity | SwitchEntity] = []
 
-    # Type as a generic list of SwitchEntity so it accepts both output switches and our proxy switch
-    entities: list[SwitchEntity] = []
+    # 1. Native Proxy Switch for Atmospheric Pre-Arm Blueprint
+    entities.append(ElkArmRequestSwitch(elk, elk_data))
 
-    # 1. Add the native proxy switch for the Atmospheric Pre-Arm Check blueprint
-    entities.append(ElkArmRequestSwitch(coordinator, config_entry))
-
-    # 2. Create a switch for each physical Elk-M1 output safely
-    if coordinator._elk:
-        # Iterate directly since elkm1_lib collections don't support len()
-        for output in coordinator._elk.outputs:
-            name = getattr(output, "name", "")
-            # Only add the switch if it has a custom name in ElkRP
-            if name and not name.startswith("Output "):
-                entities.append(
-                    ElkOutputSwitch(
-                        coordinator=coordinator,
-                        config_entry=config_entry,
-                        output_index=getattr(output, "index", 0),
-                        output=output,
-                    )
-                )
-
+    # 2. Native Physical Outputs & Thermostats (Respects auto_configure)
+    create_elk_entities(elk_data, elk.outputs, "output", ElkOutput, entities)
+    create_elk_entities(
+        elk_data, elk.thermostats, "thermostat", ElkThermostatEMHeat, entities
+    )
+    
     async_add_entities(entities)
 
+    service.async_register_platform_entity_service(
+        hass,
+        DOMAIN,
+        SERVICE_SWITCH_OUTPUT_TURN_ON_FOR,
+        entity_domain=SWITCH_DOMAIN,
+        schema=ELK_OUTPUT_TURN_ON_FOR_SERVICE_SCHEMA,
+        func="async_switch_output_turn_on_for",
+    )
 
-class ElkArmRequestSwitch(ElkEntity, SwitchEntity):
+
+class ElkArmRequestSwitch(SwitchEntity):
     """Native proxy switch for triggering pre-arm validation automations."""
 
-    def __init__(self, coordinator: ElkDataUpdateCoordinator, config_entry: ConfigEntry) -> None:
+    _attr_name = "Arm System Request"
+    _attr_icon = "mdi:shield-sync"
+    _attr_should_poll = False
+    _attr_has_entity_name = True
+
+    def __init__(self, elk: Elk, elk_data: ELKM1Data) -> None:
         """Initialize the arm request proxy switch."""
-        # Passes "arm_system_request" as the unique_id suffix to the base ElkEntity
-        super().__init__(coordinator, config_entry, "arm_system_request")
-        
-        self._attr_name = "Arm System Request"
-        self._attr_icon = "mdi:shield-sync"
+        self._elk = elk
+        self._prefix = elk_data.prefix
+        self._mac = elk_data.mac
+        self._attr_unique_id = f"elkm1_{self._prefix}_arm_request".lower()
         self._attr_is_on = False
-        self._attr_has_entity_name = True
-        
 
     @property
+    @override
+    def device_info(self) -> DeviceInfo:
+        """Device info connecting via the ElkM1 system."""
+        return create_elk_system_device_info(self._elk, self._prefix, self._mac)
+
+    @property
+    @override
     def is_on(self) -> bool:
         """Return the state of the switch."""
         return self._attr_is_on
 
+    @override
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Turn the switch on (Triggers the HA Pre-Arm Blueprint)."""
         self._attr_is_on = True
         self.async_write_ha_state()
 
+    @override
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Turn the switch off (Reset by the Blueprint or manually)."""
         self._attr_is_on = False
         self.async_write_ha_state()
 
 
-class ElkOutputSwitch(ElkEntity, SwitchEntity):
-    """Switch for ELK output/relay."""
+class ElkOutput(ElkAttachedEntity, SwitchEntity):
+    """Elk output as switch."""
 
-    _attr_has_entity_name = True
-    _attr_should_poll = False
-    # This disables all outputs by default:
-    _attr_entity_registry_enabled_default = False
-
-    def __init__(
-        self,
-        coordinator: ElkDataUpdateCoordinator,
-        config_entry: ConfigEntry,
-        output_index: int,
-        output: Any,
-    ) -> None:
-        """Initialize output switch."""
-        super().__init__(
-            coordinator=coordinator,
-            config_entry=config_entry,
-            entity_key=f"output_{output_index}",
-        )
-        self._output_index = output_index
-        self._output = output
-        
-        self._attr_name = output.name
-        
-        # Determine device class based on output name
-        if any(keyword in output.name.lower() for keyword in ("siren", "strobe", "light")):
-            self._attr_device_class = SwitchDeviceClass.OUTLET
+    _element: Output
 
     @property
+    @override
     def is_on(self) -> bool:
-        """Return true if output is on."""
-        if not self._output:
-            return False
-        # elkm1_lib typically uses output_on for the boolean state
-        return getattr(self._output, "output_on", False)
+        """Get the current output status."""
+        return self._element.output_on
 
+    @override
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Turn on the output."""
-        try:
-            if self._output:
-                # '0' tells the Elk-M1 to turn the output on indefinitely
-                self._output.turn_on(0)
-                
-                # Tell HA to update the UI immediately
-                self.async_write_ha_state()
-        except Exception as err: # noqa: BLE001
-            _LOGGER.error(f"Error turning on output: {err}")
+        self._element.turn_on(0)
 
+    @override
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Turn off the output."""
-        try:
-            if self._output:
-                self._output.turn_off()
-                
-                # Tell HA to update the UI immediately
-                self.async_write_ha_state()
-        except Exception as err: # noqa: BLE001
-            _LOGGER.error(f"Error turning off output: {err}")
+        self._element.turn_off()
 
-    @callback
-    def _handle_coordinator_update(self) -> None:
-        """Handle updated data from coordinator."""
-        if self.coordinator._elk:
-            self._output = self.coordinator._elk.outputs[self._output_index]
-        self.async_write_ha_state()
+    async def async_switch_output_turn_on_for(self, duration: timedelta) -> None:
+        """Turn on an output for specified length of time."""
+        self._element.turn_on(ceil(duration.total_seconds()))
+
+
+class ElkThermostatEMHeat(ElkEntity, SwitchEntity):
+    """Elk Thermostat emergency heat as switch."""
+
+    _element: Thermostat
+
+    def __init__(self, element: Element, elk: Elk, elk_data: ELKM1Data) -> None:
+        """Initialize the emergency heat switch."""
+        super().__init__(element, elk, elk_data)
+        self._unique_id = f"{self._unique_id}emheat"
+        self._attr_name = f"{element.name} emergency heat"
+
+    @property
+    @override
+    def is_on(self) -> bool:
+        """Get the current emergency heat status."""
+        return self._element.mode is ThermostatMode.EMERGENCY_HEAT
+
+    def _elk_set(self, mode: ThermostatMode) -> None:
+        """Set the thermostat mode."""
+        self._element.set(ThermostatSetting.MODE, mode)
+
+    @override
+    async def async_turn_on(self, **kwargs: Any) -> None:
+        """Turn on the output."""
+        self._elk_set(ThermostatMode.EMERGENCY_HEAT)
+
+    @override
+    async def async_turn_off(self, **kwargs: Any) -> None:
+        """Turn off the output."""
+        self._elk_set(ThermostatMode.EMERGENCY_HEAT)
+
+    async def async_switch_output_turn_on_for(self, duration: timedelta) -> None:
+        """Turn on an output for specified length of time: not supported for thermostat."""
+        raise HomeAssistantError("supported only on ElkM1 output switch entities")
