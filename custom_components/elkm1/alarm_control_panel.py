@@ -94,29 +94,52 @@ class ElkAlarmControlPanel(ElkEntity, AlarmControlPanelEntity):
             return self.coordinator._elk.areas[self._area_index]
         return None
 
+    def _get_enum_value(self, obj, default=0) -> int:
+        """Safely extract the raw integer value from elkm1_lib Enum objects."""
+        if hasattr(obj, "value"):
+            return obj.value
+        if isinstance(obj, str):
+            return int(obj) if obj.isdigit() else default
+        return obj if isinstance(obj, int) else default
+
     @property
     def state(self) -> str | None:
-        """Return state with robust boolean conversion."""
-        if not self.coordinator.data:
+        """Return state strictly mapped to HA AlarmControlPanelState."""
+        if not self.coordinator.data or not self.area:
             return None
 
-        # Safely evaluate alarm state from panel or area, guarding against string '0'
-        alarm_state_raw = getattr(self.area, "alarm_state", 0) if self.area else 0
-        is_triggered = bool(alarm_state_raw) and alarm_state_raw not in ("0", 0, "False", "false")
+        # Extract precise integer states from Elk Enums
+        alarm_state_val = self._get_enum_value(getattr(self.area, "alarm_state", 0))
+        armed_status_val = self._get_enum_value(getattr(self.area, "armed_status", 0))
+        arm_up_state_val = self._get_enum_value(getattr(self.area, "arm_up_state", 0))
 
-        if is_triggered:
+        # 1. TRIGGERED: Elk AlarmState >= 2 (0=No Alarm, 1=Entrance Delay, 2=Abort Delay, 3+=Actual Alarms)[cite: 2]
+        if alarm_state_val >= 2:
             return STATE_ALARM_TRIGGERED
 
-        if self.coordinator.data.get("armed", False):
-            armed_mode = self.coordinator.data.get("armed_mode", "").lower()
-            
-            if "stay" in armed_mode or "home" in armed_mode:
-                return STATE_ARMED_HOME
-            elif "night" in armed_mode:
-                return STATE_ARMED_NIGHT
-            else:
-                return STATE_ARMED_AWAY
-        
+        # 2. PENDING (Entry Delay): Elk AlarmState == 1 OR Timer1 is running while Armed[cite: 2]
+        if alarm_state_val == 1 or (getattr(self.area, "timer1", 0) > 0 and armed_status_val != 0):
+            return AlarmControlPanelState.PENDING
+
+        # 3. ARMING (Exit Delay): Timer2 is running OR Elk ArmUpState indicates Exit Timer (3 or 5)[cite: 2]
+        if getattr(self.area, "timer2", 0) > 0 or arm_up_state_val in (3, 5):
+            return AlarmControlPanelState.ARMING
+
+        # 4. ARMED_CUSTOM_BYPASS: System armed and Elk ArmUpState is 6 (Armed with Bypass)[cite: 2]
+        if arm_up_state_val == 6 and armed_status_val != 0:
+            return AlarmControlPanelState.ARMED_CUSTOM_BYPASS
+
+        # 5. Stable Arming Modes (Elk ArmedStatus Enum mapping)[cite: 2]
+        if armed_status_val == 1:
+            return STATE_ARMED_AWAY
+        elif armed_status_val in (2, 3):
+            return STATE_ARMED_HOME       # 2 = Stay, 3 = Stay Instant[cite: 2]
+        elif armed_status_val in (4, 5):
+            return STATE_ARMED_NIGHT      # 4 = Night, 5 = Night Instant[cite: 2]
+        elif armed_status_val == 6:
+            return AlarmControlPanelState.ARMED_VACATION
+
+        # 6. Fallback to Disarmed
         return STATE_DISARMED
 
     @property
@@ -131,6 +154,9 @@ class ElkAlarmControlPanel(ElkEntity, AlarmControlPanelEntity):
 
         # Get live faulted zones directly from hardware
         faulted_indices, faulted_names = self._get_live_faulted_zones()
+        
+        # Safely evaluate AlarmTriggered attribute to a boolean
+        alarm_state_val = self._get_enum_value(getattr(area, "alarm_state", 0)) if area else 0
 
         # Safe boolean helper for status flags
         def safe_bool(val) -> bool:
@@ -176,8 +202,8 @@ class ElkAlarmControlPanel(ElkEntity, AlarmControlPanelEntity):
             "connection_status": "Connected" if self.coordinator.last_update_success else "Disconnected",
             "last_update": self.coordinator.last_update_success,
             
-            # Alarm state information (Safe evaluation)
-            "alarm_triggered": str(getattr(area, "alarm_state", 0) if area else 0),
+            # Alarm state information
+            "alarm_triggered": alarm_state_val >= 2,
             "fire_alarm": self._get_fire_alarm_status(),
             "panic_alarm": safe_bool(getattr(area, "panic_state", False)) if area else False,
             "alarm_memory": self._get_alarm_memory_status(),
@@ -289,6 +315,16 @@ class ElkAlarmControlPanel(ElkEntity, AlarmControlPanelEntity):
                 
         return False
 
+    def _get_code_val(self, code: str | None) -> int:
+        """Safely convert HA string PIN to Elk required integer."""
+        if not code:
+            return 0
+        try:
+            return int(code)
+        except ValueError:
+            _LOGGER.warning("Invalid PIN code format. Expected numeric digits.")
+            return 0
+
     # ============================================================================
     # Alarm Control Panel Service Actions
     # ============================================================================
@@ -297,61 +333,61 @@ class ElkAlarmControlPanel(ElkEntity, AlarmControlPanelEntity):
         """Send disarm command to the area."""
         try:
             if self.area:
-                self.area.disarm(code)
+                self.area.disarm(self._get_code_val(code))
                 _LOGGER.info("Panel disarmed")
-        except (OSError, TimeoutError, ValueError, AttributeError) as err:
+        except Exception as err:
             _LOGGER.error(f"Error disarming: {err}")
 
     async def async_alarm_arm_home(self, code: str | None = None) -> None:
-        """Send arm home command to the area."""
+        """Send arm stay command to the area (Elk Protocol Level 2)."""
         try:
             if self.area:
-                self.area.arm_home(code)
-                _LOGGER.info("Panel armed home")
-        except (OSError, TimeoutError, ValueError, AttributeError) as err:
+                self.area.arm(2, self._get_code_val(code))
+                _LOGGER.info("Panel armed home (stay)")
+        except Exception as err:
             _LOGGER.error(f"Error arming home: {err}")
 
     async def async_alarm_arm_away(self, code: str | None = None) -> None:
-        """Send arm away command to the area."""
+        """Send arm away command to the area (Elk Protocol Level 1)."""
         try:
             if self.area:
-                self.area.arm_away(code)
+                self.area.arm(1, self._get_code_val(code))
                 _LOGGER.info("Panel armed away")
-        except (OSError, TimeoutError, ValueError, AttributeError) as err:
+        except Exception as err:
             _LOGGER.error(f"Error arming away: {err}")
 
     async def async_alarm_arm_night(self, code: str | None = None) -> None:
-        """Send arm night command to the area."""
+        """Send arm night command to the area (Elk Protocol Level 4)."""
         try:
             if self.area:
-                self.area.arm_night(code)
+                self.area.arm(4, self._get_code_val(code))
                 _LOGGER.info("Panel armed night")
-        except (OSError, TimeoutError, ValueError, AttributeError) as err:
+        except Exception as err:
             _LOGGER.error(f"Error arming night: {err}")
+
+    async def async_alarm_arm_vacation(self, code: str | None = None) -> None:
+        """Send arm vacation command to the area (Elk Protocol Level 6)."""
+        try:
+            if self.area:
+                self.area.arm(6, self._get_code_val(code))
+                _LOGGER.info("Panel armed vacation")
+        except Exception as err:
+            _LOGGER.error(f"Error arming vacation: {err}")
+
+    async def async_alarm_arm_custom_bypass(self, code: str | None = None) -> None:
+        """Handle custom bypass request. (Maps to Away with Force Arm)"""
+        try:
+            if self.area:
+                self.area.arm(1, self._get_code_val(code))
+                _LOGGER.info("Panel armed custom bypass mode")
+        except Exception as err:
+            _LOGGER.error(f"Error arming custom bypass: {err}")
 
     async def async_alarm_trigger(self, code: str | None = None) -> None:
         """Trigger the alarm on the area."""
         try:
-            if self.area:
-                self.area.trigger(code)
-                _LOGGER.info("Panel alarm triggered")
-        except (OSError, TimeoutError, ValueError, AttributeError) as err:
+            if self.area and hasattr(self.area, "trigger"):
+                self.area.trigger(self._get_code_val(code))
+                _LOGGER.info("Panel alarm triggered via HA")
+        except Exception as err:
             _LOGGER.error(f"Error triggering alarm: {err}")
-
-    async def async_alarm_arm_vacation(self, code: str | None = None) -> None:
-        """Arm vacation."""
-        try:
-            if self.area:
-                self.area.arm_vacation(code)
-                _LOGGER.info("Panel armed vacation")
-        except (OSError, TimeoutError, ValueError, AttributeError) as err:
-            _LOGGER.error(f"Error arming vacation: {err}")
-
-    async def async_alarm_arm_custom_bypass(self, code: str | None = None) -> None:
-        """Arm with custom bypass."""
-        try:
-            if self.area:
-                self.area.arm_custom_bypass(code)
-                _LOGGER.info("Panel armed custom bypass")
-        except (OSError, TimeoutError, ValueError, AttributeError) as err:
-            _LOGGER.error(f"Error arming custom bypass: {err}")
