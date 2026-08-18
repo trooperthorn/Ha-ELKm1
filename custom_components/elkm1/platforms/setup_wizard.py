@@ -1,10 +1,14 @@
 """Setup wizard to check and configure panel on first connection."""
+
+from __future__ import annotations
+
 import logging
 from typing import Any
 
 from elkm1_lib import Elk
 
-from ..helpers.panel_settings import (
+from ..const import CONNECTION_SERIAL
+from ..helpers import (
     check_panel_version,
     check_required_settings,
     enable_required_settings,
@@ -12,15 +16,16 @@ from ..helpers.panel_settings import (
 
 _LOGGER = logging.getLogger(__name__)
 
-# Best practice: update the return hint so other functions know what to expect
-async def run_panel_setup_wizard(elk_connection: Elk, connection_type: str) -> dict[str, Any]:
-    """
-    Run setup wizard to check and optionally configure panel.
-    
+
+async def run_panel_setup_wizard(
+    elk_connection: Elk, connection_type: str
+) -> dict[str, Any]:
+    """Run setup wizard to check and optionally configure panel.
+
     Args:
         elk_connection: Elk instance
         connection_type: "serial" or "network"
-        
+
     Returns:
         Setup results dictionary
     """
@@ -30,33 +35,42 @@ async def run_panel_setup_wizard(elk_connection: Elk, connection_type: str) -> d
         "settings_enabled": False,
         "details": {},
     }
-    
+
     _LOGGER.info("Running ELK-M1 panel setup wizard...")
-    
-    # Check version
-    version = await check_panel_version(elk_connection)
-    results["version"] = version
-    
-    # Only check settings for serial connections
-    if connection_type == "serial":
-        _LOGGER.info("Serial connection - checking global settings...")
-        
-        # Fetch current settings dictionary to satisfy references
-        settings = await check_required_settings(elk_connection)
-        results["settings_checked"] = True
-        results["details"]["initial_settings"] = settings
-        
-        # Check if all are enabled
-        all_enabled = all(s["enabled"] for s in settings.values())
-        
-        if not all_enabled:
-            _LOGGER.info("Some settings are disabled. Attempting to enable...")
-            enable_results = await enable_required_settings(elk_connection)
-            results["settings_enabled"] = all(enable_results.values())
-            results["details"]["enable_results"] = enable_results
-            
-            # Re-check settings
+
+    try:
+        # Check panel firmware version
+        version = await check_panel_version(elk_connection)
+        results["version"] = version
+
+        # Global settings inspection is only applicable for direct serial/USB connections
+        if connection_type in (CONNECTION_SERIAL, "serial"):
+            _LOGGER.info("Serial connection detected - checking global settings...")
+
             settings = await check_required_settings(elk_connection)
-            results["details"]["final_settings"] = settings
+            results["settings_checked"] = True
+            results["details"]["initial_settings"] = settings
+
+            # Check if all required settings are currently enabled
+            all_enabled = all(s.get("enabled") is True for s in settings.values())
+
+            if all_enabled:
+                _LOGGER.info("All required global settings are already enabled ✓")
+                results["settings_enabled"] = True
+            else:
+                _LOGGER.info("Some settings are disabled. Attempting to enable...")
+                enable_results = await enable_required_settings(elk_connection)
+                results["details"]["enable_results"] = enable_results
+
+                # Re-verify settings after write
+                final_settings = await check_required_settings(elk_connection)
+                results["details"]["final_settings"] = final_settings
+                results["settings_enabled"] = all(
+                    s.get("enabled") is True for s in final_settings.values()
+                )
+
+    except Exception as err:  # noqa: BLE001
+        _LOGGER.error(f"Error encountered during ELK-M1 setup wizard: {err}")
+        results["details"]["error"] = str(err)
 
     return results
