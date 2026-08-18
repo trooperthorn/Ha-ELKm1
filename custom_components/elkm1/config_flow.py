@@ -1,6 +1,5 @@
 """Config flow for Elk-M1 Control integration."""
 
-import asyncio
 import glob
 import logging
 import os
@@ -87,14 +86,14 @@ def get_persistent_port_path(device_path: str) -> str:
         try:
             if os.path.realpath(symlink) == resolved_target:
                 return symlink
-        except OSError as err:
+        except OSError:
             continue
 
     for symlink in glob.glob("/dev/serial/by-path/*"):
         try:
             if os.path.realpath(symlink) == resolved_target:
                 return symlink
-        except OSError as err:
+        except OSError:
             continue
 
     return device_path
