@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from typing import Iterable, Union
+from collections.abc import Iterable
+from typing import Union
+
 
 ELK_VOICE_VOCABULARY = {
     0: "{Blank}",
@@ -116,7 +118,7 @@ ELK_VOICE_VOCABULARY = {
 }
 
 
-def translate_elk_voice(word_ids: Iterable[Union[int, str]]) -> str:
+def translate_elk_voice(word_ids: Iterable[int | str) -> str:
     """Translate a list of Elk-M1 voice IDs into a readable string.
 
     Args:
