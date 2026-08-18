@@ -1,11 +1,14 @@
 """Constants for Elk-M1 integration."""
+
+from __future__ import annotations
+
 from datetime import timedelta
+from typing import Any
 
 from elkm1_lib.const import Max
 import voluptuous as vol
 
 from homeassistant.const import ATTR_CODE, CONF_ZONE
-from homeassistant.helpers.typing import VolDictType
 
 DOMAIN = "elkm1"
 LOGIN_TIMEOUT = 20
@@ -53,6 +56,6 @@ ATTR_CHANGED_BY_TIME = "changed_by_time"
 ATTR_VALUE = "value"
 
 # Native service schema validation for strict PIN enforcement
-ELK_USER_CODE_SERVICE_SCHEMA: VolDictType = {
+ELK_USER_CODE_SERVICE_SCHEMA: dict[Any, Any] = {
     vol.Required(ATTR_CODE): vol.All(vol.Coerce(int), vol.Range(0, 999999))
 }
