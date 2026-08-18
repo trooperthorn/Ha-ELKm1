@@ -256,7 +256,7 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 "tasks": tasks,
                 "thermostat": thermostat,
             }
-        except Exception as err:
+        except Exception as err:  # noqa: BLE001
             _LOGGER.exception("Error fetching coordinator data")
             raise UpdateFailed(f"Failed to fetch data: {err}") from err
 
@@ -316,7 +316,7 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 await self.send_raw_elk_command(raw_cmd)
                 await self.async_request_refresh()
                 return True
-        except Exception as err:
+        except Exception as err:  # noqa: BLE001
             _LOGGER.error(f"Failed to execute {cmd_type} on Area {area_num}: {err}")
         return False
 
@@ -380,7 +380,7 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             formatted_pin = str(active_pin).zfill(6)
             await self.send_raw_elk_command(f"a9{area}{formatted_pin}")
             return True
-        except Exception as err:
+        except Exception as err:  # noqa: BLE001
             _LOGGER.error(f"Failed to force arm away area {area}: {err}")
             return False
 
@@ -522,7 +522,7 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 )
                 _LOGGER.debug(f"Sent Elk command via SerialQueue: {packet_with_crlf.strip()}")
                 return
-            except Exception as queue_err:
+            except Exception as queue_err:  # noqa: BLE001
                 _LOGGER.debug(f"SerialQueue dispatch failed, falling back to direct write: {queue_err}")
 
         # Fallback direct socket/transport write
@@ -548,7 +548,7 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 return
 
             _LOGGER.error("Cannot send command: No valid stream writer found.")
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             _LOGGER.error(f"Failed to send raw Elk command: {e}")
 
     async def trigger_zone(self, zone_number: int) -> bool:
@@ -556,7 +556,7 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         try:
             await self.send_raw_elk_command(f"zt{zone_number:03d}")
             return True
-        except Exception as err:
+        except Exception as err:  # noqa: BLE001
             _LOGGER.error(f"Failed to trigger zone {zone_number}: {err}")
             return False
 
@@ -575,6 +575,6 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             command = f"dm{area}{mode}{timeout:05d}{padded_line1}{padded_line2}"
             await self.send_raw_elk_command(command)
             return True
-        except Exception as err:
+        except Exception as err:  # noqa: BLE001
             _LOGGER.error(f"Failed to display message: {err}")
             return False
