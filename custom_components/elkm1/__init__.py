@@ -365,7 +365,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ElkM1ConfigEntry) -> boo
 
     dr.async_get(hass).async_get_or_create(
         config_entry_id=entry.entry_id,
-        **create_elk_system_device_info(elk, prefix, entry.unique_id),
+        **create_elk_system_device_info(entry),
     )
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
