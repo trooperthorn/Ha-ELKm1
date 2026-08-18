@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-asyncio
+import asyncio
 import logging
 import re
 from typing import Any
@@ -71,7 +71,7 @@ try:
 except ImportError:
     async_setup_alarmo_auto_config = None
 
-type ElkM1ConfigEntry = ConfigEntry[ELKM1Data]
+ElkM1ConfigEntry = ConfigEntry[ELKM1Data]
 
 SYNC_TIMEOUT = 120
 
