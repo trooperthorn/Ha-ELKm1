@@ -51,10 +51,10 @@ class ElkZoneBinarySensor(ElkEntity, BinarySensorEntity):
 
         # Bind this binary sensor to the main Elk-M1 device
         self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, "elk_m1_main_panel")},
-            name="Elk-M1 Control Panel",
-            manufacturer="Elk Products",
-            model="M1 Gold",
+            identifiers={(DOMAIN, config_entry.entry_id)}, # Uses the integration ID as the glue
+            name="Elk-M1",                   # The cleaner name you wanted
+            manufacturer=MANUFACTURER,
+            model=MODEL,
         )
 
     @property
