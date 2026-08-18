@@ -184,6 +184,10 @@ activate_task:
           min: 1
           max: 32
 
+alarmo_auto_setup:
+  name: "Alarmo Auto-Setup"
+  description: "Auto-configure Alarmo with discovered ELK-M1 zones."
+
 speak_phrase:
   name: Speak Phrase
   description: Command the Elk-M1 panel to speak a vocabulary word or phrase.
