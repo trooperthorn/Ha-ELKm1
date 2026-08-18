@@ -1,5 +1,6 @@
 automation:
   - alias: "Security: Good Night Perimeter Guard"
+    description: "Arms the Elk-M1 in night mode when sleep mode activates, and warns via keypad/speakers if windows are open."
     trigger:
       - platform: state
         entity_id: input_boolean.sleep_mode
@@ -16,4 +17,4 @@ automation:
             sequence:
               - service: elkm1.speak_phrase
                 data:
-                  phrase: "Warning. Window left open"
+                  number: 464
