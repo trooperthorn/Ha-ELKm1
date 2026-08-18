@@ -107,9 +107,12 @@ class ElkAlarmControlPanel(ElkEntity, AlarmControlPanelEntity):
     @property
     def area(self) -> Any:
         """Helper to get the specific area object from elkm1_lib."""
-        if self.coordinator._elk and getattr(self.coordinator._elk, "areas", None):
-            if self._area_index < len(self.coordinator._elk.areas):
-                return self.coordinator._elk.areas[self._area_index]
+        if (
+            self.coordinator._elk
+            and getattr(self.coordinator._elk, "areas", None)
+            and self._area_index < len(self.coordinator._elk.areas)
+        ):
+            return self.coordinator._elk.areas[self._area_index]
         return None
 
     def _get_enum_value(self, obj: Any, default: int = 0) -> int:
@@ -302,7 +305,7 @@ class ElkAlarmControlPanel(ElkEntity, AlarmControlPanelEntity):
             if self.area:
                 self.area.disarm(self._get_code_val(code))
                 _LOGGER.info(f"Area {self._area_index + 1} disarmed")
-        except Exception as err:
+        except Exception as err:  # noqa: BLE001
             _LOGGER.error(f"Error disarming area {self._area_index + 1}: {err}")
 
     async def async_alarm_arm_home(self, code: str | None = None) -> None:
@@ -311,7 +314,7 @@ class ElkAlarmControlPanel(ElkEntity, AlarmControlPanelEntity):
             if self.area:
                 self.area.arm(ArmLevel.ARMED_STAY, self._get_code_val(code))
                 _LOGGER.info(f"Area {self._area_index + 1} armed home (stay)")
-        except Exception as err:
+        except Exception as err:  # noqa: BLE001
             _LOGGER.error(f"Error arming home area {self._area_index + 1}: {err}")
 
     async def async_alarm_arm_away(self, code: str | None = None) -> None:
@@ -320,7 +323,7 @@ class ElkAlarmControlPanel(ElkEntity, AlarmControlPanelEntity):
             if self.area:
                 self.area.arm(ArmLevel.ARMED_AWAY, self._get_code_val(code))
                 _LOGGER.info(f"Area {self._area_index + 1} armed away")
-        except Exception as err:
+        except Exception as err:  # noqa: BLE001
             _LOGGER.error(f"Error arming away area {self._area_index + 1}: {err}")
 
     async def async_alarm_arm_night(self, code: str | None = None) -> None:
@@ -329,7 +332,7 @@ class ElkAlarmControlPanel(ElkEntity, AlarmControlPanelEntity):
             if self.area:
                 self.area.arm(ArmLevel.ARMED_NIGHT, self._get_code_val(code))
                 _LOGGER.info(f"Area {self._area_index + 1} armed night")
-        except Exception as err:
+        except Exception as err:  # noqa: BLE001
             _LOGGER.error(f"Error arming night area {self._area_index + 1}: {err}")
 
     async def async_alarm_arm_vacation(self, code: str | None = None) -> None:
@@ -338,7 +341,7 @@ class ElkAlarmControlPanel(ElkEntity, AlarmControlPanelEntity):
             if self.area:
                 self.area.arm(ArmLevel.ARMED_VACATION, self._get_code_val(code))
                 _LOGGER.info(f"Area {self._area_index + 1} armed vacation")
-        except Exception as err:
+        except Exception as err:  # noqa: BLE001
             _LOGGER.error(f"Error arming vacation area {self._area_index + 1}: {err}")
 
     async def async_alarm_arm_custom_bypass(self, code: str | None = None) -> None:
@@ -347,7 +350,7 @@ class ElkAlarmControlPanel(ElkEntity, AlarmControlPanelEntity):
             if self.area:
                 self.area.arm(ArmLevel.ARMED_AWAY, self._get_code_val(code))
                 _LOGGER.info(f"Area {self._area_index + 1} armed custom bypass mode")
-        except Exception as err:
+        except Exception as err:  # noqa: BLE001
             _LOGGER.error(f"Error arming custom bypass area {self._area_index + 1}: {err}")
 
     async def async_alarm_trigger(self, code: str | None = None) -> None:
@@ -356,5 +359,5 @@ class ElkAlarmControlPanel(ElkEntity, AlarmControlPanelEntity):
             if self.area and hasattr(self.area, "trigger"):
                 self.area.trigger(self._get_code_val(code))
                 _LOGGER.warning(f"Area {self._area_index + 1} alarm manually triggered via HA")
-        except Exception as err:
+        except Exception as err:  # noqa: BLE001
             _LOGGER.error(f"Error triggering alarm area {self._area_index + 1}: {err}")
