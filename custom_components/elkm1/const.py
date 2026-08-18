@@ -1,53 +1,58 @@
 """Constants for Elk-M1 integration."""
 from datetime import timedelta
-from typing import Final
 
-from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_PORT, CONF_USERNAME
+from elkm1_lib.const import Max
+import voluptuous as vol
 
-__all__ = [
-    "CONF_HOST",
-    "CONF_PASSWORD",
-    "CONF_PORT",
-    "CONF_USERNAME",
-]
+from homeassistant.const import ATTR_CODE, CONF_ZONE
+from homeassistant.helpers.typing import VolDictType
 
-DOMAIN: Final = "elkm1"
-CONF_URL: Final = "url"
+DOMAIN = "elkm1"
+LOGIN_TIMEOUT = 20
 
-# Config flow keys
-CONF_SERIAL_PORT: Final = "serial_port"
-CONF_CONNECTION_TYPE: Final = "connection_type"
-CONF_PIN: Final = "pin"
-CONF_VERIFY_DEVICE: Final = "verify_device"
+# Config flow keys injected for USB/Serial discovery UI
+CONF_SERIAL_PORT = "serial_port"
 
-CONNECTION_SERIAL: Final = "serial"
-CONNECTION_NETWORK: Final = "network"
+CONF_AUTO_CONFIGURE = "auto_configure"
+CONF_AREA = "area"
+CONF_COUNTER = "counter"
+CONF_KEYPAD = "keypad"
+CONF_OUTPUT = "output"
+CONF_PLC = "plc"
+CONF_SETTING = "setting"
+CONF_TASK = "task"
+CONF_THERMOSTAT = "thermostat"
 
-# Device info
-MANUFACTURER: Final = "ELK Products, Inc."
-MODEL: Final = "M1 Gold/EZ8"
+DISCOVER_SCAN_TIMEOUT = 10
+DISCOVERY_INTERVAL = timedelta(minutes=15)
 
-# Connection settings
-ELKM1_BAUDRATE: Final = 115200
-COORDINATOR_UPDATE_INTERVAL: Final = 5  # seconds, used with timedelta()
+# Element map required for __init__.py auto_configure logic
+ELK_ELEMENTS = {
+    CONF_AREA: Max.AREAS.value,
+    CONF_COUNTER: Max.COUNTERS.value,
+    CONF_KEYPAD: Max.KEYPADS.value,
+    CONF_OUTPUT: Max.OUTPUTS.value,
+    CONF_PLC: Max.LIGHTS.value,
+    CONF_SETTING: Max.SETTINGS.value,
+    CONF_TASK: Max.TASKS.value,
+    CONF_THERMOSTAT: Max.THERMOSTATS.value,
+    CONF_ZONE: Max.ZONES.value,
+}
 
-# Polling interval (for status updates)
-DEFAULT_UPDATE_INTERVAL: Final = timedelta(seconds=60)
+# Keypad and automation event constants
+EVENT_ELKM1_KEYPAD_KEY_PRESSED = "elkm1.keypad_key_pressed"
 
-# Watchdog settings (detect silent connection loss)
-LIVENESS_CHECK_INTERVAL: Final = timedelta(seconds=30)
-LIVENESS_TIMEOUT: Final = 60  # seconds without traffic = reconnect
+ATTR_DURATION = "duration"
+ATTR_KEYPAD_ID = "keypad_id"
+ATTR_KEY = "key"
+ATTR_KEY_NAME = "key_name"
+ATTR_KEYPAD_NAME = "keypad_name"
+ATTR_CHANGED_BY_KEYPAD = "changed_by_keypad"
+ATTR_CHANGED_BY_ID = "changed_by_id"
+ATTR_CHANGED_BY_TIME = "changed_by_time"
+ATTR_VALUE = "value"
 
-# SECURITY
-CONF_INCLUDED_ZONES = "included_zones"
-CONF_SYNC_CLOCK = "sync_clock"
-CONF_ENABLE_TASKS = "enable_tasks"
-CONF_STRICT_PIN = "strict_pin"
-CONF_AUTO_CLEAR_MEMORY = "auto_clear_memory"
-
-# Default values
-DEFAULT_INCLUDED_ZONES = "1-10"
-DEFAULT_SYNC_CLOCK = True
-DEFAULT_ENABLE_TASKS = True
-DEFAULT_STRICT_PIN = True
-DEFAULT_AUTO_CLEAR_MEMORY = False
+# Native service schema validation for strict PIN enforcement
+ELK_USER_CODE_SERVICE_SCHEMA: VolDictType = {
+    vol.Required(ATTR_CODE): vol.All(vol.Coerce(int), vol.Range(0, 999999))
+}
