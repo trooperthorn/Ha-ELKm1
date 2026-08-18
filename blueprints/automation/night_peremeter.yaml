@@ -1,20 +1,124 @@
-automation:
-  - alias: "Security: Good Night Perimeter Guard"
-    description: "Arms the Elk-M1 in night mode when sleep mode activates, and warns via keypad/speakers if windows are open."
-    trigger:
-      - platform: state
-        entity_id: input_boolean.sleep_mode
-        to: "on"
-    action:
-      - service: alarm_control_panel.alarm_arm_night
-        target:
-          entity_id: alarm_control_panel.alarm_panel
-      - choose:
-          - conditions:
-              - condition: numeric_state
-                entity_id: sensor.elk_m1_open_windows
-                above: 0
-            sequence:
-              - service: elkm1.speak_phrase
-                data:
-                  number: 464
+blueprint:
+  name: "ELK-M1: Good Night Perimeter Guard with Detailed Sensor Announcement"
+  description: |
+    Arms the ELK-M1 security system in Night mode when sleep mode activates. If doors 
+    or windows are open, it announces the totals, pauses for 5 seconds, and then 
+    sequentially reads out the specific open zones by name using Elk-M1 vocabulary IDs.
+  domain: automation
+  source_url: https://github.com/trooperthorn/ha_int_elkm1/blob/main/blueprints/automation/night_perimeter.yaml
+
+  input:
+    sleep_mode_helper:
+      name: Sleep Mode Helper
+      description: The input_boolean or switch helper that triggers your bedtime routine.
+      selector:
+        entity:
+          domain: input_boolean
+          
+    alarm_panel:
+      name: ELK-M1 Alarm Panel
+      description: The alarm control panel entity to arm into Night mode.
+      selector:
+        entity:
+          domain: alarm_control_panel
+
+    open_windows_sensor:
+      name: Open Windows Sensor
+      description: The sensor tracking the count of open windows (e.g., sensor.elk_m1_open_windows).
+      selector:
+        entity:
+          domain: sensor
+
+    open_doors_sensor:
+      name: Open Doors Sensor
+      description: The sensor tracking the count of open doors (e.g., sensor.elk_m1_open_doors).
+      selector:
+        entity:
+          domain: sensor
+
+trigger:
+  - platform: state
+    entity_id: !input sleep_mode_helper
+    to: "on"
+
+variables:
+  win_sensor: !input open_windows_sensor
+  door_sensor: !input open_doors_sensor
+  windows_count: "{{ states(win_sensor) | int(0) }}"
+  doors_count: "{{ states(door_sensor) | int(0) }}"
+
+action:
+  - action: alarm_control_panel.alarm_arm_night
+    target:
+      entity_id: !input alarm_panel
+      
+  - if:
+      - condition: template
+        value_template: "{{ windows_count > 0 or doors_count > 0 }}"
+    then:
+      # 1. Announce "Warning" (Elk Phrase ID 455)
+      - action: elkm1.speak_phrase
+        data:
+          number: 455
+      - delay:
+          seconds: 1
+
+      # 2. Announce Doors Count & Type (if any open)
+      - if:
+          - condition: template
+            value_template: "{{ doors_count > 0 }}"
+        then:
+          - action: elkm1.speak_phrase
+            data:
+              number: "{{ (doors_count if doors_count < 10 else 9) + 21 }}"
+          - delay:
+              seconds: 1
+          - action: elkm1.speak_phrase
+            data:
+              number: 146  # "Door" vocabulary ID
+          - delay:
+              seconds: 2
+
+      # 3. Announce Windows Count & Type (if any open)
+      - if:
+          - condition: template
+            value_template: "{{ windows_count > 0 }}"
+        then:
+          - action: elkm1.speak_phrase
+            data:
+              number: "{{ (windows_count if windows_count < 10 else 9) + 21 }}"
+          - delay:
+              seconds: 1
+          - action: elkm1.speak_phrase
+            data:
+              number: 464  # "Window" vocabulary ID
+
+      # 4. Additional 5-second delay before listing specific sensors
+      - delay:
+          seconds: 5
+
+      # 5. Dynamically iterate through all open doors and windows and announce their names
+      - repeat:
+          for_each: >
+            {% set win_ents = state_attr(win_sensor, 'open_entities') | default(state_attr(win_sensor, 'entity_id'), true) | default([], true) %}
+            {% set door_ents = state_attr(door_sensor, 'open_entities') | default(state_attr(door_sensor, 'entity_id'), true) | default([], true) %}
+            {{ (win_ents | select('is_state', 'on') | list) + (door_ents | select('is_state', 'on') | list) }}
+          sequence:
+            - variables:
+                ent_name: "{{ state_attr(repeat.item, 'friendly_name') | default(repeat.item, true) | lower }}"
+                vocab_id: >
+                  {% if 'front' in ent_name %}186
+                  {% elif 'back' in ent_name %}23
+                  {% elif 'garage' in ent_name %}150
+                  {% elif 'side' in ent_name %}350
+                  {% elif 'kitchen' in ent_name %}220
+                  {% elif 'living' in ent_name %}250
+                  {% elif 'bedroom' in ent_name %}75
+                  {% elif 'office' in ent_name %}310
+                  {% else %}146
+                  {% endif %}
+            - action: elkm1.speak_phrase
+              data:
+                number: "{{ vocab_id | int }}"
+            - delay:
+                seconds: 2
