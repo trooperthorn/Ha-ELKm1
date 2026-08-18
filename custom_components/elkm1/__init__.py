@@ -1,233 +1,421 @@
 """Elk-M1 Control integration."""
 
+import asyncio
 import logging
-from typing import Final
+import re
+from typing import Any
 
-from homeassistant.config_entries import ConfigEntry, ConfigEntryNotReady
-from homeassistant.const import Platform
-from homeassistant.core import (
-    HomeAssistant,
-    ServiceCall,
-    ServiceResponse,
-    SupportsResponse,
+from elkm1_lib.elements import Element
+from elkm1_lib.elk import Elk
+from elkm1_lib.util import parse_url
+import voluptuous as vol
+
+from homeassistant.config_entries import SOURCE_IMPORT, ConfigEntry
+from homeassistant.const import (
+    CONF_ENABLED,
+    CONF_EXCLUDE,
+    CONF_HOST,
+    CONF_INCLUDE,
+    CONF_PASSWORD,
+    CONF_PREFIX,
+    CONF_TEMPERATURE_UNIT,
+    CONF_USERNAME,
+    CONF_ZONE,
+    Platform,
+    UnitOfTemperature,
 )
-from homeassistant.helpers.update_coordinator import UpdateFailed
+from homeassistant.core import HomeAssistant, callback
+from homeassistant.exceptions import ConfigEntryNotReady
+from homeassistant.helpers import config_validation as cv, device_registry as dr
+from homeassistant.helpers.event import async_track_time_interval
+from homeassistant.helpers.typing import ConfigType
+from homeassistant.util.network import is_ip_address
 
-from .alarmo_integration import async_setup_alarmo_auto_config
-from .const import CONF_SERIAL_PORT, DOMAIN
-from .coordinator import ElkDataUpdateCoordinator
-from .data import ElkRuntimeData
+from .const import (
+    ATTR_KEY,
+    ATTR_KEY_NAME,
+    ATTR_KEYPAD_ID,
+    ATTR_KEYPAD_NAME,
+    CONF_AREA,
+    CONF_AUTO_CONFIGURE,
+    CONF_COUNTER,
+    CONF_KEYPAD,
+    CONF_OUTPUT,
+    CONF_PLC,
+    CONF_SETTING,
+    CONF_TASK,
+    CONF_THERMOSTAT,
+    DISCOVER_SCAN_TIMEOUT,
+    DISCOVERY_INTERVAL,
+    DOMAIN,
+    ELK_ELEMENTS,
+    EVENT_ELKM1_KEYPAD_KEY_PRESSED,
+    LOGIN_TIMEOUT,
+)
+from .discovery import (
+    async_discover_device,
+    async_discover_devices,
+    async_trigger_discovery,
+    async_update_entry_from_discovery,
+)
+from .entity import create_elk_system_device_info
+from .models import ELKM1Data
+from .services import async_setup_services
+
+# Hook for Alarmo Auto-Config
+try:
+    from .alarmo_integration import async_setup_alarmo_auto_config
+except ImportError:
+    async_setup_alarmo_auto_config = None
+
+type ElkM1ConfigEntry = ConfigEntry[ELKM1Data]
+
+SYNC_TIMEOUT = 120
 
 _LOGGER = logging.getLogger(__name__)
 
-PLATFORMS: Final[list[Platform]] = [
+PLATFORMS = [
     Platform.ALARM_CONTROL_PANEL,
     Platform.BINARY_SENSOR,
+    Platform.CLIMATE,
+    Platform.LIGHT,
+    Platform.NUMBER,
+    Platform.SCENE,
     Platform.SENSOR,
     Platform.SWITCH,
+    Platform.TIME,
 ]
 
-async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+
+def hostname_from_url(url: str) -> str:
+    """Return the hostname from a url."""
+    return parse_url(url)[1]
+
+
+def _host_validator(config: dict[str, str]) -> dict[str, str]:
+    """Validate that a host is properly configured."""
+    if config[CONF_HOST].startswith(("elks://", "elksv1_2://")):
+        if CONF_USERNAME not in config or CONF_PASSWORD not in config:
+            raise vol.Invalid(
+                "Specify username and password for elks:// or elksv1_2://"
+            )
+    elif not config[CONF_HOST].startswith("elk://") and not config[
+        CONF_HOST
+    ].startswith("serial://"):
+        raise vol.Invalid("Invalid host URL")
+    return config
+
+
+def _elk_range_validator(rng: str) -> tuple[int, int]:
+    def _housecode_to_int(val: str) -> int:
+        match = re.search(r"^([a-p])(0[1-9]|1[0-6]|[1-9])$", val.lower())
+        if match:
+            return (ord(match.group(1)) - ord("a")) * 16 + int(match.group(2))
+        raise vol.Invalid("Invalid range")
+
+    def _elk_value(val: str) -> int:
+        return int(val) if val.isdigit() else _housecode_to_int(val)
+
+    vals = [s.strip() for s in str(rng).split("-")]
+    start = _elk_value(vals[0])
+    end = start if len(vals) == 1 else _elk_value(vals[1])
+    return (start, end)
+
+
+def _has_all_unique_prefixes(value: list[dict[str, str]]) -> list[dict[str, str]]:
+    """Validate that each m1 configured has a unique prefix.
+    Uniqueness is determined case-independently.
+    """
+    prefixes = [device[CONF_PREFIX] for device in value]
+    schema = vol.Schema(vol.Unique())
+    schema(prefixes)
+    return value
+
+
+DEVICE_SCHEMA_SUBDOMAIN = vol.Schema(
+    {
+        vol.Optional(CONF_ENABLED, default=True): cv.boolean,
+        vol.Optional(CONF_INCLUDE, default=[]): [_elk_range_validator],
+        vol.Optional(CONF_EXCLUDE, default=[]): [_elk_range_validator],
+    }
+)
+
+DEVICE_SCHEMA = vol.All(
+    cv.deprecated(CONF_TEMPERATURE_UNIT),
+    vol.Schema(
+        {
+            vol.Required(CONF_HOST): cv.string,
+            vol.Optional(CONF_PREFIX, default=""): vol.All(cv.string, vol.Lower),
+            vol.Optional(CONF_USERNAME, default=""): cv.string,
+            vol.Optional(CONF_PASSWORD, default=""): cv.string,
+            vol.Optional(CONF_AUTO_CONFIGURE, default=False): cv.boolean,
+            vol.Optional(CONF_TEMPERATURE_UNIT, default="F"): cv.temperature_unit,
+            vol.Optional(CONF_AREA, default={}): DEVICE_SCHEMA_SUBDOMAIN,
+            vol.Optional(CONF_COUNTER, default={}): DEVICE_SCHEMA_SUBDOMAIN,
+            vol.Optional(CONF_KEYPAD, default={}): DEVICE_SCHEMA_SUBDOMAIN,
+            vol.Optional(CONF_OUTPUT, default={}): DEVICE_SCHEMA_SUBDOMAIN,
+            vol.Optional(CONF_PLC, default={}): DEVICE_SCHEMA_SUBDOMAIN,
+            vol.Optional(CONF_SETTING, default={}): DEVICE_SCHEMA_SUBDOMAIN,
+            vol.Optional(CONF_TASK, default={}): DEVICE_SCHEMA_SUBDOMAIN,
+            vol.Optional(CONF_THERMOSTAT, default={}): DEVICE_SCHEMA_SUBDOMAIN,
+            vol.Optional(CONF_ZONE, default={}): DEVICE_SCHEMA_SUBDOMAIN,
+        },
+    ),
+    _host_validator,
+)
+
+CONFIG_SCHEMA = vol.Schema(
+    {DOMAIN: vol.All(cv.ensure_list, [DEVICE_SCHEMA], _has_all_unique_prefixes)},
+    extra=vol.ALLOW_EXTRA,
+)
+
+
+async def async_setup(hass: HomeAssistant, hass_config: ConfigType) -> bool:
+    """Set up the Elk M1 platform."""
+    async_setup_services(hass)
+
+    async def _async_discovery(*_: Any) -> None:
+        async_trigger_discovery(
+            hass, await async_discover_devices(hass, DISCOVER_SCAN_TIMEOUT)
+        )
+
+    hass.async_create_background_task(_async_discovery(), "elkm1 setup discovery")
+    async_track_time_interval(
+        hass, _async_discovery, DISCOVERY_INTERVAL, cancel_on_shutdown=True
+    )
+
+    if DOMAIN not in hass_config:
+        return True
+
+    for index, conf in enumerate(hass_config[DOMAIN]):
+        _LOGGER.debug("Importing elkm1 #%d - %s", index, conf[CONF_HOST])
+        current_config_entry = _async_find_matching_config_entry(
+            hass, conf[CONF_PREFIX]
+        )
+        if current_config_entry:
+            hass.config_entries.async_update_entry(current_config_entry, data=conf)
+            continue
+
+        hass.async_create_task(
+            hass.config_entries.flow.async_init(
+                DOMAIN,
+                context={"source": SOURCE_IMPORT},
+                data=conf,
+            )
+        )
+    return True
+
+
+@callback
+def _async_find_matching_config_entry(
+    hass: HomeAssistant, prefix: str
+) -> ConfigEntry | None:
+    for entry in hass.config_entries.async_entries(DOMAIN):
+        if entry.unique_id == prefix:
+            return entry
+    return None
+
+
+async def async_setup_entry(hass: HomeAssistant, entry: ElkM1ConfigEntry) -> bool:
     """Set up Elk-M1 Control from a config entry."""
-    _LOGGER.info(f"Setting up Elk-M1 at {entry.data.get(CONF_SERIAL_PORT, entry.data.get('host'))}")
+    conf = entry.data
+    
+    # ---------------------------------------------------------
+    # INJECTED USB/SERIAL REGISTRATION LOGIC
+    # ---------------------------------------------------------
+    # If the user utilized the UI USB flow, CONF_SERIAL_PORT exists.
+    # Convert it to the required elkm1_lib serial:// string.
+    serial_port = conf.get("serial_port")
+    if serial_port:
+        connection_url = f"serial://{serial_port}"
+    else:
+        connection_url = conf.get(CONF_HOST, "")
+        
+    host = hostname_from_url(connection_url)
+    _LOGGER.info(f"Setting up elkm1 at {connection_url}")
 
-    coordinator = ElkDataUpdateCoordinator(
-        hass=hass,
-        config_entry_data=entry.data,
+    if (not entry.unique_id or ":" not in entry.unique_id) and is_ip_address(host):
+        _LOGGER.debug(
+            "Unique id for %s is missing during setup, trying to fill from discovery",
+            host,
+        )
+        if device := await async_discover_device(hass, host):
+            async_update_entry_from_discovery(hass, entry, device)
+
+    config: dict[str, Any] = {}
+    if not conf.get(CONF_AUTO_CONFIGURE, False):
+        config["panel"] = {"enabled": True, "included": [True]}
+        for item, max_ in ELK_ELEMENTS.items():
+            
+            # Use defaults if migrating from older config formats
+            item_conf = conf.get(item, {"enabled": True, "include": [], "exclude": []})
+            
+            config[item] = {
+                "enabled": item_conf.get("enabled", True),
+                "included": [not item_conf.get("include", [])] * max_,
+            }
+            try:
+                _included(item_conf.get("include", []), True, config[item]["included"])
+                _included(item_conf.get("exclude", []), False, config[item]["included"])
+            except (ValueError, vol.Invalid) as err:
+                _LOGGER.error("Config item: %s; %s", item, err)
+                return False
+
+    elk = Elk(
+        {
+            "url": connection_url,
+            "userid": conf.get(CONF_USERNAME, ""),
+            "password": conf.get(CONF_PASSWORD, ""),
+        }
     )
+    elk.connect()
 
+    def _keypad_changed(keypad: Element, changeset: dict[str, Any]) -> None:
+        if (keypress := changeset.get("last_keypress")) is None:
+            return
+        hass.bus.async_fire(
+            EVENT_ELKM1_KEYPAD_KEY_PRESSED,
+            {
+                ATTR_KEYPAD_NAME: keypad.name,
+                ATTR_KEYPAD_ID: keypad.index + 1,
+                ATTR_KEY_NAME: keypress[0],
+                ATTR_KEY: keypress[1],
+            },
+        )
+
+    for keypad in elk.keypads:
+        keypad.add_callback(_keypad_changed)
+
+    sync_success = False
     try:
-        await coordinator.async_first_refresh()
-    except UpdateFailed as err:
-        _LOGGER.error(f"Failed to set up coordinator: {err}")
-        await coordinator.async_disconnect()
-        raise ConfigEntryNotReady(f"Failed to connect: {err}") from err
+        await ElkSyncWaiter(elk, LOGIN_TIMEOUT, SYNC_TIMEOUT).async_wait()
+        sync_success = True
+    except LoginFailed:
+        _LOGGER.error("ElkM1 login failed for %s", connection_url)
+        return False
+    except TimeoutError as exc:
+        raise ConfigEntryNotReady(f"Timed out connecting to {connection_url}") from exc
+    finally:
+        if not sync_success:
+            elk.disconnect()
 
-    hass.data.setdefault(DOMAIN, {})
-    
-    serial_port_value = entry.data.get(CONF_SERIAL_PORT)
-    
-    runtime_data = ElkRuntimeData(
-        coordinator=coordinator,
-        serial_port=serial_port_value
+    elk_temp_unit = elk.panel.temperature_units
+    if elk_temp_unit == "C":
+        temperature_unit = UnitOfTemperature.CELSIUS
+    else:
+        temperature_unit = UnitOfTemperature.FAHRENHEIT
+
+    config["temperature_unit"] = temperature_unit
+    prefix: str = conf.get(CONF_PREFIX, "")
+    auto_configure: bool = conf.get(CONF_AUTO_CONFIGURE, False)
+
+    entry.runtime_data = ELKM1Data(
+        elk=elk,
+        prefix=prefix,
+        mac=entry.unique_id,
+        auto_configure=auto_configure,
+        config=config,
+        keypads={},
     )
 
-    hass.data[DOMAIN][entry.entry_id] = runtime_data
-    entry.runtime_data = runtime_data
+    dr.async_get(hass).async_get_or_create(
+        config_entry_id=entry.entry_id,
+        **create_elk_system_device_info(elk, prefix, entry.unique_id),
+    )
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
-    if len(hass.data[DOMAIN]) == 1:
-        await async_setup_services(hass, entry)
-
-    # Register the update listener to reload the integration when options change
-    entry.async_on_unload(entry.add_update_listener(update_listener))
-
-    entry.async_on_unload(coordinator.async_shutdown)
-
-    # Register Alarmo auto-setup utility service
-    await async_setup_alarmo_auto_config(hass)
+    # ---------------------------------------------------------
+    # INJECTED ALARMO HOOK
+    # ---------------------------------------------------------
+    if async_setup_alarmo_auto_config is not None:
+        await async_setup_alarmo_auto_config(hass)
 
     return True
-    
-async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+
+
+def _included(ranges: list[tuple[int, int]], set_to: bool, values: list[bool]) -> None:
+    for rng in ranges:
+        if not rng[0] <= rng[1] <= len(values):
+            raise vol.Invalid(f"Invalid range {rng}")
+        values[rng[0] - 1 : rng[1]] = [set_to] * (rng[1] - rng[0] + 1)
+
+
+async def async_unload_entry(hass: HomeAssistant, entry: ElkM1ConfigEntry) -> bool:
     """Unload a config entry."""
-    _LOGGER.info(f"Unloading Elk-M1 entry: {entry.entry_id}")
-
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
-
-    if unload_ok:
-        coordinator = hass.data[DOMAIN][entry.entry_id].coordinator
-        await coordinator.async_disconnect()
-        hass.data[DOMAIN].pop(entry.entry_id)
-        if not hass.data[DOMAIN]:
-            hass.data.pop(DOMAIN)
-
+    # disconnect cleanly
+    entry.runtime_data.elk.disconnect()
     return unload_ok
 
 
-async def async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    """Reload config entry."""
-    await async_unload_entry(hass, entry)
-    await async_setup_entry(hass, entry)
+class LoginFailed(Exception):
+    """Raised when login to ElkM1 fails."""
 
 
-async def async_setup_services(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    """Register custom services."""
-    coordinator = entry.runtime_data.coordinator
+class ElkSyncWaiter:
+    """Wait for ElkM1 to sync."""
 
-    # --- STRICT SECURITY SERVICES (PIN REQUIRED) ---
+    def __init__(self, elk: Elk, login_timeout: int, sync_timeout: int) -> None:
+        """Initialize the sync waiter."""
+        self._elk = elk
+        self._login_timeout = login_timeout
+        self._sync_timeout = sync_timeout
+        self._loop = asyncio.get_running_loop()
+        self._sync_future: asyncio.Future[None] = self._loop.create_future()
+        self._login_future: asyncio.Future[None] = self._loop.create_future()
 
-    async def handle_bypass_zone(call: ServiceCall) -> None:
-        zone_number = call.data.get("zone_number") or call.data.get("zone")
-        code = call.data.get("code") or call.data.get("pin_code")
+    @callback
+    def _async_set_future_if_not_done(self, future: asyncio.Future[None]) -> None:
+        """Set the future result if not already done."""
+        if not future.done():
+            future.set_result(None)
 
-        if not code:
-            _LOGGER.warning("Action Rejected: User PIN code is required to bypass zone %s.", zone_number)
-            return
+    @callback
+    def _async_login_status(self, succeeded: bool) -> None:
+        """Handle login status callback."""
+        if succeeded:
+            _LOGGER.debug("ElkM1 login succeeded")
+            self._async_set_future_if_not_done(self._login_future)
+        else:
+            _LOGGER.error("ElkM1 login failed; invalid username or password")
+            self._async_set_exception_if_not_done(self._login_future, LoginFailed)
 
-        if coordinator._elk and zone_number:
-            zone_index = int(zone_number) - 1
-            _LOGGER.debug("Bypassing zone %s using user PIN", zone_number)
-            coordinator._elk.zones[zone_index].bypass(code)
+    @callback
+    def _async_set_exception_if_not_done(
+        self, future: asyncio.Future[None], exception: type[Exception]
+    ) -> None:
+        """Set an exception on the future if not already done."""
+        if not future.done():
+            future.set_exception(exception())
 
-    async def handle_unbypass_zone(call: ServiceCall) -> None:
-        zone_number = call.data.get("zone_number") or call.data.get("zone")
-        code = call.data.get("code") or call.data.get("pin_code")
-        
-        if not code:
-            _LOGGER.warning("Action Rejected: User PIN code is required to unbypass zone %s.", zone_number)
-            return
+    @callback
+    def _async_sync_complete(self) -> None:
+        """Handle sync complete callback."""
+        self._async_set_future_if_not_done(self._sync_future)
 
-        if coordinator._elk and zone_number:
-            zone_index = int(zone_number) - 1
-            coordinator._elk.zones[zone_index].bypass(code)
+    async def async_wait(self) -> None:
+        """Wait for login and sync to complete.
+        Raises LoginFailed if login fails.
+        Raises TimeoutError if login or sync times out.
+        """
+        self._elk.add_handler("login", self._async_login_status)
+        self._elk.add_handler("sync_complete", self._async_sync_complete)
 
-    async def handle_disarm(call: ServiceCall) -> None:
-        code = call.data.get("code") or call.data.get("pin_code")
-        if not code:
-            _LOGGER.warning("Action Rejected: User PIN code is required to disarm.")
-            return
-        await coordinator.send_disarm(code)
-
-    async def handle_arm_stay(call: ServiceCall) -> None:
-        code = call.data.get("code") or call.data.get("pin_code")
-        if not code:
-            _LOGGER.warning("Action Rejected: User PIN code is required to arm stay.")
-            return
-        await coordinator.send_arm_stay(code)
-
-    async def handle_arm_away(call: ServiceCall) -> None:
-        code = call.data.get("code") or call.data.get("pin_code")
-        if not code:
-            _LOGGER.warning("Action Rejected: User PIN code is required to arm away.")
-            return
-        await coordinator.send_arm_away(code)
-
-    async def handle_arm_night(call: ServiceCall) -> None:
-        code = call.data.get("code") or call.data.get("pin_code")
-        if not code:
-            _LOGGER.warning("Action Rejected: User PIN code is required to arm night.")
-            return
-        await coordinator.send_arm_night(code)
-
-    async def handle_panic(call: ServiceCall) -> None:
-        code = call.data.get("code") or call.data.get("pin_code")
-        if not code:
-            _LOGGER.warning("Action Rejected: User PIN code is required to trigger panic.")
-            return
-        await coordinator.panic_alarm(code)
-
-    async def handle_force_arm_away(call: ServiceCall) -> None:
-        area = call.data.get("area", 1)
-        code = call.data.get("code") or call.data.get("pin_code")
-        if not code:
-            _LOGGER.warning("Action Rejected: User PIN code is required to force arm.")
-            return
-        await coordinator.force_arm_away(int(area), code)
-
-    # --- NON-SECURITY SERVICES (NO PIN REQUIRED) ---
-
-    async def handle_trigger_zone(call: ServiceCall) -> None:
-        zone_number = call.data.get("zone_number") or call.data.get("zone")
-        if zone_number:
-            await coordinator.trigger_zone(int(zone_number))
-
-    async def handle_display_message(call: ServiceCall) -> None:
-        area = call.data.get("area", 1)
-        line1 = call.data.get("line1", "")
-        line2 = call.data.get("line2", "^")
-        beep = 1 if call.data.get("beep") else 0
-        timeout = call.data.get("timeout", 0)
-        # Clear option: 2 = Display until timeout
-        await coordinator.display_message(area, 2, beep, timeout, line1, line2)
-
-    async def handle_speak_phrase(call: ServiceCall) -> None:
-        phrase_number = call.data.get("phrase_number")
-        if phrase_number:
-            await coordinator.speak_phrase(int(phrase_number))
-
-    async def handle_activate_task(call: ServiceCall) -> None:
-        task_number = call.data.get("task_number")
-        if task_number:
-            await coordinator.activate_task(int(task_number))
-
-    # --- QUERY SERVICES (RETURNS DATA) ---
-    
-    async def handle_get_security_summary(call: ServiceCall) -> ServiceResponse:
-        """Handle the service call and return data to the automation/script."""
-        faulted = coordinator.data.get("zones_faulted", [])
-        active_zones = [z + 1 for z in faulted]
-        
-        return {
-            "total_faulted": len(faulted),
-            "is_ready_to_arm": len(faulted) == 0,
-            "faulted_zone_numbers": active_zones,
-        }
-
-    # Register all services
-    hass.services.async_register(DOMAIN, "bypass_zone", handle_bypass_zone)
-    hass.services.async_register(DOMAIN, "unbypass_zone", handle_unbypass_zone)
-    hass.services.async_register(DOMAIN, "disarm", handle_disarm)
-    hass.services.async_register(DOMAIN, "arm_stay", handle_arm_stay)
-    hass.services.async_register(DOMAIN, "arm_away", handle_arm_away)
-    hass.services.async_register(DOMAIN, "arm_night", handle_arm_night)
-    hass.services.async_register(DOMAIN, "panic_alarm", handle_panic)
-    hass.services.async_register(DOMAIN, "trigger_zone", handle_trigger_zone)
-    hass.services.async_register(DOMAIN, "force_arm_away", handle_force_arm_away)
-    hass.services.async_register(DOMAIN, "display_message", handle_display_message)
-    hass.services.async_register(DOMAIN, "speak_phrase", handle_speak_phrase)
-    hass.services.async_register(DOMAIN, "activate_task", handle_activate_task)
-    
-    # Register the response service specifically defining the supports_response parameter
-    hass.services.async_register(
-        DOMAIN, 
-        "get_security_summary", 
-        handle_get_security_summary,
-        supports_response=SupportsResponse.ONLY,
-    )
-
-async def update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    """Handle options update when a user changes settings in the UI."""
-    _LOGGER.info("Elk-M1 options updated, reloading integration...")
-    await hass.config_entries.async_reload(entry.entry_id)
+        try:
+            for name, future, timeout in (
+                ("login", self._login_future, self._login_timeout),
+                ("sync_complete", self._sync_future, self._sync_timeout),
+            ):
+                _LOGGER.debug("Waiting for %s event for %s seconds", name, timeout)
+                handle = self._loop.call_later(
+                    timeout, self._async_set_exception_if_not_done, future, TimeoutError
+                )
+                try:
+                    await future
+                finally:
+                    handle.cancel()
+                _LOGGER.debug("Received %s event", name)
+        finally:
+            self._elk.remove_handler("login", self._async_login_status)
+            self._elk.remove_handler("sync_complete", self._async_sync_complete)
