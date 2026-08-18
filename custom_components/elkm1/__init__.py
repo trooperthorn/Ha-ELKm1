@@ -268,8 +268,62 @@ async def async_setup_entry(hass: HomeAssistant, entry: ElkM1ConfigEntry) -> boo
             "password": conf.get(CONF_PASSWORD, ""),
         }
     )
-    elk.connect()
 
+    # ---------------------------------------------------------
+    # PLATINUM FEATURE: RAW SERIAL EVENT INTERCEPTOR
+    # ---------------------------------------------------------
+    def elk_broadcast_handler(msg: Any) -> None:
+        """Intercept broadcasts not fully mapped by elkm1_lib."""
+        raw_str = msg.get("raw", "") if isinstance(msg, dict) else str(msg)
+        if len(raw_str) < 4:
+            return
+
+        cmd = raw_str[2:4]
+
+        # Entry/Exit Timer (EE)
+        if cmd == "EE":
+            hass.bus.async_fire(
+                "elkm1_timer_event",
+                {
+                    "area": int(raw_str[4:5]),
+                    "type": "exit" if raw_str[5:6] == "0" else "entry",
+                    "timer1": int(raw_str[6:9]),
+                    "timer2": int(raw_str[9:12]),
+                    "armed_state": int(raw_str[12:13]),
+                },
+            )
+
+        # Alarm Memory (AM)
+        elif cmd == "AM":
+            hass.bus.async_fire(
+                "elkm1_alarm_memory", {"flags": raw_str[4:12]}
+            )
+
+        # Raw ASCII fallback for Voice (VN) commands
+        elif cmd == "VN":
+            try:
+                word_str = raw_str[4:22]
+                words = [int(word_str[i : i + 3]) for i in range(0, 18, 3)]
+                
+                # If you kept vocabulary.py from the AI, you can translate here:
+                # readable_message = translate_elk_voice(words)
+                
+                hass.bus.async_fire(
+                    "elkm1_voice_announcement",
+                    {
+                        "source": "elk_m1",
+                        "raw_ids": words,
+                    },
+                )
+            except ValueError:
+                pass
+
+    # Hook into elkm1_lib's fallback handler
+    elk.add_handler("unknown", elk_broadcast_handler)
+
+    # Now connect natively
+    elk.connect() 
+    
     def _keypad_changed(keypad: Element, changeset: dict[str, Any]) -> None:
         if (keypress := changeset.get("last_keypress")) is None:
             return
