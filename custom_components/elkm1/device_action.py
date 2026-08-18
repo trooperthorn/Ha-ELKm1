@@ -1,6 +1,9 @@
 # custom_components/elkm1/device_action.py
+from __future__ import annotations
+
 import voluptuous as vol
-from homeassistant.core import HomeAssistant, Context
+
+from homeassistant.core import Context, HomeAssistant
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import device_registry as dr
 
