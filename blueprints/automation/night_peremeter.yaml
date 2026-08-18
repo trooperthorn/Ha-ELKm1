@@ -1,0 +1,19 @@
+automation:
+  - alias: "Security: Good Night Perimeter Guard"
+    trigger:
+      - platform: state
+        entity_id: input_boolean.sleep_mode
+        to: "on"
+    action:
+      - service: alarm_control_panel.alarm_arm_night
+        target:
+          entity_id: alarm_control_panel.alarm_panel
+      - choose:
+          - conditions:
+              - condition: numeric_state
+                entity_id: sensor.elk_m1_open_windows
+                above: 0
+            sequence:
+              - service: elkm1.speak_phrase
+                data:
+                  phrase: "Warning. Window left open"
