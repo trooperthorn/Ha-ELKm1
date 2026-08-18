@@ -64,13 +64,6 @@ class ElkArmRequestSwitch(ElkEntity, SwitchEntity):
         self._attr_is_on = False
         self._attr_has_entity_name = True
         
-        # Binds this switch directly to the main hardware panel in the UI
-        self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, config_entry.entry_id)}, # Uses the integration ID as the glue
-            name="Elk-M1",                   # The cleaner name you wanted
-            manufacturer=MANUFACTURER,
-            model=MODEL,
-        )
 
     @property
     def is_on(self) -> bool:
