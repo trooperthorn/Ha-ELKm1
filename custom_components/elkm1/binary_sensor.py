@@ -49,14 +49,6 @@ class ElkZoneBinarySensor(ElkEntity, BinarySensorEntity):
         self._attr_device_class = self._get_device_class(definition_val)
         self._attr_name = zone.name
 
-        # Bind this binary sensor to the main Elk-M1 device
-        self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, config_entry.entry_id)}, # Uses the integration ID as the glue
-            name="Elk-M1",                   # The cleaner name you wanted
-            manufacturer=MANUFACTURER,
-            model=MODEL,
-        )
-
     @property
     def is_on(self) -> bool | None:
         """Return true if zone is open/triggered."""
