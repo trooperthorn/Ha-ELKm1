@@ -1,0 +1,84 @@
+blueprint:
+  name: "ELK-M1: Kiosk Security Event Popup (Browser-Mod)"
+  description: |
+    Automatically forces a live security popup card (camera feed or alarm panel) onto 
+    your wall-mounted HAOS-kiosk touchscreen displays when a security event or zone triggers.
+  domain: automation
+  source_url: https://github.com/trooperthorn/ha_int_elkm1/blob/main/blueprints/automation/kiosk_security_popup.yaml
+
+  input:
+    trigger_entity:
+      name: Security Trigger Entity
+      description: The binary sensor, alarm panel, or helper that forces the kiosk popup.
+      selector:
+        entity:
+          domain: 
+            - binary_sensor
+            - alarm_control_panel
+            - input_boolean
+
+    trigger_state:
+      name: Trigger State
+      description: The state that causes the popup to appear (e.g., 'on', 'triggered', 'open').
+      default: "on"
+      selector:
+        text: {}
+
+    kiosk_device:
+      name: Kiosk Browser-Mod Target Device
+      description: The Browser-Mod target device or browser ID for your wall kiosk display.
+      selector:
+        device:
+          integration: browser_mod
+
+    popup_title:
+      name: Popup Window Title
+      description: The header title displayed on the kiosk emergency popup.
+      default: "⚠️ Security Event - Live Feed"
+      selector:
+        text: {}
+
+    popup_camera:
+      name: Target Camera Entity for Popup Feed
+      description: The UniFi Protect camera entity to display inside the emergency popup.
+      selector:
+        entity:
+          domain: camera
+
+    auto_close_delay:
+      name: Auto-Close Popup Delay (seconds)
+      description: Time before the popup automatically dismisses itself (0 to disable).
+      default: 60
+      selector:
+        number:
+          min: 0
+          max: 300
+          step: 5
+
+trigger:
+  - platform: state
+    entity_id: !input trigger_entity
+    to: !input trigger_state
+
+action:
+  - action: browser-mod.popup
+    target:
+      device_id: !input kiosk_device
+    data:
+      title: !input popup_title
+      size: wide
+      auto_close: !input auto_close_delay
+      content:
+        type: vertical-stack
+        cards:
+          - type: picture-entity
+            entity: !input popup_camera
+            camera_image: !input popup_camera
+            name: Live Event Feed
+            hold_action:
+              action: more-info
+          - type: markdown
+            content: >
+              **Security Alert Active**
+              Trigger Entity: `{{ trigger.entity_id }}`
+              Time: `{{ now().strftime('%H:%M:%S') }}`
