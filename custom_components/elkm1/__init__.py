@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from elkm1_lib.elements import Element
 from elkm1_lib.elk import Elk
@@ -28,7 +28,8 @@ from homeassistant.const import (
 )
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import ConfigEntryNotReady
-from homeassistant.helpers import config_validation as cv, device_registry as dr
+from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.event import async_track_time_interval
 from homeassistant.helpers.typing import ConfigType
 from homeassistant.util.network import is_ip_address
@@ -64,14 +65,6 @@ from .entity import create_elk_system_device_info
 from .models import ELKM1Data
 from .platforms.setup_wizard import run_panel_setup_wizard
 from .services import async_setup_services
-
-# Hook for Alarmo Auto-Config
-try:
-    from .alarmo_integration import async_setup_alarmo_auto_config
-except ImportError:
-    async_setup_alarmo_auto_config = None
-
-from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     ElkM1ConfigEntry = ConfigEntry[ELKM1Data]
