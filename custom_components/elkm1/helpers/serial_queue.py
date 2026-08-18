@@ -1,4 +1,5 @@
 """Serial command queue for Elk-M1 writes."""
+
 from __future__ import annotations
 
 import asyncio
@@ -23,7 +24,9 @@ class ElkSerialQueue:
 
     async def start(self) -> None:
         """Start the queue worker."""
-        self._worker_task = asyncio.create_task(self._worker())
+        if not self._worker_task or self._worker_task.done():
+            self._worker_task = asyncio.create_task(self._worker())
+            _LOGGER.debug("ElkSerialQueue worker started.")
 
     async def stop(self) -> None:
         """Stop the queue worker."""
@@ -33,11 +36,14 @@ class ElkSerialQueue:
                 await self._worker_task
             except asyncio.CancelledError:
                 pass
+            finally:
+                self._worker_task = None
+                _LOGGER.debug("ElkSerialQueue worker stopped.")
 
     async def async_send_command(
         self, encoder_name: str, **kwargs: Any
     ) -> Any:
-        """Queue a command for sending."""
+        """Queue a command for sending with timeout handling."""
         future: asyncio.Future[Any] = asyncio.Future()
         await self._queue.put((encoder_name, kwargs, future))
 
@@ -45,11 +51,11 @@ class ElkSerialQueue:
             result = await asyncio.wait_for(future, timeout=5.0)
             return result
         except asyncio.TimeoutError:
-            _LOGGER.warning(f"Timeout sending {encoder_name}")
+            _LOGGER.warning(f"Timeout sending command encoder: {encoder_name}")
             raise
 
     async def _worker(self) -> None:
-        """Worker task that processes queue."""
+        """Worker task that processes queue sequentially with rate limiting."""
         while True:
             try:
                 encoder_name, kwargs, future = await self._queue.get()
@@ -61,15 +67,25 @@ class ElkSerialQueue:
                         raise AttributeError(f"Unknown encoder: {encoder_name}")
 
                     result = await encoder(**kwargs)
-                    future.set_result(result)
+                    
+                    # Prevent InvalidStateError if caller timed out and abandoned future
+                    if not future.done():
+                        future.set_result(result)
+                        
                 except (OSError, TimeoutError, ValueError, AttributeError) as err:
-                    future.set_exception(err)
+                    if not future.done():
+                        future.set_exception(err)
+                    else:
+                        _LOGGER.error(f"Error executing {encoder_name} (future already done): {err}")
 
-                # Rate limit: wait before processing next command
+                finally:
+                    self._queue.task_done()
+
+                # Rate limit: wait before processing next command in queue
                 await asyncio.sleep(self._interval)
 
             except asyncio.CancelledError:
                 break
             except (OSError, TimeoutError, ValueError) as err:
-                _LOGGER.error(f"Queue worker error: {err}")
+                _LOGGER.error(f"Queue worker unexpected error: {err}")
                 await asyncio.sleep(1)
