@@ -5,8 +5,9 @@ from __future__ import annotations
 from datetime import timedelta
 from typing import Any
 
-from elkm1_lib.const import Max
 import voluptuous as vol
+
+from elkm1_lib.const import Max
 
 from homeassistant.const import ATTR_CODE, CONF_ZONE
 
