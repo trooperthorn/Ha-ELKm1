@@ -161,6 +161,16 @@
       "name": "Arm Night",
       "description": "Arm the panel in night mode"
     },
+    "force_arm_away": {
+      "name": "Force Arm Away",
+      "description": "Force arm the system into away mode bypassing faulted zones",
+      "fields": {
+        "area": {
+          "name": "Area",
+          "description": "Area partition number (1-8)"
+        }
+      }
+    },
     "bypass_zone": {
       "name": "Bypass Zone",
       "description": "Bypass a zone to prevent triggering the alarm",
@@ -184,6 +194,60 @@
     "panic_alarm": {
       "name": "Panic Alarm",
       "description": "Trigger a panic alarm on the panel"
+    },
+    "speak_phrase": {
+      "name": "Speak Phrase",
+      "description": "Command the Elk-M1 panel to speak a vocabulary word or phrase ID",
+      "fields": {
+        "phrase_number": {
+          "name": "Phrase Number",
+          "description": "Vocabulary ROM ID number (0-500)"
+        }
+      }
+    },
+    "trigger_zone": {
+      "name": "Trigger Zone",
+      "description": "Trigger a virtual zone violation on the panel",
+      "fields": {
+        "zone_number": {
+          "name": "Zone Number",
+          "description": "Zone number (1-208)"
+        }
+      }
+    },
+    "display_message": {
+      "name": "Display Message",
+      "description": "Display a custom message on physical keypads",
+      "fields": {
+        "area": {
+          "name": "Area",
+          "description": "Area partition number (1-8)"
+        },
+        "clear_type": {
+          "name": "Clear Type",
+          "description": "Display/clear behavior mode (0-5)"
+        },
+        "beep": {
+          "name": "Beep",
+          "description": "Enable keypad buzzer alert"
+        },
+        "timeout": {
+          "name": "Timeout",
+          "description": "Display timeout in seconds"
+        },
+        "line1": {
+          "name": "Line 1",
+          "description": "First line text (16 chars max)"
+        },
+        "line2": {
+          "name": "Line 2",
+          "description": "Second line text (16 chars max)"
+        }
+      }
+    },
+    "get_security_summary": {
+      "name": "Get Security Summary",
+      "description": "Returns structured security readiness and faulted zone diagnostics"
     },
     "set_temperature": {
       "name": "Set Temperature",
