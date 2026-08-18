@@ -11,6 +11,11 @@ from homeassistant.core import HomeAssistant
 _LOGGER = logging.getLogger(__name__)
 
 
+def _short_mac(mac: str) -> str:
+    """Format a MAC address to a short, colon-less string."""
+    return mac.replace(":", "").replace("-", "").lower()
+
+
 async def async_discover_device(
     hass: HomeAssistant,
     entry: ConfigEntry,
