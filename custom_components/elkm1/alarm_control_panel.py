@@ -4,6 +4,8 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from elkm1_lib.const import ArmLevel
+
 from homeassistant.components.alarm_control_panel import (
     AlarmControlPanelEntity,
     AlarmControlPanelState,
@@ -103,7 +105,7 @@ class ElkAlarmControlPanel(ElkEntity, AlarmControlPanelEntity):
         return obj if isinstance(obj, int) else default
 
     @property
-    def state(self) -> str | None:
+    def alarm_state(self) -> AlarmControlPanelState | None:
         """Return state strictly mapped to HA AlarmControlPanelState."""
         if not self.coordinator.data or not self.area:
             return None
@@ -113,29 +115,29 @@ class ElkAlarmControlPanel(ElkEntity, AlarmControlPanelEntity):
         armed_status_val = self._get_enum_value(getattr(self.area, "armed_status", 0))
         arm_up_state_val = self._get_enum_value(getattr(self.area, "arm_up_state", 0))
 
-        # 1. TRIGGERED: Elk AlarmState >= 2 (0=No Alarm, 1=Entrance Delay, 2=Abort Delay, 3+=Actual Alarms)[cite: 2]
+        # 1. TRIGGERED: Elk AlarmState >= 2
         if alarm_state_val >= 2:
             return STATE_ALARM_TRIGGERED
 
-        # 2. PENDING (Entry Delay): Elk AlarmState == 1 OR Timer1 is running while Armed[cite: 2]
+        # 2. PENDING (Entry Delay): Elk AlarmState == 1 OR Timer1 is running while Armed
         if alarm_state_val == 1 or (getattr(self.area, "timer1", 0) > 0 and armed_status_val != 0):
             return AlarmControlPanelState.PENDING
 
-        # 3. ARMING (Exit Delay): Timer2 is running OR Elk ArmUpState indicates Exit Timer (3 or 5)[cite: 2]
+        # 3. ARMING (Exit Delay): Timer2 is running OR Elk ArmUpState indicates Exit Timer (3 or 5)
         if getattr(self.area, "timer2", 0) > 0 or arm_up_state_val in (3, 5):
             return AlarmControlPanelState.ARMING
 
-        # 4. ARMED_CUSTOM_BYPASS: System armed and Elk ArmUpState is 6 (Armed with Bypass)[cite: 2]
+        # 4. ARMED_CUSTOM_BYPASS: System armed and Elk ArmUpState is 6 (Armed with Bypass)
         if arm_up_state_val == 6 and armed_status_val != 0:
             return AlarmControlPanelState.ARMED_CUSTOM_BYPASS
 
-        # 5. Stable Arming Modes (Elk ArmedStatus Enum mapping)[cite: 2]
+        # 5. Stable Arming Modes (Elk ArmedStatus Enum mapping)
         if armed_status_val == 1:
             return STATE_ARMED_AWAY
         elif armed_status_val in (2, 3):
-            return STATE_ARMED_HOME       # 2 = Stay, 3 = Stay Instant[cite: 2]
+            return STATE_ARMED_HOME       # 2 = Stay, 3 = Stay Instant
         elif armed_status_val in (4, 5):
-            return STATE_ARMED_NIGHT      # 4 = Night, 5 = Night Instant[cite: 2]
+            return STATE_ARMED_NIGHT      # 4 = Night, 5 = Night Instant
         elif armed_status_val == 6:
             return AlarmControlPanelState.ARMED_VACATION
 
@@ -345,37 +347,37 @@ class ElkAlarmControlPanel(ElkEntity, AlarmControlPanelEntity):
             _LOGGER.error(f"Error disarming: {err}")
 
     async def async_alarm_arm_home(self, code: str | None = None) -> None:
-        """Send arm stay command to the area (Elk Protocol Level 2)."""
+        """Send arm stay command to the area."""
         try:
             if self.area:
-                self.area.arm(2, self._get_code_val(code))
+                self.area.arm(ArmLevel.ARMED_STAY, self._get_code_val(code))
                 _LOGGER.info("Panel armed home (stay)")
         except Exception as err:
             _LOGGER.error(f"Error arming home: {err}")
 
     async def async_alarm_arm_away(self, code: str | None = None) -> None:
-        """Send arm away command to the area (Elk Protocol Level 1)."""
+        """Send arm away command to the area."""
         try:
             if self.area:
-                self.area.arm(1, self._get_code_val(code))
+                self.area.arm(ArmLevel.ARMED_AWAY, self._get_code_val(code))
                 _LOGGER.info("Panel armed away")
         except Exception as err:
             _LOGGER.error(f"Error arming away: {err}")
 
     async def async_alarm_arm_night(self, code: str | None = None) -> None:
-        """Send arm night command to the area (Elk Protocol Level 4)."""
+        """Send arm night command to the area."""
         try:
             if self.area:
-                self.area.arm(4, self._get_code_val(code))
+                self.area.arm(ArmLevel.ARMED_NIGHT, self._get_code_val(code))
                 _LOGGER.info("Panel armed night")
         except Exception as err:
             _LOGGER.error(f"Error arming night: {err}")
 
     async def async_alarm_arm_vacation(self, code: str | None = None) -> None:
-        """Send arm vacation command to the area (Elk Protocol Level 6)."""
+        """Send arm vacation command to the area."""
         try:
             if self.area:
-                self.area.arm(6, self._get_code_val(code))
+                self.area.arm(ArmLevel.ARMED_VACATION, self._get_code_val(code))
                 _LOGGER.info("Panel armed vacation")
         except Exception as err:
             _LOGGER.error(f"Error arming vacation: {err}")
@@ -384,7 +386,7 @@ class ElkAlarmControlPanel(ElkEntity, AlarmControlPanelEntity):
         """Handle custom bypass request. (Maps to Away with Force Arm)"""
         try:
             if self.area:
-                self.area.arm(1, self._get_code_val(code))
+                self.area.arm(ArmLevel.ARMED_AWAY, self._get_code_val(code))
                 _LOGGER.info("Panel armed custom bypass mode")
         except Exception as err:
             _LOGGER.error(f"Error arming custom bypass: {err}")
