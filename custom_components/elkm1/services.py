@@ -1,9 +1,18 @@
 """Support the ElkM1 Gold and ElkM1 EZ8 alarm/integration panels."""
 
-from elkm1_lib.elk import Elk, Panel
+from __future__ import annotations
+
 import voluptuous as vol
 
-from homeassistant.core import HomeAssistant, ServiceCall, ServiceResponse, SupportsResponse, callback
+from elkm1_lib.elk import Elk, Panel
+
+from homeassistant.core import (
+    HomeAssistant,
+    ServiceCall,
+    ServiceResponse,
+    SupportsResponse,
+    callback,
+)
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import config_validation as cv
 from homeassistant.util import dt as dt_util
