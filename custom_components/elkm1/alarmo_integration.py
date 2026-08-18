@@ -122,7 +122,6 @@ Zones are automatically detected by Alarmo. No manual configuration needed!
         DOMAIN,
         "alarmo_auto_setup",
         handle_auto_setup_alarmo,
-        description="Auto-configure Alarmo with discovered ELK-M1 zones",
     )
     
     _LOGGER.info("Alarmo auto-setup service registered")
