@@ -1,0 +1,31 @@
+sequence:
+  - action: elkm1.get_security_summary
+    response_variable: security_status
+  - if:
+      - condition: template
+        value_template: "{{ security_status.is_ready_to_arm == false }}"
+    then:
+      # 1. Announce "Warning" (Elk Phrase ID 455)
+      - action: elkm1.speak_phrase
+        data:
+          number: 455
+      - delay:
+          seconds: 1
+
+      # 2. Announce "Zone" (Elk Phrase ID 471)
+      - action: elkm1.speak_phrase
+        data:
+          number: 471
+      - delay:
+          seconds: 1
+
+      # 3. Dynamically loop through and announce each faulted zone number
+      - repeat:
+          for_each: "{{ security_status.faulted_zone_numbers }}"
+          sequence:
+            - action: elkm1.speak_phrase
+              data:
+                # Maps zone numbers 1-9 to Elk vocabulary word IDs 22-30
+                number: "{{ repeat.item | int + 21 }}"
+            - delay:
+                seconds: 1
