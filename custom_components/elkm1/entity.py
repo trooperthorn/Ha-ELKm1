@@ -1,4 +1,5 @@
 """Base entity for Elk-M1 integration."""
+
 from __future__ import annotations
 
 from homeassistant.config_entries import ConfigEntry
@@ -8,6 +9,16 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN, MANUFACTURER, MODEL
 from .coordinator import ElkDataUpdateCoordinator
+
+
+def create_elk_system_device_info(config_entry: ConfigEntry) -> DeviceInfo:
+    """Create standard device info for Elk-M1 system components."""
+    return DeviceInfo(
+        identifiers={(DOMAIN, config_entry.entry_id)},
+        name="Elk-M1",
+        manufacturer=MANUFACTURER,
+        model=MODEL,
+    )
 
 
 class ElkEntity(CoordinatorEntity[ElkDataUpdateCoordinator], Entity):
@@ -27,10 +38,10 @@ class ElkEntity(CoordinatorEntity[ElkDataUpdateCoordinator], Entity):
         self.entity_key = entity_key
         self._config_entry = config_entry
 
-       # EVERY entity that inherits ElkEntity will now share this exact device
+        # EVERY entity that inherits ElkEntity will now share this exact device
         self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, config_entry.entry_id)}, # Uses the integration ID as the glue
-            name="Elk-M1",                   # The cleaner name you wanted
+            identifiers={(DOMAIN, config_entry.entry_id)},  # Uses the integration ID as the glue
+            name="Elk-M1",                    # The cleaner name you wanted
             manufacturer=MANUFACTURER,
             model=MODEL,
         )
