@@ -11,6 +11,8 @@ import voluptuous as vol
 from homeassistant.const import ATTR_CODE, CONF_ZONE
 
 DOMAIN = "elkm1"
+MANUFACTURER = "Elk Products"
+MODEL = "M1 Gold / M1EZ8"
 LOGIN_TIMEOUT = 20
 
 # Config flow keys injected for USB/Serial discovery UI
