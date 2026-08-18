@@ -1,6 +1,9 @@
 """Parse and handle system trouble status from ELK-M1."""
 
+from __future__ import annotations
+
 import logging
+from typing import Any
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -41,85 +44,91 @@ ZONE_TROUBLES = {
 }
 
 
-def parse_trouble_status(panel_object) -> list[str]:
-    """
-    Parse trouble status from panel object.
-    
+def parse_trouble_status(panel_object: Any) -> list[str]:
+    """Parse trouble status from panel object.
+
     Args:
         panel_object: Panel object from elkm1_lib
-        
+
     Returns:
         List of active trouble status strings
-        
+
     Example:
         ["AC Fail", "Lost Transmitter zone 5"]
     """
-    troubles = []
-    
+    troubles: list[str] = []
+
     try:
-        # Get trouble status from panel
-        # This depends on elkm1_lib implementation
-        if hasattr(panel_object, 'trouble_status'):
-            trouble_data = panel_object.trouble_status
-        else:
+        if not panel_object or not hasattr(panel_object, "trouble_status"):
             return []
-        
-        # Parse each trouble bit/value
+
+        trouble_data = panel_object.trouble_status
+        if trouble_data is None:
+            return []
+
+        # Handle dictionary payloads
         if isinstance(trouble_data, dict):
-            # If trouble_status is a dict with codes
             for code, is_active in trouble_data.items():
                 if is_active:
-                    trouble_name = TROUBLE_STATUSES.get(code, f"Unknown ({code})")
+                    try:
+                        code_int = int(code)
+                        trouble_name = TROUBLE_STATUSES.get(code_int, f"Unknown ({code})")
+                    except (ValueError, TypeError):
+                        trouble_name = str(code)
                     troubles.append(trouble_name)
-        elif isinstance(trouble_data, (int, list)):
-            # If it's a bitmask or list of active codes
-            if isinstance(trouble_data, int):
-                # Parse as bitmask
+
+        # Handle integer bitmask or numeric string representation
+        elif isinstance(trouble_data, (int, str)):
+            try:
+                bitmask = int(trouble_data)
                 for bit in range(32):
-                    if trouble_data & (1 << bit):
+                    if bitmask & (1 << bit):
                         trouble_name = TROUBLE_STATUSES.get(bit, f"Unknown ({bit})")
                         troubles.append(trouble_name)
-            else:
-                # Parse as list of codes
-                for code in trouble_data:
-                    trouble_name = TROUBLE_STATUSES.get(code, f"Unknown ({code})")
+            except (ValueError, TypeError):
+                pass
+
+        # Handle list, tuple, or set of active codes
+        elif isinstance(trouble_data, (list, tuple, set)):
+            for code in trouble_data:
+                try:
+                    code_int = int(code)
+                    trouble_name = TROUBLE_STATUSES.get(code_int, f"Unknown ({code})")
                     troubles.append(trouble_name)
-        
+                except (ValueError, TypeError):
+                    troubles.append(str(code))
+
         return troubles
-        
+
     except (AttributeError, KeyError, TypeError) as err:
         _LOGGER.error(f"Error parsing trouble status: {err}")
         return []
 
 
-def get_trouble_status_string(panel_object) -> str:
-    """
-    Get formatted trouble status string for display.
-    
+def get_trouble_status_string(panel_object: Any) -> str:
+    """Get formatted trouble status string for display.
+
     Args:
         panel_object: Panel object from elkm1_lib
-        
+
     Returns:
         Comma-separated string of active troubles
-        e.g., "AC Fail, Lost Transmitter zone 42"
     """
     troubles = parse_trouble_status(panel_object)
-    
+
     if not troubles:
         return "No troubles"
-    
+
     return ", ".join(troubles)
 
 
-def has_troubles(panel_object) -> bool:
+def has_troubles(panel_object: Any) -> bool:
     """Check if any troubles are active."""
-    troubles = parse_trouble_status(panel_object)
-    return len(troubles) > 0
+    return len(parse_trouble_status(panel_object)) > 0
 
 
-def get_critical_troubles(panel_object) -> list[str]:
+def get_critical_troubles(panel_object: Any) -> list[str]:
     """Get only critical trouble statuses."""
     critical = {"AC Fail", "Box Tamper", "Fire", "Security Alert"}
-    
     troubles = parse_trouble_status(panel_object)
     return [t for t in troubles if any(c in t for c in critical)]
