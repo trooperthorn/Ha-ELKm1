@@ -224,11 +224,14 @@ class ElkAlarmControlPanel(ElkEntity, AlarmControlPanelEntity):
         return None
 
     def _is_zone_open(self, zone) -> bool:
-        """Helper to match exact physical/logical logic."""
+        """Helper to match exact physical/logical logic safely."""
         if not zone:
             return False
-        logical_val = getattr(getattr(zone, "logical_status", None), "value", getattr(zone, "logical_status", 0))
-        physical_val = getattr(getattr(zone, "physical_status", None), "value", getattr(zone, "physical_status", 0))
+            
+        # Safely extract strict integers for status checks
+        logical_val = self._get_enum_value(getattr(zone, "logical_status", 0))
+        physical_val = self._get_enum_value(getattr(zone, "physical_status", 0))
+        
         return logical_val == 2 or physical_val in (1, 3)
 
     def _get_live_faulted_zones(self) -> tuple[list[int], list[str]]:
@@ -295,11 +298,14 @@ class ElkAlarmControlPanel(ElkEntity, AlarmControlPanelEntity):
             return False
 
         for zone in self.coordinator._elk.zones:
-            if (
-                zone
-                and getattr(zone, "definition", 0) in (9, 10)
-                and getattr(zone, "logical_status", 0) == 2
-            ):
+            if not zone:
+                continue
+                
+            definition = self._get_enum_value(getattr(zone, "definition", 0))
+            logical_status = self._get_enum_value(getattr(zone, "logical_status", 0))
+            
+            # Definition 9 is standard Fire Alarm, 10 is Fire w/ Verify
+            if definition in (9, 10) and logical_status == 2:
                 return True
         
         return False
