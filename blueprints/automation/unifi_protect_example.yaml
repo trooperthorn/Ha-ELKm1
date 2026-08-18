@@ -1,71 +1,164 @@
-# Example automations that bridge ELK-M1 → Unifi Protect
+blueprint:
+  name: "ELK-M1 & UniFi Protect Security Bridge"
+  description: |
+    Bridges your ELK-M1 security system zones and alarm states with UniFi Protect cameras, 
+    sirens, and mobile notifications. Handles zone recordings, armed-away automations, 
+    motion snapshots, and full lockdown triggers.
+  domain: automation
+  source_url: https://github.com/trooperthorn/ha_int_elkm1/blob/main/blueprints/automation/unifi_protect_integration.yaml
 
-automation:
-  # Trigger Unifi Protect recording when door is opened
-  - alias: Record door open on UniFi when ELK zone triggered
-    trigger:
-      platform: state
-      entity_id: binary_sensor.front_door_zone
-      to: "on"
-    action:
-      - service: camera.record
-        target:
-          entity_id: camera.front_door_doorbell
-        data:
-          duration: 30
+  input:
+    # --- Section 1: Door/Window Zone Recording ---
+    door_sensor:
+      name: Door / Window Zone Sensor
+      description: ELK-M1 binary sensor for the door or window.
+      selector:
+        entity:
+          domain: binary_sensor
+    door_camera:
+      name: Target Camera for Door Trigger
+      description: UniFi Protect camera to record when this zone trips.
+      selector:
+        entity:
+          domain: camera
+    door_record_duration:
+      name: Recording Duration (seconds)
+      default: 30
+      selector:
+        number:
+          min: 5
+          max: 300
+          step: 5
 
-  # Change Unifi Protect camera mode based on alarm state
-  - alias: Enable all cameras when alarm armed away
-    trigger:
-      platform: state
-      entity_id: alarm_control_panel.elk_m1
-      to: "armed_away"
-    action:
-      - service: switch.turn_on
+    # --- Section 2: Armed Away Camera Switching ---
+    alarm_panel:
+      name: ELK-M1 Alarm Panel
+      description: The alarm control panel entity.
+      selector:
+        entity:
+          domain: alarm_control_panel
+    away_recording_switches:
+      name: Camera Recording Switches (Armed Away)
+      description: UniFi Protect recording switches to enable when the system arms away.
+      selector:
         target:
-          entity_id:
-            - switch.front_door_camera_recording
-            - switch.side_yard_camera_recording
-            - switch.garage_camera_recording
+          entity:
+            integration: unifi_protect
+            domain: switch
 
-  # Send notification with camera snapshot on zone trigger
-  - alias: Notify on suspicious zone with camera snapshot
-    trigger:
-      platform: state
-      entity_id: binary_sensor.motion_sensor_zone
-      to: "on"
-    action:
-      - service: camera.snapshot
+    # --- Section 3: Motion Snapshot & Notification ---
+    motion_sensor:
+      name: Motion Zone Sensor
+      description: ELK-M1 motion binary sensor for snapshots and alerts.
+      selector:
+        entity:
+          domain: binary_sensor
+    motion_camera:
+      name: Snapshot Camera
+      description: Camera to capture a snapshot from when motion is detected.
+      selector:
+        entity:
+          domain: camera
+    notify_device:
+      name: Mobile Device to Notify
+      description: The mobile app notification service target (e.g., notify.mobile_app_iphone).
+      selector:
         target:
-          entity_id: camera.garage_camera
-        data:
-          filename: /config/www/motion_alert.jpg
-      - service: notify.mobile_app_iphone
-        data:
-          title: Motion Detected
-          message: "Motion detected in garage at {{ now().strftime('%H:%M:%S') }}"
-          data:
-            image: /config/www/motion_alert.jpg
+          entity:
+            domain: notify
 
-  # Trigger sirens when alarm triggered AND camera records
-  - alias: Full lockdown on alarm trigger
-    trigger:
-      platform: state
-      entity_id: alarm_control_panel.elk_m1
-      to: "triggered"
-    action:
-      - service: switch.turn_on
+    # --- Section 4: Full Lockdown ---
+    siren_switch:
+      name: Siren Relay Switch
+      description: ELK-M1 output switch wired to your siren.
+      selector:
+        entity:
+          domain: switch
+    strobe_light:
+      name: Strobe Light Entity
+      description: Strobe light or relay for visual alarms.
+      selector:
+        entity:
+          domain: light
+    lockdown_cameras:
+      name: Lockdown Cameras
+      description: Cameras to record during a full system trigger.
+      selector:
         target:
-          entity_id: switch.siren_relay
-      - service: light.turn_on
-        target:
-          entity_id: light.strobe_lights
-        data:
-          brightness: 255
-      - service: camera.record
-        target:
-          entity_id: 
-            - camera.front_door_doorbell
-            - camera.garage_camera
-        data:
-          duration: 300  # 5 minutes
+          entity:
+            domain: camera
+
+trigger:
+  - platform: state
+    entity_id: !input door_sensor
+    to: "on"
+    id: door_triggered
+
+  - platform: state
+    entity_id: !input alarm_panel
+    to: "armed_away"
+    id: alarm_armed_away
+
+  - platform: state
+    entity_id: !input motion_sensor
+    to: "on"
+    id: motion_triggered
+
+  - platform: state
+    entity_id: !input alarm_panel
+    to: "triggered"
+    id: alarm_triggered
+
+action:
+  - choose:
+      # 1. Door / Window Triggered -> Record Camera
+      - conditions:
+          - condition: trigger
+            id: door_triggered
+        sequence:
+          - action: camera.record
+            target: !input door_camera
+            data:
+              duration: !input door_record_duration
+
+      # 2. System Armed Away -> Enable Camera Recording Switches
+      - conditions:
+          - condition: trigger
+            id: alarm_armed_away
+        sequence:
+          - action: switch.turn_on
+            target: !input away_recording_switches
+
+      # 3. Motion Detected -> Take Snapshot & Send Mobile Notification
+      - conditions:
+          - condition: trigger
+            id: motion_triggered
+        sequence:
+          - action: camera.snapshot
+            target: !input motion_camera
+            data:
+              filename: /config/www/motion_alert.jpg
+          - action: !input notify_device
+            data:
+              title: "Motion Detected"
+              message: "Motion detected in security zone at {{ now().strftime('%H:%M:%S') }}"
+              data:
+                image: /config/www/motion_alert.jpg
+
+      # 4. Full Alarm Triggered -> Lockdown (Sirens, Strobes, Extended Recording)
+      - conditions:
+          - condition: trigger
+            id: alarm_triggered
+        sequence:
+          - action: switch.turn_on
+            target:
+              entity_id: !input siren_switch
+          - action: light.turn_on
+            target:
+              entity_id: !input strobe_light
+            data:
+              brightness: 255
+          - action: camera.record
+            target: !input lockdown_cameras
+            data:
+              duration: 300
