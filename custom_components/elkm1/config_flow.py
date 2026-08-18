@@ -1,20 +1,22 @@
 """Config flow for Elk-M1 Control integration."""
 
+from __future__ import annotations
+
 import glob
 import logging
 import os
 from typing import Any, Self
 
-# Python 3.11 compatibility for @override
 try:
     from typing import override
 except ImportError:
     from typing_extensions import override
 
-from elkm1_lib.discovery import ElkSystem
-from elkm1_lib.elk import Elk
 import serial.tools.list_ports
 import voluptuous as vol
+
+from elkm1_lib.discovery import ElkSystem
+from elkm1_lib.elk import Elk
 
 from homeassistant.config_entries import ConfigFlow, ConfigFlowResult
 from homeassistant.const import (
@@ -26,13 +28,11 @@ from homeassistant.const import (
     CONF_PROTOCOL,
     CONF_USERNAME,
 )
-from homeassistant.core import callback
 from homeassistant.exceptions import HomeAssistantError
-from homeassistant.helpers import config_validation as cv, device_registry as dr, selector
+from homeassistant.helpers import device_registry as dr, selector
 from homeassistant.helpers.service_info.dhcp import DhcpServiceInfo
 from homeassistant.helpers.typing import DiscoveryInfoType, VolDictType
 from homeassistant.util import slugify
-from homeassistant.util.network import is_ip_address
 
 from . import ElkSyncWaiter, hostname_from_url
 from .const import CONF_AUTO_CONFIGURE, DISCOVER_SCAN_TIMEOUT, DOMAIN, LOGIN_TIMEOUT
