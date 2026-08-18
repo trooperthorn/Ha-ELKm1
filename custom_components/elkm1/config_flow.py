@@ -4,7 +4,13 @@ import asyncio
 import glob
 import logging
 import os
-from typing import Any, Self, override
+from typing import Any, Self
+
+# Python 3.11 compatibility for @override
+try:
+    from typing import override
+except ImportError:
+    from typing_extensions import override
 
 from elkm1_lib.discovery import ElkSystem
 from elkm1_lib.elk import Elk
