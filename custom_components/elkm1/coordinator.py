@@ -256,7 +256,7 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 "tasks": tasks,
                 "thermostat": thermostat,
             }
-        except Exception as err:  # noqa: BLE001
+        except Exception as err:
             _LOGGER.exception("Error fetching coordinator data")
             raise UpdateFailed(f"Failed to fetch data: {err}") from err
 
