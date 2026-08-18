@@ -113,10 +113,10 @@ class ElkZoneGroupSensor(ElkEntity, SensorEntity):
         self._attr_has_entity_name = True
 
         self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, "elk_m1_main_panel")},
-            name="Elk-M1 Control Panel",
-            manufacturer="Elk Products",
-            model="M1 Gold",
+            identifiers={(DOMAIN, config_entry.entry_id)}, # Uses the integration ID as the glue
+            name="Elk-M1", 
+            manufacturer=MANUFACTURER,
+            model=MODEL,
         )
 
     def _is_zone_open(self, zone) -> bool:
