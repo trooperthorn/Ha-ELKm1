@@ -48,14 +48,7 @@ async def discover_elk_ports() -> dict[str, str]:
 
 
 def _get_friendly_name(port_info: Any) -> str:
-    """Get friendly name for a serial port.
-
-    Args:
-        port_info: pyserial PortInfo object
-
-    Returns:
-        Friendly string like "FTDI FT232R (ttyUSB0)" or "Unknown Device (ttyUSB0)"
-    """
+    """Get friendly name for a serial port."""
     product = port_info.product or "Unknown Device"
     device_name = port_info.name.split("/")[-1] if port_info.name else "unknown"
     return f"{product} ({device_name})"
@@ -73,46 +66,43 @@ async def probe_serial_port(port: str, timeout: float = 5.0) -> bool:
     Returns:
         True if ELK-M1 data detected, False otherwise
     """
-    from elkm1_lib import Elk
+    from .connection import ElkConnectionManager
+
+    data_received = asyncio.Event()
+
+    def _on_message(msg: str) -> None:
+        """Callback for incoming data. Any valid Elk ASCII response proves it's a panel."""
+        if len(msg) >= 4:
+            data_received.set()
+
+    url = f"serial://{port}"
+    _LOGGER.debug(f"Probing port: {url}")
+
+    connection = ElkConnectionManager(
+        connection_url=url,
+        on_message_callback=_on_message,
+        is_serial=True
+    )
 
     try:
-        url = f"serial://{port}"
-        _LOGGER.debug(f"Probing port: {url}")
-
-        config = {"url": url}
-        connection = Elk(config)
-
-        connected_event = asyncio.Event()
-
-        def on_connected(*args: Any, **kwargs: Any) -> None:
-            connected_event.set()
-
-        connection.add_handler("connected", on_connected)
-
-        # connect() is synchronous; starts background background read/write streams
-        connection.connect()
+        await connection.connect()
+        
+        # Send a 'vn' (Version Request) command to prompt the panel to speak
+        await connection.write("vn")
 
         try:
-            await asyncio.wait_for(connected_event.wait(), timeout=timeout)
-            
-            # Wait briefly for initial panel sync telemetry packet
-            await asyncio.sleep(1.5)
-
-            if getattr(connection.panel, "elkm1_version", None) or getattr(
-                connection.panel, "system_trouble_status", None
-            ):
-                _LOGGER.info(f"Port {url}: ELK-M1 data verified ✓")
-                return True
-            
-            _LOGGER.debug(f"Port {url}: Port opened, but no ELK-M1 data received.")
-            return False
+            # Wait for a response to hit our callback
+            await asyncio.wait_for(data_received.wait(), timeout=timeout)
+            _LOGGER.info(f"Port {url}: ELK-M1 data verified ✓")
+            return True
 
         except asyncio.TimeoutError:
-            _LOGGER.debug(f"Port {port}: Connection timeout (no device)")
+            _LOGGER.debug(f"Port {url}: Connection timeout (no device responded)")
             return False
-        finally:
-            connection.disconnect()
 
     except Exception as e:  # noqa: BLE001
         _LOGGER.debug(f"Port {port}: No ELK-M1 detected - {e}")
         return False
+        
+    finally:
+        await connection.disconnect()
