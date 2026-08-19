@@ -20,6 +20,7 @@ from homeassistant.const import (
     CONF_PREFIX,
     CONF_USERNAME,
     CONF_ZONE,
+    CONF_TEMPERATURE_UNIT,
     Platform,
 )
 from homeassistant.core import HomeAssistant, callback
