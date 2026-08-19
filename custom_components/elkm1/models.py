@@ -69,6 +69,7 @@ class ElkPanelData:
     lights: list[Any] = field(default_factory=list)
     counters: list[Any] = field(default_factory=list)
     settings: list[Any] = field(default_factory=list)
+    keypads: list[Any] = field(default_factory=list)
     armed: bool = False
     armed_mode: str = "disarmed"
     last_user: int | None = None

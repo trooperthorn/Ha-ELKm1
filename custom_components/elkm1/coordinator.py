@@ -18,6 +18,10 @@ from homeassistant.helpers.update_coordinator import (
 )
 
 from .const import (
+    ATTR_KEY,
+    ATTR_KEY_NAME,
+    ATTR_KEYPAD_ID,
+    ATTR_KEYPAD_NAME,
     CONF_BAUD_RATE,
     CONF_CONNECTION_TYPE,
     CONF_HOST,
@@ -29,6 +33,7 @@ from .const import (
     CONNECTION_NETWORK,
     CONNECTION_SERIAL,
     COORDINATOR_UPDATE_INTERVAL,
+    EVENT_ELKM1_KEYPAD_KEY_PRESSED,
 )
 from .helpers.transport import attach_baud_state
 from .helpers.troublestatus import parse_troubles
@@ -197,6 +202,28 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator[ElkPanelData]):
             for element in getattr(self._elk, collection_name):
                 element.add_callback(_on_change)
 
+        for keypad in self._elk.keypads:
+            keypad.add_callback(_on_change)
+            keypad.add_callback(self._handle_keypad_change)
+
+    def _handle_keypad_change(self, keypad: Any, changeset: dict[str, Any]) -> None:
+        """Fire an HA event when a keypad key is pressed (for automations)."""
+        if "last_keypress" not in changeset:
+            return
+        keypress = changeset["last_keypress"]
+        if not keypress:
+            return
+        key_name, key = keypress
+        self.hass.bus.async_fire(
+            EVENT_ELKM1_KEYPAD_KEY_PRESSED,
+            {
+                ATTR_KEYPAD_ID: keypad.index + 1,
+                ATTR_KEYPAD_NAME: keypad.name,
+                ATTR_KEY: key,
+                ATTR_KEY_NAME: key_name,
+            },
+        )
+
     def _count_broadcast(self, msg_type: str) -> Callable[..., None]:
         """Return a handler that increments this message type's seen-count."""
 
@@ -278,6 +305,7 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator[ElkPanelData]):
         lights = list(self._elk.lights)
         counters = list(self._elk.counters)
         settings = list(self._elk.settings)
+        keypads = list(self._elk.keypads)
 
         # elkm1_lib always allocates Max.AREAS.value (8) Area objects
         # regardless of how many the panel actually has configured; treat
@@ -353,6 +381,7 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator[ElkPanelData]):
             lights=lights,
             counters=counters,
             settings=settings,
+            keypads=keypads,
             armed=is_any_armed,
             armed_mode="armed" if is_any_armed else "disarmed",
             last_user=None,
