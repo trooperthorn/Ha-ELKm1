@@ -411,8 +411,11 @@ class Elkm1ConfigFlow(ConfigFlow, domain=DOMAIN):
                 try:
                     if not await probe_serial_port(port, timeout=5.0):
                         errors["base"] = "cannot_connect"
-                except (OSError, TimeoutError, ValueError) as e:
-                    _LOGGER.error(f"Error probing port: {e}")
+                except (OSError, asyncio.TimeoutError, ValueError) as e:
+                    _LOGGER.debug("Error probing serial port %s: %s", port, e)
+                    errors["base"] = "cannot_connect"
+                except Exception as e:  # noqa: BLE001
+                    _LOGGER.debug("Unexpected error probing serial port %s: %s", port, e)
                     errors["base"] = "cannot_connect"
             
             if not errors:
@@ -436,7 +439,7 @@ class Elkm1ConfigFlow(ConfigFlow, domain=DOMAIN):
             # Safely check all common integration keys for serial paths
             for key in ("serial_port", "device", "port", "path"):
                 val = entry.data.get(key) or entry.options.get(key)
-                if isinstance(val, str) and (val.startswith("/dev/") or val.startswith("COM")):
+                if isinstance(val, str) and val.startswith(("/dev/", "COM")):
                     ha_configured_ports[val] = entry.domain
                 elif isinstance(val, dict) and isinstance(val.get("path"), str):
                     ha_configured_ports[val["path"]] = entry.domain
