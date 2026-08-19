@@ -429,8 +429,8 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             raise UpdateFailed("Not connected to ELK-M1")
         try:
             return self._build_normalized_data()
-        except Exception as err:  # noqa: BLE001
-            _LOGGER.exception("Error fetching coordinator data")
+        except Exception as err:
+            _LOGGER.debug("Error fetching coordinator data: %s", err)
             raise UpdateFailed(f"Failed to fetch data: {err}") from err
 
     async def async_first_refresh(self) -> None:
@@ -548,7 +548,7 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 )
                 _LOGGER.debug("Sent Elk command via SerialQueue: %s", packet_with_crlf.strip())
                 return
-            except Exception as queue_err:
+            except Exception as queue_err:  # noqa: BLE001
                 _LOGGER.debug("SerialQueue dispatch fallback: %s", queue_err)
 
         try:
@@ -573,8 +573,8 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 return
 
             _LOGGER.error("Cannot send command: No valid stream writer found.")
-        except Exception as e:
-            _LOGGER.error("Failed to send raw Elk command: %s", e)
+        except Exception as e:  # noqa: BLE001
+            _LOGGER.debug("Failed to send raw Elk command: %s", e)
 
     def _handle_voice_message(self, *args: Any, **kwargs: Any) -> None:
         """Process incoming voice command arrays and fire a Home Assistant event."""
