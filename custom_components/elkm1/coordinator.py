@@ -26,7 +26,7 @@ from .const import (
     CONNECTION_SERIAL,
     COORDINATOR_UPDATE_INTERVAL,
 )
-from .helpers import ElkSerialQueue
+from .helpers.serial_queue import ElkSerialQueue
 from .vocabulary import translate_elk_voice
 
 _LOGGER = logging.getLogger(__name__)
