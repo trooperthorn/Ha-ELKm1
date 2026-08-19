@@ -4,20 +4,18 @@ from __future__ import annotations
 
 import voluptuous as vol
 
-from elkm1_lib.elk import Elk, Panel
-
 from homeassistant.core import (
     HomeAssistant,
     ServiceCall,
     ServiceResponse,
     SupportsResponse,
-    callback,
 )
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import config_validation as cv
 from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN
+from .coordinator import ElkDataUpdateCoordinator
 from .models import ELKM1Data
 
 SPEAK_SERVICE_SCHEMA = vol.Schema(
@@ -39,51 +37,55 @@ SECURITY_SUMMARY_SCHEMA = vol.Schema(
     }
 )
 
-def _find_elk_by_prefix(hass: HomeAssistant, prefix: str) -> Elk | None:
-    """Search all config entries for a given prefix."""
+def _find_coordinator_by_prefix(hass: HomeAssistant, prefix: str) -> ElkDataUpdateCoordinator | None:
+    """Search all config entries for a given prefix's coordinator."""
     for entry in hass.config_entries.async_entries(DOMAIN):
         if not entry.runtime_data:
             continue
         elk_data: ELKM1Data = entry.runtime_data
         if elk_data.prefix == prefix:
-            return elk_data.elk
+            return elk_data.coordinator
     return None
 
-@callback
-def _async_get_elk_panel(service: ServiceCall) -> Panel:
-    """Get the ElkM1 panel from a service call."""
+def _get_coordinator(service: ServiceCall) -> ElkDataUpdateCoordinator:
+    """Get the coordinator from a service call."""
     prefix = service.data.get("prefix", "")
-    elk = _find_elk_by_prefix(service.hass, prefix)
-    if elk is None:
-        raise HomeAssistantError(f"No ElkM1 with prefix '{prefix}' found")
-    return elk.panel
+    coordinator = _find_coordinator_by_prefix(service.hass, prefix)
+    if coordinator is None:
+        raise HomeAssistantError(f"No ElkM1 coordinator with prefix '{prefix}' found")
+    return coordinator
 
-@callback
-def _speak_word_service(service: ServiceCall) -> None:
-    _async_get_elk_panel(service).speak_word(service.data["number"])
+async def _async_speak_word_service(service: ServiceCall) -> None:
+    """Send the speak word (sw) raw command."""
+    coordinator = _get_coordinator(service)
+    number = service.data["number"]
+    await coordinator.send_raw_elk_command(f"sw{number:03d}")
 
-@callback
-def _speak_phrase_service(service: ServiceCall) -> None:
-    _async_get_elk_panel(service).speak_phrase(service.data["number"])
+async def _async_speak_phrase_service(service: ServiceCall) -> None:
+    """Send the speak phrase (sp) raw command."""
+    coordinator = _get_coordinator(service)
+    number = service.data["number"]
+    await coordinator.send_raw_elk_command(f"sp{number:03d}")
 
-@callback
-def _set_time_service(service: ServiceCall) -> None:
-    _async_get_elk_panel(service).set_time(dt_util.now())
+async def _async_set_time_service(service: ServiceCall) -> None:
+    """Send the change system clock (cs) raw command."""
+    coordinator = _get_coordinator(service)
+    now = dt_util.now()
+    # Elk ASCII 'cs' format: csYYMMDDHHmmD (D = Day of week 1-7, where Sun=1, Mon=2...)
+    # Python isoweekday() is Mon=1, Sun=7.
+    dow = (now.isoweekday() % 7) + 1
+    cmd = f"cs{now.strftime('%y%m%d%H%M')}{dow}"
+    await coordinator.send_raw_elk_command(cmd)
 
-@callback
-def _get_security_summary(service: ServiceCall) -> ServiceResponse:
+async def _async_get_security_summary(service: ServiceCall) -> ServiceResponse:
     """Return live security data to an automation or script."""
-    prefix = service.data.get("prefix", "")
-    elk = _find_elk_by_prefix(service.hass, prefix)
-    if elk is None:
-        raise HomeAssistantError(f"No ElkM1 with prefix '{prefix}' found")
+    coordinator = _get_coordinator(service)
     
-    faulted_zones = []
-    # Definition 2 corresponds to Burglar/Perimeter, 1 corresponds to Burglar/Entry
-    # Logical status 2 is Violated/Open
-    for zone in elk.zones:
-        if zone and hasattr(zone, "logical_status") and zone.logical_status.value == 2:
-            faulted_zones.append(zone.index + 1)
+    # Read instantly from our normalized coordinator data
+    faulted_indices = coordinator.data.get("zones_faulted", []) if coordinator.data else []
+    
+    # Elk zones are 1-indexed for the user, indices are 0-indexed
+    faulted_zones = [idx + 1 for idx in faulted_indices]
 
     return {
         "total_faulted": len(faulted_zones),
@@ -91,22 +93,21 @@ def _get_security_summary(service: ServiceCall) -> ServiceResponse:
         "faulted_zone_numbers": faulted_zones,
     }
 
-@callback
-def async_setup_services(hass: HomeAssistant) -> None:
+async def async_setup_services(hass: HomeAssistant) -> None:
     """Create ElkM1 services."""
     hass.services.async_register(
-        DOMAIN, "speak_word", _speak_word_service, SPEAK_SERVICE_SCHEMA
+        DOMAIN, "speak_word", _async_speak_word_service, SPEAK_SERVICE_SCHEMA
     )
     hass.services.async_register(
-        DOMAIN, "speak_phrase", _speak_phrase_service, SPEAK_SERVICE_SCHEMA
+        DOMAIN, "speak_phrase", _async_speak_phrase_service, SPEAK_SERVICE_SCHEMA
     )
     hass.services.async_register(
-        DOMAIN, "set_time", _set_time_service, SET_TIME_SERVICE_SCHEMA
+        DOMAIN, "set_time", _async_set_time_service, SET_TIME_SERVICE_SCHEMA
     )
     hass.services.async_register(
         DOMAIN, 
         "get_security_summary", 
-        _get_security_summary, 
+        _async_get_security_summary, 
         SECURITY_SUMMARY_SCHEMA,
         supports_response=SupportsResponse.ONLY
     )
