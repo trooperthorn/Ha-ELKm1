@@ -14,7 +14,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .coordinator import ElkDataUpdateCoordinator
-from .data import ElkRuntimeData
+from .data import ElkM1Data
 from .entity import ElkEntity
 
 _LOGGER = logging.getLogger(__name__)
