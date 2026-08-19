@@ -50,7 +50,7 @@ from .discovery import (
 )
 from .entity import create_elk_system_device_info
 from .models import ELKM1Data
-from .panel_settings import verify_panel_configuration
+from .helpers.panel_settings import verify_panel_configuration
 from .services import async_setup_services
 
 if TYPE_CHECKING:
