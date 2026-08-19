@@ -6,10 +6,8 @@ from dataclasses import dataclass
 from typing import Any
 
 from .coordinator import ElkDataUpdateCoordinator
-from .helpers.connection import ElkConnectionManager
 
-
-@dataclass(slots=True)
+@dataclass
 class ELKM1Data:
     """Data class for Elk-M1 runtime data storage in Home Assistant config entries."""
 
@@ -18,4 +16,4 @@ class ELKM1Data:
     auto_configure: bool
     config: dict[str, Any]
     coordinator: ElkDataUpdateCoordinator
-    connection: ElkConnectionManager
+    connection: Any | None = None
