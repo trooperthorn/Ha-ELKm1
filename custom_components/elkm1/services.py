@@ -16,7 +16,7 @@ from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN
 from .coordinator import ElkDataUpdateCoordinator
-from .models import ELKM1Data
+from .models import ElkRuntimeData
 
 SPEAK_SERVICE_SCHEMA = vol.Schema(
     {
