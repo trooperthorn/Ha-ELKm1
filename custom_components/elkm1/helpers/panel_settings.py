@@ -18,10 +18,6 @@ REQUIRED_SETTINGS = [
     "Transmit Keypad Changes (G40)",
 ]
 
-async def enable_required_settings(*args: Any, **kwargs: Any) -> bool:
-    """Compatibility stub for enabling required global settings."""
-    _LOGGER.info("ELK-M1 panel settings verification check completed via setup wizard.")
-    return True
 
 async def enable_required_settings(*args: Any, **kwargs: Any) -> bool:
     """Compatibility stub for enabling required global settings."""
