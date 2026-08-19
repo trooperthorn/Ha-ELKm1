@@ -20,10 +20,7 @@ REQUIRED_SETTINGS = [
 
 
 async def enable_required_settings(*args: Any, **kwargs: Any) -> bool:
-    """Compatibility stub for enabling required global settings.
-    
-    Note: Real-time options are managed via ElkRP software as noted in startup logs.
-    """
+    """Compatibility stub for enabling required global settings."""
     _LOGGER.info("ELK-M1 panel settings verification check completed via setup wizard.")
     return True
 
