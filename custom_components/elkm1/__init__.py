@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import asyncio
+# 1. CLEAN UP IMPORTS (Remove asyncio, UnitOfTemperature, DISCOVERY constants, etc.)
 import logging
 import re
 from typing import TYPE_CHECKING, Any
@@ -18,17 +18,14 @@ from homeassistant.const import (
     CONF_INCLUDE,
     CONF_PASSWORD,
     CONF_PREFIX,
-    CONF_TEMPERATURE_UNIT,
     CONF_USERNAME,
     CONF_ZONE,
     Platform,
-    UnitOfTemperature,
 )
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import device_registry as dr
-from homeassistant.helpers.event import async_track_time_interval
 from homeassistant.helpers.typing import ConfigType
 from homeassistant.util.network import is_ip_address
 
@@ -43,27 +40,18 @@ from .const import (
     CONF_SETTING,
     CONF_TASK,
     CONF_THERMOSTAT,
-    DISCOVER_SCAN_TIMEOUT,
-    DISCOVERY_INTERVAL,
     DOMAIN,
     ELK_ELEMENTS,
 )
 from .coordinator import ElkDataUpdateCoordinator
 from .discovery import (
-    _short_mac,
     async_discover_device,
-    async_discover_devices,
     async_update_entry_from_discovery,
 )
 from .entity import create_elk_system_device_info
 from .models import ELKM1Data
 from .platforms.setup_wizard import run_panel_setup_wizard
 from .services import async_setup_services
-
-if TYPE_CHECKING:
-    ElkM1ConfigEntry = ConfigEntry[ELKM1Data]
-else:
-    ElkM1ConfigEntry = ConfigEntry
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -166,16 +154,6 @@ async def async_setup(hass: HomeAssistant, hass_config: ConfigType) -> bool:
     """Set up the Elk M1 platform."""
     async_setup_services(hass)
 
-    async def _async_discovery(*_: Any) -> None:
-        async_trigger_discovery(
-            hass, await async_discover_devices(hass, entry=None)
-        )
-
-    hass.async_create_background_task(_async_discovery(), "elkm1 setup discovery")
-    async_track_time_interval(
-        hass, _async_discovery, DISCOVERY_INTERVAL, cancel_on_shutdown=True
-    )
-
     if DOMAIN not in hass_config:
         return True
 
@@ -223,9 +201,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ElkM1ConfigEntry) -> boo
     host = hostname_from_url(connection_url)
     _LOGGER.info(f"Setting up elkm1 at {connection_url}")
 
-    if (not entry.unique_id or ":" not in entry.unique_id) and is_ip_address(host):
-        if device := await async_discover_device(hass, entry, "network", 0):
-            await async_update_entry_from_discovery(hass, entry, device)
+    if (not entry.unique_id or ":" not in entry.unique_id) and is_ip_address(host) and (device := await async_discover_device(hass, entry, "network", 0)):
+        await async_update_entry_from_discovery(hass, entry, device)
 
     # Initialize the new Coordinator
     coordinator = ElkDataUpdateCoordinator(hass, dict(conf))
