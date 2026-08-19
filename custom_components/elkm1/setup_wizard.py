@@ -7,8 +7,8 @@ from typing import Any
 
 from elkm1_lib import Elk
 
-from ..const import CONNECTION_SERIAL
-from ..helpers import (
+from .const import CONNECTION_SERIAL
+from .helpers import (
     check_panel_version,
     check_required_settings,
     enable_required_settings,
