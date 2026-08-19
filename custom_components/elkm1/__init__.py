@@ -53,6 +53,11 @@ from .models import ELKM1Data
 from .platforms.setup_wizard import run_panel_setup_wizard
 from .services import async_setup_services
 
+if TYPE_CHECKING:
+    ElkM1ConfigEntry = ConfigEntry[ELKM1Data]
+else:
+    ElkM1ConfigEntry = ConfigEntry
+
 _LOGGER = logging.getLogger(__name__)
 
 PLATFORMS = [
