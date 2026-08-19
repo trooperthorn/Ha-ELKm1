@@ -107,12 +107,19 @@ async def async_setup_entry(hass: HomeAssistant, entry: ElkM1ConfigEntry) -> boo
             f"Timed out or failed connecting to {connection_url}"
         ) from err
 
-    # Verify panel version and log required global settings reminders;
-    # non-fatal, setup should still succeed if this check itself errors.
-    try:
-        await verify_panel_configuration(coordinator)
-    except Exception as err:  # noqa: BLE001
-        _LOGGER.warning("Panel verification encountered non-fatal error: %s", err)
+    # Verify panel version and log required global settings reminders.
+    # Runs in the background, not awaited here: it waits several seconds
+    # to give broadcast-based settings a chance to prove themselves, and
+    # is purely diagnostic - entity setup shouldn't wait on it.
+    async def _background_verify() -> None:
+        try:
+            await verify_panel_configuration(coordinator)
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.warning("Panel verification encountered non-fatal error: %s", err)
+
+    entry.async_create_background_task(
+        hass, _background_verify(), "elkm1_panel_verification"
+    )
 
     prefix: str = conf.get(CONF_PREFIX, "")
     auto_configure: bool = conf.get(CONF_AUTO_CONFIGURE, False)

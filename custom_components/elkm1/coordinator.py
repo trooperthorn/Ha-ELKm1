@@ -77,7 +77,19 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator[ElkPanelData]):
         self._on_baud_detected = on_baud_detected
         self._url = self._build_connection_url()
         self._raw_trouble_status = ""
+        # Counts of unsolicited broadcasts seen per message type since
+        # connecting, used by helpers/panel_settings.py to empirically infer
+        # whether the panel's Global Programming "Xmit ... Changes" settings
+        # are enabled - the protocol has no direct way to read those bits.
+        self._broadcast_counts: dict[str, int] = dict.fromkeys(
+            ("ZC", "CC", "TC", "PC", "KC", "LD"), 0
+        )
         self.data = ElkPanelData()
+
+    @property
+    def broadcast_counts(self) -> dict[str, int]:
+        """Return counts of unsolicited broadcasts seen per message type."""
+        return dict(self._broadcast_counts)
 
     @property
     def connected(self) -> bool:
@@ -144,6 +156,8 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator[ElkPanelData]):
         elk.add_handler("AM", self._handle_alarm_memory)
         elk.add_handler("SS", self._handle_trouble_status)
         elk.add_handler("ZD", self._handle_zone_definitions)
+        for msg_type in self._broadcast_counts:
+            elk.add_handler(msg_type, self._count_broadcast(msg_type))
         if elk.panel is not None:
             elk.panel.add_callback(self._handle_voice_message)
 
@@ -182,6 +196,14 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator[ElkPanelData]):
         ):
             for element in getattr(self._elk, collection_name):
                 element.add_callback(_on_change)
+
+    def _count_broadcast(self, msg_type: str) -> Callable[..., None]:
+        """Return a handler that increments this message type's seen-count."""
+
+        def _handler(**_kwargs: Any) -> None:
+            self._broadcast_counts[msg_type] += 1
+
+        return _handler
 
     def _handle_timer_event(
         self, area: int, is_exit: bool, timer1: int, timer2: int, armed_status: Any
