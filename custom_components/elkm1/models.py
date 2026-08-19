@@ -8,7 +8,7 @@ from typing import Any
 from .coordinator import ElkDataUpdateCoordinator
 
 @dataclass
-class ELKM1Data:
+class ElkRuntimeData:
     """Data class for Elk-M1 runtime data storage in Home Assistant config entries."""
 
     prefix: str
