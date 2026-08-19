@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import Any, override
 
 from homeassistant.components.binary_sensor import (
     BinarySensorDeviceClass,
@@ -101,10 +101,13 @@ class ElkBinarySensor(ElkEntity, BinarySensorEntity):
         super().__init__(coordinator, config_entry, f"binary_sensor_zone_{zone_num}")
         self._zone_index = zone_index
         self._attr_unique_id = f"{config_entry.entry_id}_zone_{zone_num}"
-        
-        # Initial name setup
+
+    @property
+    @override
+    def name(self) -> str | None:
+        """Return the panel-configured name, which may arrive after entity creation."""
         zone_obj = self.zone_data
-        self._attr_name = getattr(zone_obj, "name", f"Zone {zone_num}") if zone_obj else f"Zone {zone_num}"
+        return zone_obj.name if zone_obj else f"Zone {self._zone_index + 1}"
 
     @property
     def zone_data(self) -> Any:

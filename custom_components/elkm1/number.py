@@ -77,13 +77,18 @@ class ElkCounter(ElkEntity, NumberEntity):
         super().__init__(coordinator, config_entry, f"counter_{index + 1}")
         self._index = index
         self._attr_unique_id = f"{config_entry.entry_id}_counter_{index + 1}"
-        obj = self._get_obj()
-        self._attr_name = getattr(obj, "name", f"Counter {index + 1}") if obj else None
 
     def _get_obj(self) -> Any:
         if self.coordinator.data and self._index < len(self.coordinator.data.counters):
             return self.coordinator.data.counters[self._index]
         return None
+
+    @property
+    @override
+    def name(self) -> str | None:
+        """Return the panel-configured name, which may arrive after entity creation."""
+        obj = self._get_obj()
+        return obj.name if obj else f"Counter {self._index + 1}"
 
     @property
     @override
@@ -113,13 +118,18 @@ class ElkCustomValue(ElkEntity, NumberEntity):
         super().__init__(coordinator, config_entry, f"custom_value_{index + 1}")
         self._index = index
         self._attr_unique_id = f"{config_entry.entry_id}_custom_value_{index + 1}"
-        obj = self._get_obj()
-        self._attr_name = getattr(obj, "name", f"Custom Value {index + 1}") if obj else None
 
     def _get_obj(self) -> Any:
         if self.coordinator.data and self._index < len(self.coordinator.data.settings):
             return self.coordinator.data.settings[self._index]
         return None
+
+    @property
+    @override
+    def name(self) -> str | None:
+        """Return the panel-configured name, which may arrive after entity creation."""
+        obj = self._get_obj()
+        return obj.name if obj else f"Custom Value {self._index + 1}"
 
     @property
     @override

@@ -51,13 +51,18 @@ class ElkTask(ElkEntity, Scene):
         super().__init__(coordinator, config_entry, f"task_{index + 1}")
         self._index = index
         self._attr_unique_id = f"{config_entry.entry_id}_task_{index + 1}"
-        obj = self._get_obj()
-        self._attr_name = getattr(obj, "name", f"Task {index + 1}") if obj else None
 
     def _get_obj(self) -> Any:
         if self.coordinator.data and self._index < len(self.coordinator.data.tasks):
             return self.coordinator.data.tasks[self._index]
         return None
+
+    @property
+    @override
+    def name(self) -> str | None:
+        """Return the panel-configured name, which may arrive after entity creation."""
+        obj = self._get_obj()
+        return obj.name if obj else f"Task {self._index + 1}"
 
     @override
     async def async_activate(self, **kwargs: Any) -> None:

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import Any, override
 
 from homeassistant.components.sensor import (
     SensorDeviceClass,
@@ -167,8 +167,12 @@ class ElkZone(ElkSensor):
         self._attr_unique_id = f"{config_entry.entry_id}_sensor_zone_{index+1}"
         self._temperature_unit = "°F"
 
+    @property
+    @override
+    def name(self) -> str | None:
+        """Return the panel-configured name, which may arrive after entity creation."""
         obj = self._get_obj()
-        self._attr_name = getattr(obj, "name", f"Zone {index+1}") if obj else f"Zone {index+1}"
+        return obj.name if obj else f"Zone {self._index + 1}"
 
     def _get_obj(self) -> Any:
         if self.coordinator.data and self._index < len(self.coordinator.data.zones):

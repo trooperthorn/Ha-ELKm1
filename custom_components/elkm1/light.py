@@ -53,13 +53,18 @@ class ElkPlcLight(ElkEntity, LightEntity):
         super().__init__(coordinator, config_entry, f"light_{index + 1}")
         self._index = index
         self._attr_unique_id = f"{config_entry.entry_id}_light_{index + 1}"
-        obj = self._get_obj()
-        self._attr_name = getattr(obj, "name", f"Light {index + 1}") if obj else None
 
     def _get_obj(self) -> Any:
         if self.coordinator.data and self._index < len(self.coordinator.data.lights):
             return self.coordinator.data.lights[self._index]
         return None
+
+    @property
+    @override
+    def name(self) -> str | None:
+        """Return the panel-configured name, which may arrive after entity creation."""
+        obj = self._get_obj()
+        return obj.name if obj else f"Light {self._index + 1}"
 
     @property
     @override

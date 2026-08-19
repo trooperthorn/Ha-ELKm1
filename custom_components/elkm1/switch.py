@@ -135,9 +135,13 @@ class ElkOutput(ElkEntity, SwitchEntity):
         super().__init__(coordinator, config_entry, f"output_{index+1}")
         self._index = index
         self._attr_unique_id = f"{config_entry.entry_id}_output_{index+1}"
-        
-        output_obj = self._get_obj()
-        self._attr_name = getattr(output_obj, "name", f"Output {index+1}") if output_obj else f"Output {index+1}"
+
+    @property
+    @override
+    def name(self) -> str | None:
+        """Return the panel-configured name, which may arrive after entity creation."""
+        obj = self._get_obj()
+        return obj.name if obj else f"Output {self._index + 1}"
 
     def _get_obj(self) -> Any:
         if self.coordinator.data and self._index < len(self.coordinator.data.outputs):
@@ -177,15 +181,19 @@ class ElkThermostatEMHeat(ElkEntity, SwitchEntity):
         super().__init__(coordinator, config_entry, f"thermostat_{index+1}_emheat")
         self._index = index
         self._attr_unique_id = f"{config_entry.entry_id}_thermostat_{index+1}_emheat"
-        
-        tstat_obj = self._get_obj()
-        base_name = getattr(tstat_obj, "name", f"Thermostat {index+1}") if tstat_obj else f"Thermostat {index+1}"
-        self._attr_name = f"{base_name} Emergency Heat"
 
     def _get_obj(self) -> Any:
         if self.coordinator.data and self._index < len(self.coordinator.data.thermostats):
             return self.coordinator.data.thermostats[self._index]
         return None
+
+    @property
+    @override
+    def name(self) -> str | None:
+        """Return the panel-configured name (may arrive after entity creation), suffixed."""
+        obj = self._get_obj()
+        base_name = obj.name if obj else f"Thermostat {self._index + 1}"
+        return f"{base_name} Emergency Heat"
 
     @property
     @override
@@ -239,14 +247,19 @@ class ElkZoneBypassSwitch(ElkEntity, SwitchEntity):
         super().__init__(coordinator, config_entry, f"zone_{index + 1}_bypass")
         self._index = index
         self._attr_unique_id = f"{config_entry.entry_id}_zone_{index + 1}_bypass"
-        obj = self._get_obj()
-        base_name = getattr(obj, "name", f"Zone {index + 1}") if obj else f"Zone {index + 1}"
-        self._attr_name = f"{base_name} Bypass"
 
     def _get_obj(self) -> Any:
         if self.coordinator.data and self._index < len(self.coordinator.data.zones):
             return self.coordinator.data.zones[self._index]
         return None
+
+    @property
+    @override
+    def name(self) -> str | None:
+        """Return the panel-configured name (may arrive after entity creation), suffixed."""
+        obj = self._get_obj()
+        base_name = obj.name if obj else f"Zone {self._index + 1}"
+        return f"{base_name} Bypass"
 
     @staticmethod
     def _enum_value(obj: Any, default: int = 0) -> int:
