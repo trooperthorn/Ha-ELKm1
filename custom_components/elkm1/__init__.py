@@ -216,7 +216,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ElkM1ConfigEntry) -> boo
     # Run the setup wizard to verify panel version and configure global settings if serial
     try:
         await run_panel_setup_wizard(coordinator, connection_type)
-    except Exception as err:
+    except Exception as err:  # noqa: BLE001
         _LOGGER.warning(f"Setup wizard encountered non-fatal error: {err}")
 
     # Build the runtime data matching our new models.py
