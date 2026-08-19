@@ -50,7 +50,7 @@ from .discovery import (
 )
 from .entity import create_elk_system_device_info
 from .models import ELKM1Data
-from .platforms.setup_wizard import run_panel_setup_wizard
+from .panel_settings import verify_panel_configuration
 from .services import async_setup_services
 
 if TYPE_CHECKING:
@@ -219,10 +219,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ElkM1ConfigEntry) -> boo
         raise ConfigEntryNotReady(f"Timed out or failed connecting to {connection_url}") from exc
 
     # Run the setup wizard to verify panel version and configure global settings if serial
+    # Verify panel version and log required global settings reminders
     try:
-        await run_panel_setup_wizard(coordinator, connection_type)
+        await verify_panel_configuration(coordinator)
     except Exception as err:  # noqa: BLE001
-        _LOGGER.warning(f"Setup wizard encountered non-fatal error: {err}")
+        _LOGGER.warning(f"Panel verification encountered non-fatal error: {err}")
 
     # Build the runtime data matching our new models.py
     prefix: str = conf.get(CONF_PREFIX, "")
