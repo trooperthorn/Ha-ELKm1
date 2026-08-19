@@ -16,7 +16,6 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from .coordinator import ElkDataUpdateCoordinator
 from .data import ELKM1Data
 from .entity import ElkEntity
-from .models import ElkRuntimeData
 
 # Safe imports for optional alarm panel features/formats across HA versions
 try:
