@@ -2,86 +2,151 @@
 
 from __future__ import annotations
 
-from typing import Any, override
-
-from elkm1_lib.const import ZoneLogicalStatus, ZoneType
-from elkm1_lib.elements import Element
-from elkm1_lib.zones import Zone
+import logging
+from typing import Any
 
 from homeassistant.components.binary_sensor import (
     BinarySensorDeviceClass,
     BinarySensorEntity,
 )
+from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from . import ElkM1ConfigEntry
-from .entity import ElkAttachedEntity, ElkEntity
+from .coordinator import ElkDataUpdateCoordinator
+from .data import ElkRuntimeData
+from .entity import ElkEntity
 
-# Map ELK ZoneType strict enums to Home Assistant Device Classes
-_DEVICE_CLASS_MAP: dict[ZoneType, BinarySensorDeviceClass] = {
-    ZoneType.BURGLAR_ENTRY_EXIT_1: BinarySensorDeviceClass.DOOR,
-    ZoneType.BURGLAR_ENTRY_EXIT_2: BinarySensorDeviceClass.DOOR,
-    ZoneType.BURGLAR_PERIMETER_INSTANT: BinarySensorDeviceClass.WINDOW,
-    ZoneType.BURGLAR_INTERIOR: BinarySensorDeviceClass.MOTION,
-    ZoneType.BURGLAR_INTERIOR_FOLLOWER: BinarySensorDeviceClass.MOTION,
-    ZoneType.BURGLAR_INTERIOR_NIGHT: BinarySensorDeviceClass.MOTION,
-    ZoneType.BURGLAR_INTERIOR_NIGHT_DELAY: BinarySensorDeviceClass.MOTION,
-    ZoneType.FIRE_ALARM: BinarySensorDeviceClass.SMOKE,
-    ZoneType.FIRE_VERIFIED: BinarySensorDeviceClass.SMOKE,
-    ZoneType.CARBON_MONOXIDE: BinarySensorDeviceClass.CO,
-    ZoneType.FREEZE: BinarySensorDeviceClass.COLD,
-    ZoneType.GAS: BinarySensorDeviceClass.GAS,
-    ZoneType.HEAT: BinarySensorDeviceClass.HEAT,
-    ZoneType.WATER: BinarySensorDeviceClass.MOISTURE,
+_LOGGER = logging.getLogger(__name__)
+
+# Map raw ELK integer definitions to Home Assistant Device Classes
+# 1-2: Entry/Exit, 3: Window, 4-7: Motion, 10-11: Fire, 17: CO, 19: Freeze, 20: Gas, 21: Heat, 25: Water
+_DEVICE_CLASS_MAP: dict[int, BinarySensorDeviceClass] = {
+    1: BinarySensorDeviceClass.DOOR,
+    2: BinarySensorDeviceClass.DOOR,
+    3: BinarySensorDeviceClass.WINDOW,
+    4: BinarySensorDeviceClass.MOTION,
+    5: BinarySensorDeviceClass.MOTION,
+    6: BinarySensorDeviceClass.MOTION,
+    7: BinarySensorDeviceClass.MOTION,
+    10: BinarySensorDeviceClass.SMOKE,
+    11: BinarySensorDeviceClass.SMOKE,
+    17: BinarySensorDeviceClass.CO,
+    19: BinarySensorDeviceClass.COLD,
+    20: BinarySensorDeviceClass.GAS,
+    21: BinarySensorDeviceClass.HEAT,
+    25: BinarySensorDeviceClass.MOISTURE,
 }
-
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    config_entry: ElkM1ConfigEntry,
-    async_add_entities: AddConfigEntryEntitiesCallback,
+    config_entry: ConfigEntry,
+    async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Create the Elk-M1 sensor platform."""
-    elk_data = config_entry.runtime_data
-    elk = elk_data.elk
-    auto_configure = elk_data.auto_configure
+    """Create the Elk-M1 binary sensor platform."""
+    runtime_data: ElkRuntimeData = config_entry.runtime_data
+    coordinator = runtime_data.coordinator
 
-    entities: list[ElkEntity] = []
-    for element in elk.zones:
-        # Don't create binary sensors for zones that are analog/temperature
-        # Those are handled natively by sensor.py
-        if element.definition in {ZoneType.TEMPERATURE, ZoneType.ANALOG_ZONE}:
+    entities = []
+    zones = coordinator.data.get("zones", []) if coordinator.data else []
+
+    for index, zone in enumerate(zones):
+        if not zone:
             continue
             
-        # Respect the user's inclusion/exclusion configuration
-        if auto_configure:
-            if not element.configured:
-                continue
-        elif not elk_data.config["zone"]["included"][element.index]:
-            continue
+        # Safely extract the zone definition (integer representation)
+        def_val = 0
+        if hasattr(zone, "definition"):
+            def_obj = zone.definition
+            def_val = int(def_obj.value) if hasattr(def_obj, "value") else int(def_obj)
 
-        entities.append(ElkBinarySensor(element, elk, elk_data))
+        # Skip 33 (TEMPERATURE) and 34 (ANALOG_ZONE) - these are handled natively in sensor.py
+        if def_val in (33, 34):
+            continue
+            
+        # Create the Binary Sensor entity
+        entities.append(
+            ElkBinarySensor(
+                coordinator=coordinator,
+                config_entry=config_entry,
+                zone_index=index,
+            )
+        )
 
     async_add_entities(entities)
 
 
-class ElkBinarySensor(ElkAttachedEntity, BinarySensorEntity):
+class ElkBinarySensor(ElkEntity, BinarySensorEntity):
     """Representation of ElkM1 binary sensor."""
 
-    _element: Zone
     _attr_entity_registry_enabled_default = True
 
-    @property
-    @override
-    def device_class(self) -> BinarySensorDeviceClass | None:
-        """Return the device class of this sensor."""
-        return _DEVICE_CLASS_MAP.get(self._element.definition)
+    def __init__(
+        self,
+        coordinator: ElkDataUpdateCoordinator,
+        config_entry: ConfigEntry,
+        zone_index: int,
+    ) -> None:
+        """Initialize the binary sensor."""
+        zone_num = zone_index + 1
+        super().__init__(coordinator, config_entry, f"binary_sensor_zone_{zone_num}")
+        self._zone_index = zone_index
+        self._attr_unique_id = f"{config_entry.entry_id}_zone_{zone_num}"
+        
+        # Initial name setup
+        zone_obj = self.zone_data
+        self._attr_name = getattr(zone_obj, "name", f"Zone {zone_num}") if zone_obj else f"Zone {zone_num}"
 
-    @override
-    def _element_changed(self, element: Element, changeset: dict[str, Any]) -> None:
-        """Handle hardware interrupt state changes instantly."""
-        # Zone in NORMAL state is OFF; any other state (Violated, Bypassed, Short) is ON
-        self._attr_is_on = bool(
-            self._element.logical_status is not ZoneLogicalStatus.NORMAL
-        )
+    @property
+    def zone_data(self) -> Any:
+        """Helper to get the specific zone object from the coordinator data."""
+        if self.coordinator.data and "zones" in self.coordinator.data:
+            zones = self.coordinator.data["zones"]
+            if self._zone_index < len(zones):
+                return zones[self._zone_index]
+        return None
+
+    def _get_enum_value(self, obj: Any, default: int = 0) -> int:
+        """Safely extract the raw integer value from elkm1_lib Enum objects or raw dicts."""
+        if hasattr(obj, "value"):
+            return int(obj.value)
+        if isinstance(obj, str):
+            return int(obj) if obj.isdigit() else default
+        return int(obj) if isinstance(obj, (int, float)) else default
+
+    @property
+    def is_on(self) -> bool:
+        """Return true if the binary sensor is on (violating, bypassed, short)."""
+        zone = self.zone_data
+        if not zone:
+            return False
+            
+        # Logical status 0 equals NORMAL. Anything else (1=Violated, 2=Bypassed) triggers an ON state.
+        logical_status = self._get_enum_value(getattr(zone, "logical_status", 0))
+        return logical_status != 0
+
+    @property
+    def device_class(self) -> BinarySensorDeviceClass | None:
+        """Return the device class of this sensor based on its Elk definition."""
+        zone = self.zone_data
+        if not zone:
+            return None
+            
+        def_val = self._get_enum_value(getattr(zone, "definition", 0))
+        return _DEVICE_CLASS_MAP.get(def_val)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return extra state attributes for the zone."""
+        zone = self.zone_data
+        if not zone:
+            return {}
+            
+        return {
+            "physical_status": self._get_enum_value(getattr(zone, "physical_status", 0)),
+            "logical_status": self._get_enum_value(getattr(zone, "logical_status", 0)),
+            "definition": self._get_enum_value(getattr(zone, "definition", 0)),
+            "bypassed": getattr(zone, "bypassed", False),
+            "triggered_alarm": getattr(zone, "triggered_alarm", False),
+            "voltage": getattr(zone, "voltage", 0.0),
+        }
