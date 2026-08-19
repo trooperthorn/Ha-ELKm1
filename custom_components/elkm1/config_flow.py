@@ -386,6 +386,7 @@ class Elkm1ConfigFlow(ConfigFlow, domain=DOMAIN):
             errors=errors,
         )
 
+    @override
     async def async_step_serial(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
@@ -405,11 +406,11 @@ class Elkm1ConfigFlow(ConfigFlow, domain=DOMAIN):
             await self.async_set_unique_id(port)
             self._abort_if_unique_id_configured()
             
-            # Verify device exists on this port
+            # Verify device exists on this port ONLY upon user selection
             if user_input.get(CONF_VERIFY_DEVICE, True):
                 try:
                     if not await probe_serial_port(port, timeout=5.0):
-                        errors["base"] = "no_elk_device"
+                        errors["base"] = "cannot_connect"
                 except (OSError, TimeoutError, ValueError) as e:
                     _LOGGER.error(f"Error probing port: {e}")
                     errors["base"] = "cannot_connect"
@@ -424,24 +425,28 @@ class Elkm1ConfigFlow(ConfigFlow, domain=DOMAIN):
                     data={
                         CONF_CONNECTION_TYPE: CONNECTION_SERIAL,
                         CONF_SERIAL_PORT: port,
-                        CONF_PIN: pin,  # Saves as empty string if ignored
+                        CONF_PREFIX: user_input.get(CONF_PREFIX, "elkm1"),
+                        CONF_PIN: pin,
                     },
                 )
 
         # 1. Map all active HA integration entries to device paths they consume
         ha_configured_ports: dict[str, str] = {}
         for entry in self.hass.config_entries.async_entries():
-            # Check if an entry is utilizing a serial port
-            if CONF_SERIAL_PORT in entry.data:
-                ha_configured_ports[entry.data[CONF_SERIAL_PORT]] = entry.domain
-            elif "device" in entry.data: # ZHA / Z-Wave JS standard
-                ha_configured_ports[entry.data["device"]] = entry.domain
+            # Safely check all common integration keys for serial paths
+            for key in ("serial_port", "device", "port", "path"):
+                val = entry.data.get(key) or entry.options.get(key)
+                if isinstance(val, str) and (val.startswith("/dev/") or val.startswith("COM")):
+                    ha_configured_ports[val] = entry.domain
+                elif isinstance(val, dict) and isinstance(val.get("path"), str):
+                    ha_configured_ports[val["path"]] = entry.domain
 
         # 2. Get list of ports from the OS
         ports = await self.hass.async_add_executor_job(serial.tools.list_ports.comports)
 
-        # 3. Smart Hardware Probe (Async Concurrent Execution)
-        async def _probe_and_format(port_info: Any) -> dict[str, str]:
+        # 3. Build UI list SAFELY (NO CONCURRENT PROBING)
+        port_options = []
+        for port_info in ports:
             device_path = port_info.device
             
             # Get the reboot-safe persistent path
@@ -449,35 +454,21 @@ class Elkm1ConfigFlow(ConfigFlow, domain=DOMAIN):
                 get_persistent_port_path, device_path
             )
             
-            status_label = "(Available)"
-
-            # Check raw and persistent paths against HA configured ports
+            # Skip this port entirely if another HA integration is already using it
             if device_path in ha_configured_ports or persistent_path in ha_configured_ports:
-                using_domain = ha_configured_ports.get(device_path) or ha_configured_ports.get(persistent_path)
-                status_label = f"(In Use by {using_domain})"
-            else:
-                try:
-                    # Probe the hardware directly using our ElkConnectionManager probe
-                    is_elk = await probe_serial_port(persistent_path, timeout=2.0)
-                    if is_elk:
-                        status_label = "(ELK-M1 Panel Detected) 🎯"
-                except Exception:  # noqa: BLE001
-                    status_label = "(Available)"
+                continue
 
             # Build a clean label for the UI
             label = f"{persistent_path} - {port_info.description}" if port_info.description and port_info.description != "n/a" else persistent_path
             
-            return {
+            port_options.append({
                 "value": persistent_path, 
-                "label": f"{status_label} {label}",
-            }
-
-        # 4. Run all port probes CONCURRENTLY
-        port_options = await asyncio.gather(*[_probe_and_format(p) for p in ports])
+                "label": label,
+            })
         
         # Fallback if the system literally has 0 serial ports available
         if not port_options:
-            port_options = [{"value": "", "label": "No serial ports discovered on system"}]
+            port_options = [{"value": "", "label": "No available serial ports discovered"}]
 
         # Serial configuration schema using flexible dynamic dropdown
         data_schema = vol.Schema(
@@ -489,6 +480,7 @@ class Elkm1ConfigFlow(ConfigFlow, domain=DOMAIN):
                         custom_value=True,
                     )
                 ),
+                vol.Optional(CONF_PREFIX, default="elkm1"): str,
                 vol.Optional(CONF_PIN, default=""): str,
                 vol.Optional(CONF_VERIFY_DEVICE, default=True): bool,
             }
