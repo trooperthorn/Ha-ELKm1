@@ -7,6 +7,7 @@ from typing import Any
 
 from .coordinator import ElkDataUpdateCoordinator
 
+
 @dataclass
 class ElkRuntimeData:
     """Data class for Elk-M1 runtime data storage in Home Assistant config entries."""
@@ -17,3 +18,7 @@ class ElkRuntimeData:
     config: dict[str, Any]
     coordinator: ElkDataUpdateCoordinator
     connection: Any | None = None
+
+
+# Alias to prevent import crashes during migration
+ELKM1Data = ElkRuntimeData
