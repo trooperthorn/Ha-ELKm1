@@ -39,8 +39,8 @@ class ElkUDPDiscoveryProtocol(asyncio.DatagramProtocol):
                     self.devices.append(device_info)
                     _LOGGER.debug(f"Discovered Elk-M1 module at {addr[0]}:{addr[1]}")
                     
-        except Exception as e:
-            _LOGGER.debug(f"Error parsing UDP discovery response: {e}")
+        except Exception as e:  # noqa: BLE001
+            _LOGGER.debug("Error parsing UDP discovery response: %s", e)
 
 async def async_discover_devices(
     hass: HomeAssistant,
@@ -57,7 +57,6 @@ async def async_discover_devices(
         transport, _ = await loop.create_datagram_endpoint(
             lambda: ElkUDPDiscoveryProtocol(discovery_event, devices),
             local_addr=("0.0.0.0", 0),
-            allow_broadcast=True,
         )
 
         try:
@@ -71,8 +70,8 @@ async def async_discover_devices(
         finally:
             transport.close()
 
-    except Exception as e:
-        _LOGGER.error(f"Network discovery failed: {e}")
+    except Exception as e:  # noqa: BLE001
+        _LOGGER.debug("Network discovery failed: %s", e)
 
     return devices
 
