@@ -32,12 +32,12 @@ def deprecate_entity(
             # If the target entity ID doesn't exist yet, update the unique ID
             if entry and entry.entity_id != new_entity_id and not entity_registry.async_get(new_entity_id):
                 _LOGGER.info(
-                        "Migrating legacy Elk-M1 entity %s to new structure",
-                        entry.entity_id,
-                    )
-                    entity_registry.async_update_entity(
-                        entity_id, new_unique_id=new_unique_id
-                    )
+                    "Migrating legacy Elk-M1 entity %s to new structure",
+                    entry.entity_id,
+                )
+                entity_registry.async_update_entity(
+                    entity_id, new_unique_id=new_unique_id
+                )
     except Exception as err:  # noqa: BLE001
         _LOGGER.debug("Error during entity deprecation check for %s: %s", unique_id, err)
 
