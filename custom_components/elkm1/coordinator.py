@@ -176,11 +176,11 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             await asyncio.sleep(1.5)
 
             _LOGGER.info("Connected to ELK-M1 at %s", self._obfuscated_url())
-            await check_panel_version(self._elk)
+            await check_panel_version(self)
 
             if self._connection_type == CONNECTION_SERIAL:
                 _LOGGER.info("Serial connection detected - checking panel settings...")
-                configured, details = await verify_panel_configuration(self._elk)
+                configured, details = await verify_panel_configuration(self)
                 if not configured:
                     for setting_num, status in details["settings"].items():
                         if status["enabled"] is False:
@@ -266,14 +266,31 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         elif cmd == "AM" and len(raw_str) >= 12:
             self.hass.bus.async_fire("elkm1_alarm_memory", {"flags": raw_str[4:12]})
 
-        # 4. Voice Announcement (VN)
-        elif cmd == "VN" and len(raw_str) >= 22:
-            try:
-                word_str = raw_str[4:22]
-                words = [int(word_str[i : i + 3]) for i in range(0, 18, 3)]
-                self._handle_voice_message(words)
-            except ValueError:
-                pass
+        # 4. Version Number (VN) or Voice Announcement (VN)
+        elif cmd == "VN":
+            # The official Version Number reply is exactly 54 bytes long (length 36)
+            if len(raw_str) >= 54:
+                try:
+                    # Elk returns version in ASCII Hex: UUMMLL (Major, Minor, Patch)
+                    major = int(raw_str[4:6], 16)
+                    minor = int(raw_str[6:8], 16)
+                    patch = int(raw_str[8:10], 16)
+                    
+                    version_str = f"{major}.{minor}.{patch}"
+                    self.data["panel_version"] = version_str
+                    self.async_set_updated_data(self._build_normalized_data())
+                    _LOGGER.info("Successfully parsed Elk-M1 Version: %s", version_str)
+                except ValueError:
+                    _LOGGER.debug("Error parsing VN version broadcast")
+            
+            # Fallback for voice announcement intercepts
+            elif len(raw_str) >= 22:
+                try:
+                    word_str = raw_str[4:22]
+                    words = [int(word_str[i : i + 3]) for i in range(0, 18, 3)]
+                    self._handle_voice_message(words)
+                except ValueError:
+                    pass
 
     async def async_disconnect(self) -> None:
         """Disconnect from ELK-M1 panel and stop queue worker."""
@@ -381,6 +398,7 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         )
 
         return {
+            "panel_version": self.data.get("panel_version"),
             "num_areas": num_areas,
             "areas": areas_dict,
             "zones": zones,
