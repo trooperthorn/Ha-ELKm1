@@ -50,8 +50,8 @@ from .discovery import (
     async_update_entry_from_discovery,
 )
 from .entity import create_elk_system_device_info
-from .models import ElkRuntimeData
 from .helpers.panel_settings import verify_panel_configuration
+from .models import ElkRuntimeData
 from .services import async_setup_services
 
 if TYPE_CHECKING:
