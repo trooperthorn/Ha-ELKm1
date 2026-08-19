@@ -14,6 +14,7 @@ except ImportError:
     from typing_extensions import override
 
 import serial.tools.list_ports
+from urllib.parse import urlparse
 import voluptuous as vol
 
 from homeassistant.config_entries import ConfigFlow, ConfigFlowResult
@@ -32,7 +33,6 @@ from homeassistant.helpers.service_info.dhcp import DhcpServiceInfo
 from homeassistant.helpers.typing import DiscoveryInfoType, VolDictType
 from homeassistant.util import slugify
 
-from . import hostname_from_url
 from .const import (
     CONF_AUTO_CONFIGURE,
     CONF_CONNECTION_TYPE,
@@ -78,6 +78,10 @@ PORT_PROTOCOL_MAP = {
     SECURE_PORT: DEFAULT_SECURE_PROTOCOL,
 }
 
+def hostname_from_url(url: str) -> str:
+    """Return the hostname from a url."""
+    parsed = urlparse(url)
+    return parsed.hostname or url.replace("serial://", "")
 
 def get_persistent_port_path(device_path: str) -> str:
     """Map a raw /dev/ttyUSBx path to its persistent /dev/serial/by-id/ symlink."""
