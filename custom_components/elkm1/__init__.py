@@ -198,12 +198,14 @@ def _async_find_matching_config_entry(
 
 async def async_setup_entry(hass: HomeAssistant, entry: ElkM1ConfigEntry) -> bool:
     """Set up Elk-M1 Control from a config entry."""
-    conf = entry.data
+    # 1. Cast the read-only mapping proxy to a mutable dictionary
+    conf = dict(entry.data)
 
     serial_port = conf.get("serial_port")
     if serial_port:
         connection_url = f"serial://{serial_port}"
-        connection_type = "serial"
+        # 2. Assign directly to conf instead of the unused local variable
+        conf[CONF_CONNECTION_TYPE] = CONNECTION_SERIAL
     else:
         connection_url = conf.get(CONF_HOST, "")
         conf[CONF_CONNECTION_TYPE] = (
@@ -212,17 +214,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: ElkM1ConfigEntry) -> boo
             else CONNECTION_NETWORK
         )
 
+    # (I also removed the duplicate host assignment you had here)
     host = hostname_from_url(connection_url)
-        
-    host = hostname_from_url(connection_url)
-    _LOGGER.info(f"Setting up elkm1 at {connection_url}")
+    _LOGGER.info("Setting up elkm1 at %s", connection_url)
 
     if (not entry.unique_id or ":" not in entry.unique_id) and is_ip_address(host) and (device := await async_discover_device(hass, entry, "network", 0)):
         await async_update_entry_from_discovery(hass, entry, device)
 
-    # Initialize the new Coordinator
-    coordinator = ElkDataUpdateCoordinator(hass, dict(conf))
+    # Initialize the new Coordinator (now safely passing the mutable dict)
+    coordinator = ElkDataUpdateCoordinator(hass, conf)
 
+    # ... continue with your existing try/except block ...
     try:
         # This will natively connect to the Elk panel, start the background tasks, and fetch state
         await coordinator.async_config_entry_first_refresh()
