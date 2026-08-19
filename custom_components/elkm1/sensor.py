@@ -2,19 +2,10 @@
 
 from __future__ import annotations
 
-from typing import Any, cast, override
+import logging
+from typing import Any
 
 import voluptuous as vol
-
-from elkm1_lib.const import SettingFormat, ZoneType
-from elkm1_lib.counters import Counter
-from elkm1_lib.elements import Element
-from elkm1_lib.elk import Elk
-from elkm1_lib.keypads import Keypad
-from elkm1_lib.panel import Panel
-from elkm1_lib.settings import Setting
-from elkm1_lib.util import pretty_const
-from elkm1_lib.zones import Zone
 
 from homeassistant.components.sensor import (
     SensorDeviceClass,
@@ -22,25 +13,20 @@ from homeassistant.components.sensor import (
     SensorStateClass,
 )
 from homeassistant.const import EntityCategory, UnitOfElectricPotential
-from homeassistant.core import HomeAssistant, callback
+from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import entity_platform
 from homeassistant.helpers import entity_registry as er
-from homeassistant.helpers.device_registry import DeviceInfo
-from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.typing import VolDictType
 
-from . import ElkM1ConfigEntry
 from .const import ATTR_VALUE, ELK_USER_CODE_SERVICE_SCHEMA
-from .entity import (
-    ElkAttachedEntity,
-    ElkEntity,
-    create_elk_entities,
-    create_elk_system_device_info,
-    generate_unique_id,
-)
-from .models import ELKM1Data
+from .coordinator import ElkDataUpdateCoordinator
+from .data import ElkRuntimeData
+from .entity import ElkEntity
 from .util import deprecate_entity
+
+_LOGGER = logging.getLogger(__name__)
 
 SERVICE_SENSOR_COUNTER_REFRESH = "sensor_counter_refresh"
 SERVICE_SENSOR_COUNTER_SET = "sensor_counter_set"
@@ -49,14 +35,16 @@ SERVICE_SENSOR_ZONE_TRIGGER = "sensor_zone_trigger"
 
 UNDEFINED_TEMPERATURE = -40
 
-_DEVICE_CLASS_MAP: dict[ZoneType, SensorDeviceClass] = {
-    ZoneType.TEMPERATURE: SensorDeviceClass.TEMPERATURE,
-    ZoneType.ANALOG_ZONE: SensorDeviceClass.VOLTAGE,
+# Map raw Elk integer definitions to Device and State Classes
+# 33: Temperature, 34: Analog Zone
+_DEVICE_CLASS_MAP: dict[int, SensorDeviceClass] = {
+    33: SensorDeviceClass.TEMPERATURE,
+    34: SensorDeviceClass.VOLTAGE,
 }
 
-_STATE_CLASS_MAP: dict[ZoneType, SensorStateClass] = {
-    ZoneType.TEMPERATURE: SensorStateClass.MEASUREMENT,
-    ZoneType.ANALOG_ZONE: SensorStateClass.MEASUREMENT,
+_STATE_CLASS_MAP: dict[int, SensorStateClass] = {
+    33: SensorStateClass.MEASUREMENT,
+    34: SensorStateClass.MEASUREMENT,
 }
 
 ELK_SET_COUNTER_SERVICE_SCHEMA: VolDictType = {
@@ -64,57 +52,65 @@ ELK_SET_COUNTER_SERVICE_SCHEMA: VolDictType = {
 }
 
 
-def get_trouble_status_string(status: str) -> str:
-    """Parse Elk panel trouble status into a readable string based on the Elk ASCII protocol."""
-    if not status or not isinstance(status, str):
-        return "Normal"
-
-    troubles = []
-    # ElkM1 SS Command (System Trouble Status) bit map
-    if len(status) >= 1 and status[0] != "0": troubles.append("AC Fail")
-    if len(status) >= 2 and status[1] != "0": troubles.append("Box Tamper")
-    if len(status) >= 3 and status[2] != "0": troubles.append("Fail To Communicate")
-    if len(status) >= 4 and status[3] != "0": troubles.append("EEPROM Error")
-    if len(status) >= 5 and status[4] != "0": troubles.append("Low Battery")
-    if len(status) >= 6 and status[5] != "0": troubles.append("Transmitter Low Battery")
-    if len(status) >= 7 and status[6] != "0": troubles.append("Over Current")
-    if len(status) >= 8 and status[7] != "0": troubles.append("Telephone Fault")
-
-    if not troubles and any(char != "0" and char != " " for char in status):
-        return f"Unknown Trouble ({status})"
-
-    return ", ".join(troubles) if troubles else "Normal"
-
-
 async def async_setup_entry(
     hass: HomeAssistant,
-    config_entry: ElkM1ConfigEntry,
-    async_add_entities: AddConfigEntryEntitiesCallback,
+    config_entry: ConfigEntry,
+    async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Create the Elk-M1 sensor platform."""
-    elk_data = config_entry.runtime_data
-    elk = elk_data.elk
-    entities: list[ElkEntity | SensorEntity] = []
-    elk_settings: list[Setting] = []
+    runtime_data: ElkRuntimeData = config_entry.runtime_data
+    coordinator = runtime_data.coordinator
 
-    create_elk_entities(elk_data, elk.counters, "counter", ElkCounter, entities)
-    create_elk_entities(elk_data, elk.keypads, "keypad", ElkKeypad, entities)
-    create_elk_entities(elk_data, [elk.panel], "panel", ElkPanel, entities)
-    create_elk_entities(elk_data, elk.zones, "zone", ElkZone, entities)
+    entities = []
 
-    # Add the custom active zones summary sensor
-    entities.append(ElkActiveZonesSensor(elk, elk_data))
+    # 1. Setup Panel Sensor
+    entities.append(ElkPanel(coordinator, config_entry))
 
+    # 2. Setup Active Zones Sensor (Summary)
+    entities.append(ElkActiveZonesSensor(coordinator, config_entry))
+
+    # 3. Setup Counters
+    counters = coordinator.data.get("counters", []) if coordinator.data else []
+    for i, _ in enumerate(counters):
+        entities.append(ElkCounter(coordinator, config_entry, i))
+
+    # 4. Setup Keypads
+    keypads = coordinator.data.get("keypads", []) if coordinator.data else []
+    for i, _ in enumerate(keypads):
+        entities.append(ElkKeypad(coordinator, config_entry, i))
+
+    # 5. Setup Zones (Only 33=Temperature and 34=Analog)
+    zones = coordinator.data.get("zones", []) if coordinator.data else []
+    for i, zone in enumerate(zones):
+        if not zone:
+            continue
+            
+        def_val = 0
+        if hasattr(zone, "definition"):
+            def_obj = zone.definition
+            def_val = int(def_obj.value) if hasattr(def_obj, "value") else int(def_obj)
+
+        if def_val in (33, 34):
+            entities.append(ElkZone(coordinator, config_entry, i))
+
+    # 6. Setup Settings (with deprecation checks mapping to Number/Time domains)
+    settings = coordinator.data.get("settings", []) if coordinator.data else []
     entity_registry = er.async_get(hass)
-    for setting in elk.settings:
-        setting = cast(Setting, setting)
-        domain = (
-            "time" if setting.value_format is SettingFormat.TIME_OF_DAY else "number"
-        )
-        orig_unique_id = generate_unique_id(elk_data.prefix, setting)
-        new_unique_id = orig_unique_id
-        new_entity_id = f"{domain}.elkm1_{setting.name.replace(' ', '_')}".lower()
+    
+    for i, setting in enumerate(settings):
+        # 0 = Number, 1 = Time of Day, 2 = Timer
+        fmt_val = 0
+        if hasattr(setting, "value_format"):
+            fmt_obj = setting.value_format
+            fmt_val = int(fmt_obj.value) if hasattr(fmt_obj, "value") else int(fmt_obj)
+            
+        domain = "time" if fmt_val == 1 else "number"
+        setting_name = getattr(setting, "name", f"Setting {i+1}")
+        
+        orig_unique_id = f"{config_entry.entry_id}_setting_{i+1}"
+        new_entity_id = f"{domain}.elkm1_{setting_name.replace(' ', '_')}".lower()
 
+        # Handle entity deprecation migration
         if deprecate_entity(
             hass,
             entity_registry,
@@ -122,183 +118,68 @@ async def async_setup_entry(
             orig_unique_id,
             f"deprecated_sensor_{orig_unique_id}",
             "deprecated_sensor",
-            new_unique_id,
+            orig_unique_id,
             new_entity_id,
         ):
-            elk_settings.append(setting)
+            entities.append(ElkSetting(coordinator, config_entry, i))
 
-    create_elk_entities(elk_data, elk_settings, "setting", ElkSetting, entities)
     async_add_entities(entities)
 
+    # Register entity services
     platform = entity_platform.async_get_current_platform()
     platform.async_register_entity_service(
-        SERVICE_SENSOR_COUNTER_REFRESH,
-        None,
-        "async_counter_refresh",
+        SERVICE_SENSOR_COUNTER_REFRESH, None, "async_counter_refresh"
     )
     platform.async_register_entity_service(
-        SERVICE_SENSOR_COUNTER_SET,
-        ELK_SET_COUNTER_SERVICE_SCHEMA,
-        "async_counter_set",
+        SERVICE_SENSOR_COUNTER_SET, ELK_SET_COUNTER_SERVICE_SCHEMA, "async_counter_set"
     )
     platform.async_register_entity_service(
-        SERVICE_SENSOR_ZONE_BYPASS,
-        ELK_USER_CODE_SERVICE_SCHEMA,
-        "async_zone_bypass",
+        SERVICE_SENSOR_ZONE_BYPASS, ELK_USER_CODE_SERVICE_SCHEMA, "async_zone_bypass"
     )
     platform.async_register_entity_service(
-        SERVICE_SENSOR_ZONE_TRIGGER,
-        None,
-        "async_zone_trigger",
+        SERVICE_SENSOR_ZONE_TRIGGER, None, "async_zone_trigger"
     )
 
 
-def temperature_to_state(temperature: int, undefined_temperature: int) -> str | None:
-    """Convert temperature to a state."""
-    return f"{temperature}" if temperature > undefined_temperature else None
-
-
-class ElkSensor(ElkAttachedEntity, SensorEntity):
+class ElkSensor(ElkEntity, SensorEntity):
     """Base representation of Elk-M1 sensor."""
 
-    _attr_native_value: str | None = None
-
-    async def async_counter_refresh(self) -> None:
-        """Refresh the value of a counter from the panel."""
-        if not isinstance(self, ElkCounter):
-            raise HomeAssistantError("supported only on ElkM1 Counter sensors")
-        self._element.get()
-
-    async def async_counter_set(self, value: int | None = None) -> None:
-        """Set the value of a counter on the panel."""
-        if not isinstance(self, ElkCounter):
-            raise HomeAssistantError("supported only on ElkM1 Counter sensors")
-        if value is not None:
-            self._element.set(value)
-
-    async def async_zone_bypass(self, code: int | None = None) -> None:
-        """Bypass zone."""
-        if not isinstance(self, ElkZone):
-            raise HomeAssistantError("supported only on ElkM1 Zone sensors")
-        if code is not None:
-            self._element.bypass(code)
-
-    async def async_zone_trigger(self) -> None:
-        """Trigger zone."""
-        if not isinstance(self, ElkZone):
-            raise HomeAssistantError("supported only on ElkM1 Zone sensors")
-        self._element.trigger()
+    def _get_enum_value(self, obj: Any, default: int = 0) -> int:
+        """Safely extract integer value from enum or string objects."""
+        if hasattr(obj, "value"):
+            return int(obj.value)
+        if isinstance(obj, str):
+            return int(obj) if obj.isdigit() else default
+        return int(obj) if isinstance(obj, (int, float)) else default
 
 
-class ElkActiveZonesSensor(SensorEntity):
+class ElkActiveZonesSensor(ElkSensor):
     """Sensor that provides a live count and readable list of open zones."""
 
-    _attr_name = "Active Zones"
     _attr_icon = "mdi:shield-alert-outline"
     _attr_native_unit_of_measurement = "Zones"
-    _attr_has_entity_name = True
-    _attr_should_poll = False
 
-    def __init__(self, elk: Elk, elk_data: ELKM1Data) -> None:
+    def __init__(self, coordinator: ElkDataUpdateCoordinator, config_entry: ConfigEntry) -> None:
         """Initialize the active zones sensor."""
-        self._elk = elk
-        self._prefix = elk_data.prefix
-        self._mac = elk_data.mac
-        self._unique_id = f"elkm1_{self._prefix}_active_zones".lower()
-        self._open_zones: list[str] = []
-        self._attr_native_value = 0
+        super().__init__(coordinator, config_entry, "active_zones_summary")
+        self._attr_name = "Active Zones"
+        self._attr_unique_id = f"{config_entry.entry_id}_active_zones_summary"
 
     @property
-    def unique_id(self) -> str:
-        """Return unique id of the element."""
-        return self._unique_id
+    def native_value(self) -> int:
+        """Return the live count of faulted zones from the coordinator."""
+        if not self.coordinator.data:
+            return 0
+        return self.coordinator.data.get("zones_faulted_count", 0)
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         """Return attributes including a readable list of open zones."""
-        return {
-            "open_entities": ", ".join(self._open_zones) if self._open_zones else "None"
-        }
-
-    @property
-    def device_info(self) -> DeviceInfo:
-        """Device info connecting via the ElkM1 system."""
-        return create_elk_system_device_info(self._elk, self._prefix, self._mac)
-
-    async def async_added_to_hass(self) -> None:
-        """Register callbacks for all zones to receive instantaneous local-push updates."""
-        for zone in self._elk.zones:
-            zone.add_callback(self._update_state)
-        self._update_state(None, {})
-
-    @callback
-    def _update_state(self, element: Any, changeset: dict[str, Any]) -> None:
-        """Update the count and list of open zones directly from the hardware."""
-        open_list = []
-        for zone in self._elk.zones:
-            if not zone:
-                continue
-
-            logical_val = zone.logical_status.value if hasattr(zone.logical_status, "value") else zone.logical_status
-            physical_val = zone.physical_status.value if hasattr(zone.physical_status, "value") else zone.physical_status
-
-            # Definition 2 is Violated/Open for Logical, 1/3 for Physical
-            if logical_val == 2 or physical_val in (1, 3):
-                name = getattr(zone, "name", f"Zone {zone.index + 1}")
-                open_list.append(name)
-
-        self._open_zones = open_list
-        self._attr_native_value = len(open_list)
-        self.async_write_ha_state()
-
-
-class ElkCounter(ElkSensor):
-    """Representation of an Elk-M1 Counter."""
-
-    _attr_icon = "mdi:numeric"
-    _element: Counter
-
-    @override
-    def _element_changed(self, element: Element, changeset: dict[str, Any]) -> None:
-        self._attr_native_value = str(self._element.value)
-
-
-class ElkKeypad(ElkSensor):
-    """Representation of an Elk-M1 Keypad."""
-
-    _attr_icon = "mdi:thermometer-lines"
-    _element: Keypad
-
-    @property
-    def temperature_unit(self) -> str:
-        """Return the temperature unit."""
-        return self._temperature_unit
-
-    @property
-    @override
-    def native_unit_of_measurement(self) -> str:
-        """Return the unit of measurement."""
-        return self._temperature_unit
-
-    @property
-    @override
-    def extra_state_attributes(self) -> dict[str, Any]:
-        """Attributes of the sensor."""
-        attrs: dict[str, Any] = self.initial_attrs()
-        attrs["area"] = self._element.area + 1
-        attrs["temperature"] = self._attr_native_value
-        attrs["last_user_time"] = self._element.last_user_time.isoformat()
-        attrs["last_user"] = self._element.last_user + 1
-        attrs["code"] = self._element.code
-        attrs["last_user_name"] = self._elk.users.username(self._element.last_user)
-        attrs["last_keypress"] = self._element.last_keypress
-        return attrs
-
-    @override
-    def _element_changed(self, element: Element, changeset: dict[str, Any]) -> None:
-        self._attr_native_value = temperature_to_state(
-            self._element.temperature, UNDEFINED_TEMPERATURE
-        )
+        if not self.coordinator.data:
+            return {"open_entities": "None"}
+            
+        open_zones = self.coordinator.data.get("faulted_zone_names", [])
+        return {"open_entities": ", ".join(open_zones) if open_zones else "None"}
 
 
 class ElkPanel(ElkSensor):
@@ -306,127 +187,247 @@ class ElkPanel(ElkSensor):
 
     _attr_translation_key = "panel"
     _attr_entity_category = EntityCategory.DIAGNOSTIC
-    _element: Panel
+
+    def __init__(self, coordinator: ElkDataUpdateCoordinator, config_entry: ConfigEntry) -> None:
+        """Initialize the panel sensor."""
+        super().__init__(coordinator, config_entry, "panel_status")
+        self._attr_name = "Panel Status"
+        self._attr_unique_id = f"{config_entry.entry_id}_panel_status"
 
     @property
-    @override
+    def native_value(self) -> str:
+        """Return the connection state."""
+        return "Connected" if self.coordinator.connected else "Disconnected"
+
+    @property
     def extra_state_attributes(self) -> dict[str, Any]:
         """Attributes of the sensor."""
-        attrs = self.initial_attrs()
-        raw_status = str(self._element.system_trouble_status)
-        attrs["system_trouble_status_raw"] = raw_status
-        attrs["system_trouble_status_parsed"] = get_trouble_status_string(raw_status)
-        return attrs
+        if not self.coordinator.data:
+            return {}
+            
+        panel = self.coordinator.data.get("panel")
+        raw_status = str(getattr(panel, "system_trouble_status", "")) if panel else ""
+        
+        return {
+            "system_trouble_status_raw": raw_status,
+            "system_trouble_status_parsed": self._parse_troubles(raw_status),
+        }
 
-    @override
-    def _element_changed(self, element: Element, changeset: dict[str, Any]) -> None:
-        if self._elk.is_connected():
-            self._attr_native_value = "Paused" if self._elk.is_paused() else "Connected"
-        else:
-            self._attr_native_value = "Disconnected"
+    def _parse_troubles(self, status: str) -> str:
+        """Parse Elk panel trouble status into a readable string."""
+        if not status or not isinstance(status, str):
+            return "Normal"
+
+        troubles = []
+        if len(status) >= 1 and status[0] != "0": troubles.append("AC Fail")
+        if len(status) >= 2 and status[1] != "0": troubles.append("Box Tamper")
+        if len(status) >= 3 and status[2] != "0": troubles.append("Fail To Communicate")
+        if len(status) >= 4 and status[3] != "0": troubles.append("EEPROM Error")
+        if len(status) >= 5 and status[4] != "0": troubles.append("Low Battery")
+        if len(status) >= 6 and status[5] != "0": troubles.append("Transmitter Low Battery")
+        if len(status) >= 7 and status[6] != "0": troubles.append("Over Current")
+        if len(status) >= 8 and status[7] != "0": troubles.append("Telephone Fault")
+
+        return ", ".join(troubles) if troubles else "Normal"
+
+
+class ElkCounter(ElkSensor):
+    """Representation of an Elk-M1 Counter."""
+
+    _attr_icon = "mdi:numeric"
+
+    def __init__(self, coordinator: ElkDataUpdateCoordinator, config_entry: ConfigEntry, index: int) -> None:
+        super().__init__(coordinator, config_entry, f"counter_{index+1}")
+        self._index = index
+        self._attr_unique_id = f"{config_entry.entry_id}_counter_{index+1}"
+        
+        counter_obj = self._get_obj()
+        self._attr_name = getattr(counter_obj, "name", f"Counter {index+1}") if counter_obj else f"Counter {index+1}"
+
+    def _get_obj(self) -> Any:
+        if self.coordinator.data and "counters" in self.coordinator.data:
+            counters = self.coordinator.data["counters"]
+            if self._index < len(counters):
+                return counters[self._index]
+        return None
+
+    @property
+    def native_value(self) -> str | None:
+        obj = self._get_obj()
+        return str(getattr(obj, "value", "")) if obj else None
+
+    async def async_counter_refresh(self) -> None:
+        """Read current counter value via raw ASCII command cv."""
+        await self.coordinator.send_raw_elk_command(f"cv{self._index + 1:02d}00")
+
+    async def async_counter_set(self, value: int | None = None) -> None:
+        """Write counter value via raw ASCII command cx."""
+        if value is not None:
+            await self.coordinator.send_raw_elk_command(f"cx{self._index + 1:02d}{value:05d}")
+
+
+class ElkKeypad(ElkSensor):
+    """Representation of an Elk-M1 Keypad."""
+
+    _attr_icon = "mdi:thermometer-lines"
+
+    def __init__(self, coordinator: ElkDataUpdateCoordinator, config_entry: ConfigEntry, index: int) -> None:
+        super().__init__(coordinator, config_entry, f"keypad_{index+1}")
+        self._index = index
+        self._attr_unique_id = f"{config_entry.entry_id}_keypad_{index+1}"
+        self._temperature_unit = "°F"  # Ideally dynamically pulled from config
+        
+        kp_obj = self._get_obj()
+        self._attr_name = getattr(kp_obj, "name", f"Keypad {index+1}") if kp_obj else f"Keypad {index+1}"
+
+    def _get_obj(self) -> Any:
+        if self.coordinator.data and "keypads" in self.coordinator.data:
+            keypads = self.coordinator.data["keypads"]
+            if self._index < len(keypads):
+                return keypads[self._index]
+        return None
+
+    @property
+    def native_unit_of_measurement(self) -> str:
+        return self._temperature_unit
+
+    @property
+    def native_value(self) -> str | None:
+        obj = self._get_obj()
+        if not obj:
+            return None
+        temp = getattr(obj, "temperature", UNDEFINED_TEMPERATURE)
+        return str(temp) if temp > UNDEFINED_TEMPERATURE else None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        obj = self._get_obj()
+        if not obj:
+            return {}
+        
+        last_user_time = getattr(obj, "last_user_time", None)
+        return {
+            "area": getattr(obj, "area", 0) + 1,
+            "last_user": getattr(obj, "last_user", 0) + 1,
+            "last_user_time": last_user_time.isoformat() if last_user_time else None,
+            "code": getattr(obj, "code", ""),
+            "last_keypress": getattr(obj, "last_keypress", ""),
+        }
 
 
 class ElkSetting(ElkSensor):
     """Representation of an Elk-M1 Setting."""
 
     _attr_translation_key = "setting"
-    _element: Setting
 
-    @override
-    def _element_changed(self, element: Element, changeset: dict[str, Any]) -> None:
-        self._attr_native_value = (
-            None if self._element.value is None else str(self._element.value)
-        )
+    def __init__(self, coordinator: ElkDataUpdateCoordinator, config_entry: ConfigEntry, index: int) -> None:
+        super().__init__(coordinator, config_entry, f"setting_{index+1}")
+        self._index = index
+        self._attr_unique_id = f"{config_entry.entry_id}_setting_{index+1}"
+        
+        obj = self._get_obj()
+        self._attr_name = getattr(obj, "name", f"Setting {index+1}") if obj else f"Setting {index+1}"
+
+    def _get_obj(self) -> Any:
+        if self.coordinator.data and "settings" in self.coordinator.data:
+            settings = self.coordinator.data["settings"]
+            if self._index < len(settings):
+                return settings[self._index]
+        return None
 
     @property
-    @override
+    def native_value(self) -> str | None:
+        obj = self._get_obj()
+        val = getattr(obj, "value", None) if obj else None
+        return str(val) if val is not None else None
+
+    @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        """Attributes of the sensor."""
-        attrs: dict[str, Any] = self.initial_attrs()
-        attrs["value_format"] = SettingFormat(self._element.value_format).name.lower()
-        return attrs
+        obj = self._get_obj()
+        if not obj:
+            return {}
+        return {
+            "value_format": self._get_enum_value(getattr(obj, "value_format", 0))
+        }
 
 
 class ElkZone(ElkSensor):
-    """Representation of an Elk-M1 Zone."""
+    """Representation of an Elk-M1 Zone (Analog or Temperature)."""
 
-    _element: Zone
+    def __init__(self, coordinator: ElkDataUpdateCoordinator, config_entry: ConfigEntry, index: int) -> None:
+        super().__init__(coordinator, config_entry, f"sensor_zone_{index+1}")
+        self._index = index
+        self._attr_unique_id = f"{config_entry.entry_id}_sensor_zone_{index+1}"
+        self._temperature_unit = "°F"
+        
+        obj = self._get_obj()
+        self._attr_name = getattr(obj, "name", f"Zone {index+1}") if obj else f"Zone {index+1}"
 
-    @property
-    @override
-    def icon(self) -> str:
-        """Icon to use in the frontend."""
-        zone_icons = {
-            ZoneType.FIRE_ALARM: "fire",
-            ZoneType.FIRE_VERIFIED: "fire",
-            ZoneType.FIRE_SUPERVISORY: "fire",
-            ZoneType.KEYFOB: "key",
-            ZoneType.NON_ALARM: "alarm-off",
-            ZoneType.MEDICAL_ALARM: "medical-bag",
-            ZoneType.POLICE_ALARM: "alarm-light",
-            ZoneType.POLICE_NO_INDICATION: "alarm-light",
-            ZoneType.KEY_MOMENTARY_ARM_DISARM: "power",
-            ZoneType.KEY_MOMENTARY_ARM_AWAY: "power",
-            ZoneType.KEY_MOMENTARY_ARM_STAY: "power",
-            ZoneType.KEY_MOMENTARY_DISARM: "power",
-            ZoneType.KEY_ON_OFF: "toggle-switch",
-            ZoneType.MUTE_AUDIBLES: "volume-mute",
-            ZoneType.POWER_SUPERVISORY: "power-plug",
-            ZoneType.TEMPERATURE: "thermometer-lines",
-            ZoneType.ANALOG_ZONE: "speedometer",
-            ZoneType.PHONE_KEY: "phone-classic",
-            ZoneType.INTERCOM_KEY: "deskphone",
-        }
-        return f"mdi:{zone_icons.get(self._element.definition, 'alarm-bell')}"
-
-    @property
-    @override
-    def extra_state_attributes(self) -> dict[str, Any]:
-        """Attributes of the sensor."""
-        attrs: dict[str, Any] = self.initial_attrs()
-        attrs["physical_status"] = self._element.physical_status.name.lower()
-        attrs["logical_status"] = self._element.logical_status.name.lower()
-        attrs["definition"] = self._element.definition.name.lower()
-        attrs["area"] = self._element.area + 1
-        attrs["triggered_alarm"] = self._element.triggered_alarm
-        return attrs
-
-    @property
-    def temperature_unit(self) -> str | None:
-        """Return the temperature unit."""
-        if self._element.definition is ZoneType.TEMPERATURE:
-            return self._temperature_unit
+    def _get_obj(self) -> Any:
+        if self.coordinator.data and "zones" in self.coordinator.data:
+            zones = self.coordinator.data["zones"]
+            if self._index < len(zones):
+                return zones[self._index]
         return None
 
     @property
-    @override
+    def icon(self) -> str:
+        obj = self._get_obj()
+        def_val = self._get_enum_value(getattr(obj, "definition", 0)) if obj else 0
+        return "mdi:thermometer-lines" if def_val == 33 else "mdi:speedometer"
+
+    @property
     def device_class(self) -> SensorDeviceClass | None:
-        """Return the device class of the sensor."""
-        return _DEVICE_CLASS_MAP.get(self._element.definition)
+        obj = self._get_obj()
+        def_val = self._get_enum_value(getattr(obj, "definition", 0)) if obj else 0
+        return _DEVICE_CLASS_MAP.get(def_val)
 
     @property
-    @override
     def state_class(self) -> SensorStateClass | None:
-        """Return the state class of the sensor."""
-        return _STATE_CLASS_MAP.get(self._element.definition)
+        obj = self._get_obj()
+        def_val = self._get_enum_value(getattr(obj, "definition", 0)) if obj else 0
+        return _STATE_CLASS_MAP.get(def_val)
 
     @property
-    @override
     def native_unit_of_measurement(self) -> str | None:
-        """Return the unit of measurement."""
-        if self._element.definition is ZoneType.TEMPERATURE:
+        obj = self._get_obj()
+        def_val = self._get_enum_value(getattr(obj, "definition", 0)) if obj else 0
+        if def_val == 33:
             return self._temperature_unit
-        if self._element.definition is ZoneType.ANALOG_ZONE:
+        if def_val == 34:
             return UnitOfElectricPotential.VOLT
         return None
 
-    @override
-    def _element_changed(self, element: Element, changeset: dict[str, Any]) -> None:
-        if self._element.definition is ZoneType.TEMPERATURE:
-            self._attr_native_value = temperature_to_state(
-                self._element.temperature, UNDEFINED_TEMPERATURE
-            )
-        elif self._element.definition is ZoneType.ANALOG_ZONE:
-            self._attr_native_value = f"{self._element.voltage}"
-        else:
-            self._attr_native_value = pretty_const(self._element.logical_status.name)
+    @property
+    def native_value(self) -> str | None:
+        obj = self._get_obj()
+        if not obj:
+            return None
+            
+        def_val = self._get_enum_value(getattr(obj, "definition", 0))
+        if def_val == 33:
+            temp = getattr(obj, "temperature", UNDEFINED_TEMPERATURE)
+            return str(temp) if temp > UNDEFINED_TEMPERATURE else None
+        elif def_val == 34:
+            return str(getattr(obj, "voltage", 0.0))
+        return None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        obj = self._get_obj()
+        if not obj:
+            return {}
+        return {
+            "physical_status": self._get_enum_value(getattr(obj, "physical_status", 0)),
+            "logical_status": self._get_enum_value(getattr(obj, "logical_status", 0)),
+            "definition": self._get_enum_value(getattr(obj, "definition", 0)),
+            "bypassed": getattr(obj, "bypassed", False),
+        }
+
+    async def async_zone_bypass(self, code: str | None = None) -> None:
+        """Bypass zone via the coordinator."""
+        await self.coordinator.bypass_zone(self._index + 1, code)
+
+    async def async_zone_trigger(self) -> None:
+        """Trigger zone via the coordinator."""
+        await self.coordinator.send_raw_elk_command(f"zt{self._index + 1:03d}")
