@@ -417,6 +417,21 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator[ElkPanelData]):
         """
         return await self.bypass_zone(zone_number, pin_code)
 
+    async def display_message(
+        self,
+        area_index: int = 0,
+        line1: str = "",
+        line2: str = "",
+        beep: bool = False,
+        clear: int = 0,
+        timeout: int = 0,
+    ) -> bool:
+        """Display a message on all keypads in an area via Area.display_message()."""
+        if not self._elk:
+            return False
+        self._elk.areas[area_index].display_message(clear, beep, timeout, line1, line2)
+        return True
+
     async def speak_word(self, word: int) -> bool:
         """Speak a single word from the panel's voice vocabulary."""
         if not self._elk or self._elk.panel is None:

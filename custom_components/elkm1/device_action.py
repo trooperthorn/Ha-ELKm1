@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import voluptuous as vol
-
 from homeassistant.core import Context, HomeAssistant
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import device_registry as dr
@@ -39,8 +38,8 @@ async def async_call_action_from_config(
     
     if action_type == "speak_phrase":
         await hass.services.async_call(
-            DOMAIN, "speak_phrase", 
-            {"phrase_number": config.get("phrase_number")}, 
+            DOMAIN, "speak_phrase",
+            {"number": config.get("phrase_number")},
             context=context
         )
     elif action_type == "display_message":

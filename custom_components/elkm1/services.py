@@ -30,6 +30,18 @@ SET_TIME_SERVICE_SCHEMA = vol.Schema(
     }
 )
 
+DISPLAY_MESSAGE_SERVICE_SCHEMA = vol.Schema(
+    {
+        vol.Optional("prefix", default=""): cv.string,
+        vol.Optional("area", default=1): vol.All(vol.Coerce(int), vol.Range(min=1, max=8)),
+        vol.Optional("line1", default=""): vol.All(cv.string, vol.Length(max=16)),
+        vol.Optional("line2", default=""): vol.All(cv.string, vol.Length(max=16)),
+        vol.Optional("beep", default=False): cv.boolean,
+        vol.Optional("clear", default=0): vol.All(vol.Coerce(int), vol.Range(min=0, max=2)),
+        vol.Optional("timeout", default=0): vol.All(vol.Coerce(int), vol.Range(min=0, max=65535)),
+    }
+)
+
 SECURITY_SUMMARY_SCHEMA = vol.Schema(
     {
         vol.Optional("prefix", default=""): cv.string,
@@ -71,6 +83,18 @@ async def _async_set_time_service(service: ServiceCall) -> None:
     coordinator = _get_coordinator(service)
     await coordinator.set_panel_time(dt_util.now())
 
+async def _async_display_message_service(service: ServiceCall) -> None:
+    """Display a message on an area's keypads via elkm1_lib's own Area.display_message()."""
+    coordinator = _get_coordinator(service)
+    await coordinator.display_message(
+        area_index=service.data["area"] - 1,
+        line1=service.data["line1"],
+        line2=service.data["line2"],
+        beep=service.data["beep"],
+        clear=service.data["clear"],
+        timeout=service.data["timeout"],
+    )
+
 async def _async_get_security_summary(service: ServiceCall) -> ServiceResponse:
     """Return live security data to an automation or script."""
     coordinator = _get_coordinator(service)
@@ -97,6 +121,12 @@ async def async_setup_services(hass: HomeAssistant) -> None:
     )
     hass.services.async_register(
         DOMAIN, "set_time", _async_set_time_service, SET_TIME_SERVICE_SCHEMA
+    )
+    hass.services.async_register(
+        DOMAIN,
+        "display_message",
+        _async_display_message_service,
+        DISPLAY_MESSAGE_SERVICE_SCHEMA,
     )
     hass.services.async_register(
         DOMAIN, 
