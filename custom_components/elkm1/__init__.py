@@ -6,10 +6,8 @@ import asyncio
 import logging
 import re
 from typing import TYPE_CHECKING, Any
+from urllib.parse import urlparse
 
-from elkm1_lib.elements import Element
-from elkm1_lib.elk import Elk
-from elkm1_lib.util import parse_url
 import voluptuous as vol
 
 from homeassistant.config_entries import SOURCE_IMPORT, ConfigEntry
@@ -36,10 +34,6 @@ from homeassistant.util.network import is_ip_address
 
 from .alarmo_integration import async_setup_alarmo_auto_config
 from .const import (
-    ATTR_KEY,
-    ATTR_KEY_NAME,
-    ATTR_KEYPAD_ID,
-    ATTR_KEYPAD_NAME,
     CONF_AREA,
     CONF_AUTO_CONFIGURE,
     CONF_COUNTER,
@@ -53,13 +47,12 @@ from .const import (
     DISCOVERY_INTERVAL,
     DOMAIN,
     ELK_ELEMENTS,
-    EVENT_ELKM1_KEYPAD_KEY_PRESSED,
-    LOGIN_TIMEOUT,
 )
+from .coordinator import ElkDataUpdateCoordinator
 from .discovery import (
+    _short_mac,
     async_discover_device,
     async_discover_devices,
-    async_trigger_discovery,
     async_update_entry_from_discovery,
 )
 from .entity import create_elk_system_device_info
@@ -71,8 +64,6 @@ if TYPE_CHECKING:
     ElkM1ConfigEntry = ConfigEntry[ELKM1Data]
 else:
     ElkM1ConfigEntry = ConfigEntry
-
-SYNC_TIMEOUT = 120
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -91,7 +82,8 @@ PLATFORMS = [
 
 def hostname_from_url(url: str) -> str:
     """Return the hostname from a url."""
-    return parse_url(url)[1]
+    parsed = urlparse(url)
+    return parsed.hostname or url.replace("serial://", "")
 
 
 def _host_validator(config: dict[str, str]) -> dict[str, str]:
@@ -176,7 +168,7 @@ async def async_setup(hass: HomeAssistant, hass_config: ConfigType) -> bool:
 
     async def _async_discovery(*_: Any) -> None:
         async_trigger_discovery(
-            hass, await async_discover_devices(hass, DISCOVER_SCAN_TIMEOUT)
+            hass, await async_discover_devices(hass, entry=None)
         )
 
     hass.async_create_background_task(_async_discovery(), "elkm1 setup discovery")
@@ -232,135 +224,35 @@ async def async_setup_entry(hass: HomeAssistant, entry: ElkM1ConfigEntry) -> boo
     _LOGGER.info(f"Setting up elkm1 at {connection_url}")
 
     if (not entry.unique_id or ":" not in entry.unique_id) and is_ip_address(host):
-        _LOGGER.debug(
-            "Unique id for %s is missing during setup, trying to fill from discovery",
-            host,
-        )
-        if device := await async_discover_device(hass, host):
-            async_update_entry_from_discovery(hass, entry, device)
+        if device := await async_discover_device(hass, entry, "network", 0):
+            await async_update_entry_from_discovery(hass, entry, device)
 
-    config: dict[str, Any] = {}
-    if not conf.get(CONF_AUTO_CONFIGURE, False):
-        config["panel"] = {"enabled": True, "included": [True]}
-        for item, max_ in ELK_ELEMENTS.items():
-            item_conf = conf.get(item, {"enabled": True, "include": [], "exclude": []})
-            config[item] = {
-                "enabled": item_conf.get("enabled", True),
-                "included": [not item_conf.get("include", [])] * max_,
-            }
-            try:
-                _included(item_conf.get("include", []), True, config[item]["included"])
-                _included(item_conf.get("exclude", []), False, config[item]["included"])
-            except (ValueError, vol.Invalid) as err:
-                _LOGGER.error("Config item: %s; %s", item, err)
-                return False
+    # Initialize the new Coordinator
+    coordinator = ElkDataUpdateCoordinator(hass, dict(conf))
 
-    elk = Elk(
-        {
-            "url": connection_url,
-            "userid": conf.get(CONF_USERNAME, ""),
-            "password": conf.get(CONF_PASSWORD, ""),
-        }
-    )
-
-    def elk_broadcast_handler(msg: Any) -> None:
-        """Intercept broadcasts not fully mapped by elkm1_lib."""
-        raw_str = msg.get("raw", "") if isinstance(msg, dict) else str(msg)
-        if len(raw_str) < 4:
-            return
-
-        cmd = raw_str[2:4]
-
-        # Entry/Exit Timer (EE)
-        if cmd == "EE":
-            hass.bus.async_fire(
-                "elkm1_timer_event",
-                {
-                    "area": int(raw_str[4:5]),
-                    "type": "exit" if raw_str[5:6] == "0" else "entry",
-                    "timer1": int(raw_str[6:9]),
-                    "timer2": int(raw_str[9:12]),
-                    "armed_state": int(raw_str[12:13]),
-                },
-            )
-
-        # Alarm Memory (AM)
-        elif cmd == "AM":
-            hass.bus.async_fire(
-                "elkm1_alarm_memory", {"flags": raw_str[4:12]}
-            )
-
-        # Raw ASCII fallback for Voice (VN) commands
-        elif cmd == "VN":
-            try:
-                word_str = raw_str[4:22]
-                words = [int(word_str[i : i + 3]) for i in range(0, 18, 3)]
-                hass.bus.async_fire(
-                    "elkm1_voice_announcement",
-                    {
-                        "source": "elk_m1",
-                        "raw_ids": words,
-                    },
-                )
-            except ValueError:
-                pass
-
-    elk.add_handler("unknown", elk_broadcast_handler)
-    elk.connect() 
-    
-    def _keypad_changed(keypad: Element, changeset: dict[str, Any]) -> None:
-        if (keypress := changeset.get("last_keypress")) is None:
-            return
-        hass.bus.async_fire(
-            EVENT_ELKM1_KEYPAD_KEY_PRESSED,
-            {
-                ATTR_KEYPAD_NAME: keypad.name,
-                ATTR_KEYPAD_ID: keypad.index + 1,
-                ATTR_KEY_NAME: keypress[0],
-                ATTR_KEY: keypress[1],
-            },
-        )
-
-    for keypad in elk.keypads:
-        keypad.add_callback(_keypad_changed)
-
-    sync_success = False
     try:
-        await ElkSyncWaiter(elk, LOGIN_TIMEOUT, SYNC_TIMEOUT).async_wait()
-        sync_success = True
-    except LoginFailed:
-        _LOGGER.error("ElkM1 login failed for %s", connection_url)
-        return False
-    except TimeoutError as exc:
-        raise ConfigEntryNotReady(f"Timed out connecting to {connection_url}") from exc
-    finally:
-        if not sync_success:
-            elk.disconnect()
+        # This will natively connect to the Elk panel, start the background tasks, and fetch state
+        await coordinator.async_config_entry_first_refresh()
+    except Exception as exc:
+        raise ConfigEntryNotReady(f"Timed out or failed connecting to {connection_url}") from exc
 
     # Run the setup wizard to verify panel version and configure global settings if serial
-    if sync_success:
-        try:
-            await run_panel_setup_wizard(elk, connection_type)
-        except Exception as err:  # noqa: BLE001
-            _LOGGER.warning(f"Setup wizard encountered non-fatal error: {err}")
+    try:
+        await run_panel_setup_wizard(coordinator, connection_type)
+    except Exception as err:
+        _LOGGER.warning(f"Setup wizard encountered non-fatal error: {err}")
 
-    elk_temp_unit = elk.panel.temperature_units
-    if elk_temp_unit == "C":
-        temperature_unit = UnitOfTemperature.CELSIUS
-    else:
-        temperature_unit = UnitOfTemperature.FAHRENHEIT
-
-    config["temperature_unit"] = temperature_unit
+    # Build the runtime data matching our new models.py
     prefix: str = conf.get(CONF_PREFIX, "")
     auto_configure: bool = conf.get(CONF_AUTO_CONFIGURE, False)
 
     entry.runtime_data = ELKM1Data(
-        elk=elk,
         prefix=prefix,
         mac=entry.unique_id,
         auto_configure=auto_configure,
-        config=config,
-        keypads={},
+        config=dict(conf),
+        coordinator=coordinator,
+        connection=getattr(coordinator, "_connection", None),
     )
 
     dr.async_get(hass).async_get_or_create(
@@ -386,77 +278,10 @@ def _included(ranges: list[tuple[int, int]], set_to: bool, values: list[bool]) -
 async def async_unload_entry(hass: HomeAssistant, entry: ElkM1ConfigEntry) -> bool:
     """Unload a config entry."""
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
-    entry.runtime_data.elk.disconnect()
+    
+    # Safely disconnect using the coordinator
+    coordinator = entry.runtime_data.coordinator
+    if coordinator:
+        await coordinator.async_disconnect()
+        
     return unload_ok
-
-
-class LoginFailed(Exception):
-    """Raised when login to ElkM1 fails."""
-
-
-class ElkSyncWaiter:
-    """Wait for ElkM1 to sync."""
-
-    def __init__(self, elk: Elk, login_timeout: int, sync_timeout: int) -> None:
-        """Initialize the sync waiter."""
-        self._elk = elk
-        self._login_timeout = login_timeout
-        self._sync_timeout = sync_timeout
-        self._loop = asyncio.get_running_loop()
-        self._sync_future: asyncio.Future[None] = self._loop.create_future()
-        self._login_future: asyncio.Future[None] = self._loop.create_future()
-
-    @callback
-    def _async_set_future_if_not_done(self, future: asyncio.Future[None]) -> None:
-        """Set the future result if not already done."""
-        if not future.done():
-            future.set_result(None)
-
-    @callback
-    def _async_login_status(self, succeeded: bool) -> None:
-        """Handle login status callback."""
-        if succeeded:
-            _LOGGER.debug("ElkM1 login succeeded")
-            self._async_set_future_if_not_done(self._login_future)
-        else:
-            _LOGGER.error("ElkM1 login failed; invalid username or password")
-            self._async_set_exception_if_not_done(self._login_future, LoginFailed)
-
-    @callback
-    def _async_set_exception_if_not_done(
-        self, future: asyncio.Future[None], exception: type[Exception]
-    ) -> None:
-        """Set an exception on the future if not already done."""
-        if not future.done():
-            future.set_exception(exception())
-
-    @callback
-    def _async_sync_complete(self) -> None:
-        """Handle sync complete callback."""
-        self._async_set_future_if_not_done(self._sync_future)
-
-    async def async_wait(self) -> None:
-        """Wait for login and sync to complete.
-        Raises LoginFailed if login fails.
-        Raises TimeoutError if login or sync times out.
-        """
-        self._elk.add_handler("login", self._async_login_status)
-        self._elk.add_handler("sync_complete", self._async_sync_complete)
-
-        try:
-            for name, future, timeout in (
-                ("login", self._login_future, self._login_timeout),
-                ("sync_complete", self._sync_future, self._sync_timeout),
-            ):
-                _LOGGER.debug("Waiting for %s event for %s seconds", name, timeout)
-                handle = self._loop.call_later(
-                    timeout, self._async_set_exception_if_not_done, future, TimeoutError
-                )
-                try:
-                    await future
-                finally:
-                    handle.cancel()
-                _LOGGER.debug("Received %s event", name)
-        finally:
-            self._elk.remove_handler("login", self._async_login_status)
-            self._elk.remove_handler("sync_complete", self._async_sync_complete)
