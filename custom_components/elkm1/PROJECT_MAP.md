@@ -1,28 +1,44 @@
-# ELK-M1 Home Assistant Integration - Master Architectural Reference Map
+# Project Map: Modernized Native-Async Elk-M1 Integration
 
-## 1. Directory Structure & File Architecture
-# ELK-M1 Home Assistant Integration - Project Map & Architecture Reference
+This document provides a comprehensive structural map of the refactored Home Assistant Elk-M1 integration, detailing file organization, core classes, data collection architectures, and cross-integration hooks.
 
-## 1. Directory Structure & File Architecture
+## 1. Core Architecture & Data Flow
+The integration has been completely decoupled from the legacy `elkm1-lib` and redesigned around a high-performance, non-blocking asynchronous architecture.
+* **Connection Layer (`helpers/connection.py`):** Utilizes native `asyncio` streams and `serial_asyncio` to maintain direct TCP or serial communication with the Elk-M1 panel. It features an automated read loop, exponential backoff reconnection, and an active heartbeat timer (`rr` command) to prevent M1XEP module dropouts during alarms.
+* **State Management (`coordinator.py`):** Acts as the single source of truth (`ElkDataUpdateCoordinator`), caching normalized state dictionaries for areas, zones, outputs, keypads, and counters. Real-time ASCII broadcasts (`AS`, `EE`, `AM`, `VN`) are parsed instantly and pushed to Home Assistant without polling delays.
+* **Presentation Layer (Platforms):** UI entities (Alarm Control Panels, Binary Sensors, Sensors, Switches) are completely data-agnostic, reading directly from `coordinator.data` and dispatching asynchronous raw ASCII commands back through the coordinator.
 
-```text
-custom_components/elkm1/
-├── __init__.py               # Component lifecycle (setup, unload, runtime data, platform forwarding, services)
-├── manifest.json             # Integration metadata, requirements (elkm1_lib), code owners, versioning
-├── const.py                  # Domain definition (DOMAIN = "elkm1") and configuration keys
-├── data.py                   # ElkRuntimeData dataclass (coordinator, serial_port)
-├── coordinator.py            # ElkDataUpdateCoordinator (socket loop, polling, real-time push callbacks)
-├── entity.py                 # ElkEntity base class (availability, device_info, coordinator subscriptions)
-├── alarm_control_panel.py    # ElkAlarmControlPanel entity (Area partition mapping, arming modes, attributes)
-├── binary_sensor.py          # Individual Elk hardware zone entities (logical/physical state mapping)
-├── sensor.py                 # Diagnostic sensors, keypad temperature sensors, ElkZoneGroupSensor
-├── alarmo_integration.py     # Alarmo setup helper (registers elkm1.alarmo_auto_setup service)
-├── services.yaml             # Custom service schemas, parameter types, selectors, and UI descriptions
-└── translations/
-    └── en.json               # Localization strings, UI labels, and service field descriptions
-```
 ---
-2. Recurring Issues & Structural Gotchas (MUST READ)
+
+## 2. File Manifest & Component Descriptions
+
+### Core Integration Files
+* `__init__.py`: Manages the config entry lifecycle, integration setup/unload workflows, and runtime data assignment (`ELKM1Data`).
+* `config_flow.py`: Implements modern UI setup steps, including smart concurrent hardware serial port probing and network auto-discovery.
+* `coordinator.py`: The central hub managing data normalization, periodic updates, state caching, and raw ASCII command formatting/checksum calculations.
+* `const.py`: Houses global constants, domain names, service schemas, and hardheaded M1 Gold hardware limits (e.g., 208 zones, 8 areas, 16 keypads).
+* `models.py`: Defines the runtime data dataclass (`ELKM1Data`) linking config entries to the coordinator and connection manager.
+* `entity.py`: Base entity definitions inheriting from `CoordinatorEntity` and establishing standardized device registry identifiers.
+
+### Helper Modules (`helpers/`)
+* `connection.py`: Native non-blocking TCP/serial socket manager with heartbeat and automatic reconnect logic.
+* `usb_discovery.py`: OS-level serial port enumeration mapping raw devices to persistent `/dev/serial/by-id/` paths and verifying hardware responses.
+* `panel_settings.py`: Verifies minimum panel firmware versions and logs required global configuration reminders.
+* `troublestatus.py`: Parses system trouble bitmasks into human-readable diagnostics.
+
+### Platform Entities
+* `alarm_control_panel.py`: Manages multi-area partitioning (Areas 1–8), state mapping (`PENDING`, `ARMING`, `TRIGGERED`, `ARMED_*`), and secure PIN-authorized arming/disarming.
+* `binary_sensor.py`: Maps raw zone definitions to Home Assistant binary sensor device classes (doors, windows, motion, smoke, CO, water).
+* `sensor.py`: Exposes system panel status, active zone summary counters, temperature keypads, analog voltage zones, and user settings.
+* `switch.py`: Controls physical output relays, thermostat emergency heat switches, and native proxy triggers for pre-arm blueprints.
+
+### Metadata & Services
+* `services.py`: Registers custom platform services (`speak_word`, `speak_phrase`, `set_time`, `get_security_summary`).
+* `device_action.py`: Exposes device-level automation actions for the Home Assistant UI editor.
+* `diagnostics.py`: Securely exports redacted runtime state diagnostics for troubleshooting.
+* `vocabulary.py`: Translates numeric Elk voice vocabulary IDs into readable string phrases.
+---
+## 2. Recurring Issues & Structural Gotchas (MUST READ)
 2.1 The Enum / String / Integer Trap (elkm1_lib Quirks)
    The Problem: elkm1_lib returns payload fields as Python Enum objects, but frequently stores the underlying .value as a numeric string (e.g., '0', '2').
 
