@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any
 from urllib.parse import urlparse
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import Platform
+from homeassistant.const import CONF_PREFIX, Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers import device_registry as dr
@@ -18,10 +18,8 @@ from .const import (
     CONF_AUTO_CONFIGURE,
     CONF_BAUD_RATE,
     CONF_CONNECTION_TYPE,
-    CONF_PREFIX,
     CONNECTION_NETWORK,
     CONNECTION_SERIAL,
-    DOMAIN,
 )
 from .coordinator import ElkDataUpdateCoordinator
 from .discovery import (
