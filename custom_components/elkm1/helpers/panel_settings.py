@@ -58,7 +58,7 @@ async def check_panel_version(coordinator: Any) -> str | None:
         _LOGGER.warning("Could not determine panel version. Did the panel respond?")
         return None
 
-    except Exception as err:
+    except Exception as err: # noqa: BLE001
         _LOGGER.debug(f"Error checking panel version: {err}")
         return None
 
