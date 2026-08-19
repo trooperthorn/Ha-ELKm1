@@ -23,7 +23,7 @@ _LOGGER = logging.getLogger(__name__)
 # 1-2: Entry/Exit, 3: Window, 4-7: Motion, 10-11: Fire, 17: CO, 19: Freeze, 20: Gas, 21: Heat, 25: Water
 _DEVICE_CLASS_MAP: dict[int, BinarySensorDeviceClass] = {
     1: BinarySensorDeviceClass.DOOR,
-    2: BinarySensorDeviceClass.DOOR,
+    2: BinarySensorDeviceClass.MOTION,
     3: BinarySensorDeviceClass.WINDOW,
     4: BinarySensorDeviceClass.MOTION,
     5: BinarySensorDeviceClass.MOTION,
@@ -116,14 +116,14 @@ class ElkBinarySensor(ElkEntity, BinarySensorEntity):
 
     @property
     def is_on(self) -> bool:
-        """Return true if the binary sensor is on (violating, bypassed, short)."""
+        """Return true if the binary sensor is on (violated)."""
         zone = self.zone_data
         if not zone:
             return False
             
-        # Logical status 0 equals NORMAL. Anything else (1=Violated, 2=Bypassed) triggers an ON state.
         logical_status = self._get_enum_value(getattr(zone, "logical_status", 0))
-        return logical_status != 0
+        # 2 = Violated (Unbypassed), 5 = Violated (Bypassed)
+        return logical_status in (2, 5)
 
     @property
     def device_class(self) -> BinarySensorDeviceClass | None:
