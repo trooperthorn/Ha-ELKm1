@@ -13,7 +13,6 @@ try:
 except ImportError:
     from typing_extensions import override
 
-import serial.tools.list_ports
 from urllib.parse import urlparse
 import voluptuous as vol
 
@@ -391,6 +390,7 @@ class Elkm1ConfigFlow(ConfigFlow, domain=DOMAIN):
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         """Step 2a: Serial/USB configuration with PIN & Smart Probing."""
+        import serial.tools.list_ports
         errors = {}
 
         if user_input is not None:
