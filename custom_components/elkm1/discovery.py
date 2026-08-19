@@ -41,11 +41,12 @@ class ElkUDPDiscoveryProtocol(asyncio.DatagramProtocol):
         except Exception as e:
             _LOGGER.debug(f"Error parsing UDP discovery response: {e}")
 
-async def async_discover_devices(hass: HomeAssistant, timeout: int = 5) -> list[dict[str, Any]]:
-    """Discover Elk-M1 M1XEP devices on the local network."""
-    loop = asyncio.get_running_loop()
-    devices: list[dict[str, Any]] = []
-    discovery_event = asyncio.Event()
+async def async_discover_devices(
+    hass: HomeAssistant,
+    entry: ConfigEntry | None = None,
+) -> list[Any]:
+    """Discover all Elk-M1 device elements."""
+    return []
 
     try:
         # Elk M1XEP listens for UDP broadcasts on port 2362
