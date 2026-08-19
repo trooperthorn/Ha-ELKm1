@@ -119,11 +119,11 @@ async def probe_serial_port(port: str, timeout: float = 5.0) -> bool:
     except (asyncio.TimeoutError, ConnectionError, OSError, ValueError) as e:
         _LOGGER.debug("Port %s probe failed gracefully: %s", port, e)
         return False
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         _LOGGER.error("Unexpected error during serial probe on %s: %s", port, e)
         return False
     finally:
         try:
             await connection.disconnect()
-        except Exception:
-            pass
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.error("Disconnect failed gracefully on port %s: %s", port, err)
