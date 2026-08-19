@@ -423,7 +423,7 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "bypassed_zones": bypassed_names,
         }
 
-    async def _async_update_data(self) -> dict[str, Any]:
+    async def async_update_data(self) -> dict[str, Any]:
         """Fetch data from the ELK-M1 panel."""
         if not self._elk:
             raise UpdateFailed("Not connected to ELK-M1")
