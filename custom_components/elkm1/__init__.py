@@ -14,18 +14,10 @@ from homeassistant.config_entries import SOURCE_IMPORT, ConfigEntry
 from homeassistant.const import (
     CONF_ENABLED,
     CONF_EXCLUDE,
-    CONF_HOST,
     CONF_INCLUDE,
-    CONF_PASSWORD,
     CONF_PREFIX,
-    CONF_USERNAME,
     CONF_ZONE,
     Platform,
-    CONF_TEMPERATURE_UNIT,
-    CONNECTION_NETWORK,
-    CONNECTION_SERIAL,
-    CONF_CONNECTION_TYPE
-    
 )
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import ConfigEntryNotReady
@@ -38,13 +30,20 @@ from .alarmo_integration import async_setup_alarmo_auto_config
 from .const import (
     CONF_AREA,
     CONF_AUTO_CONFIGURE,
+    CONF_CONNECTION_TYPE,
     CONF_COUNTER,
+    CONF_HOST,
     CONF_KEYPAD,
     CONF_OUTPUT,
+    CONF_PASSWORD,
     CONF_PLC,
     CONF_SETTING,
     CONF_TASK,
+    CONF_TEMPERATURE_UNIT,
     CONF_THERMOSTAT,
+    CONF_USERNAME,
+    CONNECTION_NETWORK,
+    CONNECTION_SERIAL,
     DOMAIN,
     ELK_ELEMENTS,
 )
