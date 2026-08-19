@@ -57,7 +57,7 @@ async def async_discover_devices(hass: HomeAssistant, timeout: int = 5) -> list[
 
         try:
             # Broadcast the M1XEP discovery string
-            discovery_payload = b"ää\r\n"
+            discovery_payload = b"\xE4\xE4\r\n"
             transport.sendto(discovery_payload, ("255.255.255.255", 2362))
             
             # Wait for responses
