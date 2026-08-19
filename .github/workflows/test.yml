@@ -1,33 +1,27 @@
-name: Test
+name: Test Suite
 
-on: [push, pull_request]
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
 
 jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      
-      - name: Set up Python
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
         uses: actions/setup-python@v5
         with:
-          python-version: "3.13"
-      
+          python-version: "3.12"
+
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          
-          # Install pytest tools AND the Home Assistant core/testing frameworks
-          pip install pytest pytest-cov pytest-asyncio homeassistant pytest-homeassistant-custom-component
-          
-          # Install your integration's specific requirements (elkm1_lib)
-          jq -r '.requirements[]' custom_components/elkm1/manifest.json | xargs pip install
-          
-      - name: Lint with ruff
-        run: pip install ruff && ruff check custom_components/elkm1
-      
-      - name: Type check with mypy
-        run: pip install mypy && mypy custom_components/elkm1
-      
-      - name: Run tests with pytest
-        run: pytest tests --cov=custom_components/elkm1 --cov-report=term-missing --asyncio-mode=auto
+          pip install -r requirements-dev.txt
+
+      - name: Run Pytest
+        run: pytest
