@@ -46,10 +46,13 @@ class ElkConnectionManager:
 
     async def _connect_internal(self) -> None:
         """Internal connection logic with exponential backoff."""
+        # Move import outside the retry loop to prevent repetitive I/O hits
+        if self._is_serial:
+            import serial_asyncio
+
         while not self._connected:
             try:
                 if self._is_serial:
-                    import serial_asyncio
                     port = self._url.replace("serial://", "")
                     self._reader, self._writer = await serial_asyncio.open_serial_connection(
                         url=port, baudrate=self._baudrate
@@ -63,10 +66,10 @@ class ElkConnectionManager:
 
                 self._connected = True
                 self._reconnect_delay = 2.0  # Reset delay on success
-                _LOGGER.info(f"Successfully connected to Elk-M1 at {self._url}")
+                _LOGGER.info("Successfully connected to Elk-M1 at %s", self._url)
 
-            except Exception as err: # noqa: BLE001
-                _LOGGER.error(f"Connection failed: {err}. Retrying in {self._reconnect_delay}s...")
+            except Exception as err:
+                _LOGGER.error("Connection failed: %s. Retrying in %ss...", err, self._reconnect_delay)
                 await asyncio.sleep(self._reconnect_delay)
                 self._reconnect_delay = min(self._reconnect_delay * 2, self._max_reconnect_delay)
 
@@ -82,9 +85,10 @@ class ElkConnectionManager:
         if self._writer:
             self._writer.close()
             try:
-                await self._writer.wait_closed()
-            except Exception as err:  # noqa: BLE001
-                _LOGGER.debug(f"Error closing writer: {err}")
+                # Wrap wait_closed in a strict timeout so a dead OS port never hangs HA
+                await asyncio.wait_for(self._writer.wait_closed(), timeout=2.0)
+            except Exception as err:
+                _LOGGER.debug("Error closing writer or timeout reached: %s", err)
         
         self._reader = None
         self._writer = None
@@ -103,16 +107,19 @@ class ElkConnectionManager:
                 decoded_line = line.decode('ascii', errors='ignore').strip()
                 
                 if decoded_line:
-                    # Pass the raw ASCII string up to the coordinator for parsing
-                    self._callback(decoded_line)
+                    # STRICT DEFENSE: Catch parsing exceptions so the reader never dies
+                    try:
+                        self._callback(decoded_line)
+                    except Exception as parse_err:
+                        _LOGGER.error("Coordinator crashed while parsing '%s': %s", decoded_line, parse_err)
 
             except asyncio.IncompleteReadError:
                 _LOGGER.warning("Elk-M1 connection dropped (IncompleteReadError).")
                 await self._handle_disconnect()
             except ConnectionError as err:
-                _LOGGER.error(f"Elk-M1 connection error: {err}")
+                _LOGGER.error("Elk-M1 connection error: %s", err)
                 await self._handle_disconnect()
-            except Exception as err:  # noqa: BLE001
+            except Exception as err:
                 _LOGGER.debug("Unexpected read error: %s", err)
                 await self._handle_disconnect()
 
@@ -130,27 +137,28 @@ class ElkConnectionManager:
             return False
 
         try:
-            # 1. Format payload: <command> + "00" (reserved bytes for future protocol use)
+            # 1. Format payload: <command> + "00"
             payload = f"{command}00"
             
-            # 2. Calculate length (payload length + 2 bytes for the length itself)
+            # 2. Calculate length
             length = len(payload) + 2
             packet = f"{length:02X}{payload}"
 
-            # 3. Calculate Checksum (Two's complement of the modulo-256 sum)
-            checksum = sum(ord(c) for c in packet) % 256
+            # 3. Safe Checksum: Encode to ASCII bytes first to prevent Unicode math crashes
+            packet_bytes = packet.encode('ascii', errors='ignore')
+            checksum = sum(packet_bytes) % 256
             checksum = (checksum ^ 0xFF) + 1
 
-            # 4. Construct final string with Carriage Return + Line Feed
+            # 4. Construct final string
             final_string = f"{packet}{checksum & 0xFF:02X}\r\n"
 
             self._writer.write(final_string.encode('ascii'))
             await self._writer.drain()
-            _LOGGER.debug(f"Sent Elk Command: {final_string.strip()}")
+            _LOGGER.debug("Sent Elk Command: %s", final_string.strip())
             return True
 
-        except Exception as err: # noqa: BLE001
-            _LOGGER.error(f"Failed to write to Elk-M1: {err}")
+        except Exception as err:
+            _LOGGER.error("Failed to write to Elk-M1: %s", err)
             await self._handle_disconnect()
             return False
 
