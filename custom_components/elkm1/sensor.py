@@ -22,7 +22,7 @@ from homeassistant.helpers.typing import VolDictType
 
 from .const import ATTR_VALUE, ELK_USER_CODE_SERVICE_SCHEMA
 from .coordinator import ElkDataUpdateCoordinator
-from .data import ElkRuntimeData
+from .data import ElkM1Data
 from .entity import ElkEntity
 from .util import deprecate_entity
 
