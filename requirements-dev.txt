@@ -1,7 +1,14 @@
-homeassistant>=2024.1.0
-pytest>=7.0.0
-pytest-cov>=4.0.0
-pytest-asyncio>=0.21.0
-mypy>=1.0.0
-black>=23.0.0
-ruff>=0.1.0
+# Linting & Formatting
+ruff==0.16.3
+
+# Type Checking
+mypy>=1.8.0
+
+# Testing
+pytest>=8.0.0
+pytest-asyncio>=0.23.5
+pytest-homeassistant-custom-component>=0.13.111
+
+# Integration Dependencies (so tests/type-checkers know what they are)
+pyserial>=3.5
+pyserial-asyncio>=0.6
