@@ -39,14 +39,11 @@ from .const import (
     CONF_PIN,
     CONF_SERIAL_PORT,
     CONNECTION_SERIAL,
-    DISCOVER_SCAN_TIMEOUT,
     DOMAIN,
 )
 from .discovery import (
     _short_mac,
-    async_discover_device,
     async_discover_devices,
-    async_update_entry_from_discovery,
 )
 from .helpers.connection import ElkConnectionManager
 from .helpers.usb_discovery import probe_serial_port
