@@ -5,6 +5,7 @@ import logging
 from typing import Any
 
 from serial.tools import list_ports
+from homeassistant.core import HomeAssistant
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -18,30 +19,63 @@ KNOWN_ADAPTERS = {
 }
 
 
-async def discover_elk_ports() -> dict[str, str]:
-    """Discover available ELK-M1 compatible serial ports."""
+def get_in_use_serial_ports(hass: HomeAssistant) -> set[str]:
+    """Scan Home Assistant config entries to find serial ports actively used by other integrations."""
+    in_use = set()
+    # Common dictionary keys integrations use to store serial port paths
+    serial_keys = {"device", "port", "serial_port", "path", "url"}
+    
+    for entry in hass.config_entries.async_entries():
+        # Check both the static data and dynamic options dicts
+        for source in (entry.data, entry.options):
+            for key in serial_keys:
+                val = source.get(key)
+                
+                # Standard String Path (e.g., Modbus, Serial, ELK)
+                if isinstance(val, str) and (val.startswith("/dev/") or val.startswith("COM") or val.startswith("serial://")):
+                    clean_path = val.replace("serial://", "")
+                    in_use.add(clean_path)
+                    
+                # Dictionary Path (e.g., ZHA stores it as {'path': '/dev/ttyUSB0'})
+                elif key == "device" and isinstance(val, dict):
+                    dict_path = val.get("path")
+                    if isinstance(dict_path, str) and (dict_path.startswith("/dev/") or dict_path.startswith("COM")):
+                        in_use.add(dict_path)
+                        
+    return in_use
+
+
+async def discover_elk_ports(hass: HomeAssistant) -> dict[str, str]:
+    """Discover available ELK-M1 compatible serial ports, excluding those in use."""
     loop = asyncio.get_running_loop()
+    
+    # 1. Get the blacklist of ports already claimed by Home Assistant
+    in_use_ports = get_in_use_serial_ports(hass)
 
     def _list_ports() -> dict[str, str]:
         available_ports = {}
         for port_info in list_ports.comports():
-            # Prefer persistent by-id paths over volatile ttyUSB/COM nodes
             port_path = (
                 port_info.device
                 if port_info.device and port_info.device.startswith("/dev/serial/by-id/")
                 else (port_info.device or port_info.name)
             )
 
+            # 2. Prevent UI listing and probing if the port is already owned by another integration
+            if port_path in in_use_ports or port_info.device in in_use_ports:
+                _LOGGER.debug("Skipping in-use serial port: %s", port_path)
+                continue
+
             friendly = _get_friendly_name(port_info)
             available_ports[port_path] = friendly
-            _LOGGER.debug(f"Found port: {port_path} -> {friendly}")
+            _LOGGER.debug("Found available, unused port: %s -> %s", port_path, friendly)
 
         return available_ports
 
     try:
         ports = await loop.run_in_executor(None, _list_ports)
     except OSError as e:
-        _LOGGER.error(f"Error discovering ports: {e}")
+        _LOGGER.error("Error discovering ports: %s", e)
         return {}
 
     return ports
@@ -56,28 +90,18 @@ def _get_friendly_name(port_info: Any) -> str:
 
 async def probe_serial_port(port: str, timeout: float = 5.0) -> bool:
     """Test if a serial port actually has an ELK-M1 panel connected.
-
-    Attempts to connect, wait for the connected event, and verify panel data.
-
-    Args:
-        port: Serial port path (e.g., "/dev/ttyUSB0" or "/dev/serial/by-id/...")
-        timeout: Connection timeout in seconds
-
-    Returns:
-        True if ELK-M1 data detected, False otherwise
+    
+    Wrapped in extensive error handling to prevent event loop crashes.
     """
     from .connection import ElkConnectionManager
 
     data_received = asyncio.Event()
 
     def _on_message(msg: str) -> None:
-        """Callback for incoming data. Any valid Elk ASCII response proves it's a panel."""
         if len(msg) >= 4:
             data_received.set()
 
     url = f"serial://{port}"
-    _LOGGER.debug(f"Probing port: {url}")
-
     connection = ElkConnectionManager(
         connection_url=url,
         on_message_callback=_on_message,
@@ -86,23 +110,20 @@ async def probe_serial_port(port: str, timeout: float = 5.0) -> bool:
 
     try:
         await connection.connect()
-        
-        # Send a 'vn' (Version Request) command to prompt the panel to speak
         await connection.write("vn")
-
-        try:
-            # Wait for a response to hit our callback
-            await asyncio.wait_for(data_received.wait(), timeout=timeout)
-            _LOGGER.info(f"Port {url}: ELK-M1 data verified ✓")
-            return True
-
-        except asyncio.TimeoutError:
-            _LOGGER.debug(f"Port {url}: Connection timeout (no device responded)")
-            return False
-
-    except Exception as e:  # noqa: BLE001
-        _LOGGER.debug(f"Port {port}: No ELK-M1 detected - {e}")
-        return False
         
+        # Wait safely for the panel to respond
+        await asyncio.wait_for(data_received.wait(), timeout=timeout)
+        return True
+
+    except (asyncio.TimeoutError, ConnectionError, OSError, ValueError) as e:
+        _LOGGER.debug("Port %s probe failed gracefully: %s", port, e)
+        return False
+    except Exception as e:
+        _LOGGER.error("Unexpected error during serial probe on %s: %s", port, e)
+        return False
     finally:
-        await connection.disconnect()
+        try:
+            await connection.disconnect()
+        except Exception:
+            pass
