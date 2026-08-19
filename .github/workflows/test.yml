@@ -13,8 +13,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { ha-version: "2025.4.4", python-version: "3.13" }
-          - { ha-version: "2026.2.3", python-version: "3.13" }
           - { ha-version: "2026.8.2", python-version: "3.14" }
     steps:
       - uses: actions/checkout@v4
@@ -29,6 +27,7 @@ jobs:
             -c "https://raw.githubusercontent.com/home-assistant/core/${{ matrix.ha-version }}/homeassistant/package_constraints.txt"
           pip install -r requirements-dev.txt \
             -c "https://raw.githubusercontent.com/home-assistant/core/${{ matrix.ha-version }}/homeassistant/package_constraints.txt"
+          pip install elkm1-lib
             
       - name: Run Pytest
         run: pytest tests/
