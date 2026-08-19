@@ -42,7 +42,7 @@ def _find_coordinator_by_prefix(hass: HomeAssistant, prefix: str) -> ElkDataUpda
     for entry in hass.config_entries.async_entries(DOMAIN):
         if not entry.runtime_data:
             continue
-        elk_data: ELKM1Data = entry.runtime_data
+        elk_data: ElkRuntimeData = entry.runtime_data
         if elk_data.prefix == prefix:
             return elk_data.coordinator
     return None
