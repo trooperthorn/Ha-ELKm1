@@ -1,7 +1,7 @@
 {
   "domain": "elkm1",
   "name": "Elk-M1 Security",
-  "version": "2026.08.18.22",
+  "version": "2026.08.19",
   "codeowners": [
     "@trooperthorn"
   ],
