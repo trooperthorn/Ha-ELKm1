@@ -1,134 +1,66 @@
-"""Parse and handle system trouble status from ELK-M1."""
+"""Parse the Elk-M1 system trouble status (SS) bitfield.
+
+elkm1_lib's Panel object only exposes a pre-joined display string
+(`system_trouble_status`, built by its own internal `_ss_handler`) - there
+is no structured per-condition data on the Panel object itself to build
+individual binary_sensor entities from. This module parses the same raw,
+character-position-indexed string the panel sends (also passed to any
+extra "SS" handler registered via elk.add_handler, alongside elkm1_lib's
+own) into a plain dict of booleans, one per condition, matching the exact
+index mapping elkm1_lib's Panel._ss_handler uses internally.
+"""
 
 from __future__ import annotations
 
-import logging
-from typing import Any
-
-_LOGGER = logging.getLogger(__name__)
-
-# Map trouble codes to friendly names
-TROUBLE_STATUSES = {
-    0: "AC Fail",
-    1: "Box Tamper",
-    2: "Fail To Communicate",
-    3: "EEProm Memory Error",
-    4: "Low Battery Control",
-    5: "Transmitter Low Battery",
-    6: "Over Current",
-    7: "Telephone Fault",
-    8: "Output 2",
-    9: "Missing Keypad",
-    10: "Zone Expander",
-    11: "Output Expander",
-    12: "ELKRP Remote Access",
-    13: "Common Area Not Armed",
-    14: "Flash Memory Error",
-    15: "Security Alert",
-    16: "Serial Port Expander",
-    17: "Lost Transmitter",
-    18: "GE Smoke CleanMe",
-    19: "Ethernet",
-    20: "Display Message In Keypad Line 1",
-    21: "Display Message In Keypad Line 2",
-    22: "Fire",
-}
-
-# Troubles that include zone numbers
-ZONE_TROUBLES = {
-    "Box Tamper",
-    "Transmitter Low Battery",
-    "Security Alert",
-    "Lost Transmitter",
-    "Fire",
+# index -> (machine name, human-readable name). Indices not listed are
+# reserved/unused positions in the protocol's SS reply.
+TROUBLE_INDEX_NAMES: dict[int, tuple[str, str]] = {
+    0: ("ac_fail", "AC Fail"),
+    1: ("box_tamper", "Box Tamper"),
+    2: ("fail_to_communicate", "Fail To Communicate"),
+    3: ("eeprom_memory_error", "EEPROM Memory Error"),
+    4: ("low_battery", "Low Battery Control"),
+    5: ("transmitter_low_battery", "Transmitter Low Battery"),
+    6: ("over_current", "Over Current"),
+    7: ("telephone_fault", "Telephone Fault"),
+    9: ("output_2", "Output 2"),
+    10: ("missing_keypad", "Missing Keypad"),
+    11: ("zone_expander", "Zone Expander"),
+    12: ("output_expander", "Output Expander"),
+    14: ("elkrp_remote_access", "ELKRP Remote Access"),
+    16: ("common_area_not_armed", "Common Area Not Armed"),
+    17: ("flash_memory_error", "Flash Memory Error"),
+    18: ("security_alert", "Security Alert"),
+    19: ("serial_port_expander", "Serial Port Expander"),
+    20: ("lost_transmitter", "Lost Transmitter"),
+    21: ("ge_smoke_cleanme", "GE Smoke CleanMe"),
+    22: ("ethernet", "Ethernet"),
+    31: ("display_message_line_1", "Display Message In Keypad Line 1"),
+    32: ("display_message_line_2", "Display Message In Keypad Line 2"),
+    33: ("fire", "Fire"),
 }
 
 
-def parse_trouble_status(panel_object: Any) -> list[str]:
-    """Parse trouble status from panel object.
+def parse_troubles(raw_status: str) -> dict[str, bool]:
+    """Parse a raw SS status string into {machine_name: is_active}.
 
-    Args:
-        panel_object: Panel object from elkm1_lib
-
-    Returns:
-        List of active trouble status strings
-
-    Example:
-        ["AC Fail", "Lost Transmitter zone 5"]
+    `raw_status` is the exact string elkm1_lib's ss_decode() produces
+    (msg[4:-2]) - each character position is '0' when inactive, or any
+    other character when active (some positions encode a zone number
+    instead of a plain flag; this only reports on/off, not which zone).
     """
-    troubles: list[str] = []
-
-    try:
-        if not panel_object or not hasattr(panel_object, "trouble_status"):
-            return []
-
-        trouble_data = panel_object.trouble_status
-        if trouble_data is None:
-            return []
-
-        # Handle dictionary payloads
-        if isinstance(trouble_data, dict):
-            for code, is_active in trouble_data.items():
-                if is_active:
-                    try:
-                        code_int = int(code)
-                        trouble_name = TROUBLE_STATUSES.get(code_int, f"Unknown ({code})")
-                    except (ValueError, TypeError):
-                        trouble_name = str(code)
-                    troubles.append(trouble_name)
-
-        # Handle integer bitmask or numeric string representation
-        elif isinstance(trouble_data, (int, str)):
-            try:
-                bitmask = int(trouble_data)
-                for bit in range(32):
-                    if bitmask & (1 << bit):
-                        trouble_name = TROUBLE_STATUSES.get(bit, f"Unknown ({bit})")
-                        troubles.append(trouble_name)
-            except (ValueError, TypeError):
-                pass
-
-        # Handle list, tuple, or set of active codes
-        elif isinstance(trouble_data, (list, tuple, set)):
-            for code in trouble_data:
-                try:
-                    code_int = int(code)
-                    trouble_name = TROUBLE_STATUSES.get(code_int, f"Unknown ({code})")
-                    troubles.append(trouble_name)
-                except (ValueError, TypeError):
-                    troubles.append(str(code))
-
-        return troubles
-
-    except (AttributeError, KeyError, TypeError) as err:
-        _LOGGER.error(f"Error parsing trouble status: {err}")
-        return []
+    return {
+        name: index < len(raw_status) and raw_status[index] != "0"
+        for index, (name, _label) in TROUBLE_INDEX_NAMES.items()
+    }
 
 
-def get_trouble_status_string(panel_object: Any) -> str:
-    """Get formatted trouble status string for display.
-
-    Args:
-        panel_object: Panel object from elkm1_lib
-
-    Returns:
-        Comma-separated string of active troubles
-    """
-    troubles = parse_trouble_status(panel_object)
-
-    if not troubles:
-        return "No troubles"
-
-    return ", ".join(troubles)
-
-
-def has_troubles(panel_object: Any) -> bool:
-    """Check if any troubles are active."""
-    return len(parse_trouble_status(panel_object)) > 0
-
-
-def get_critical_troubles(panel_object: Any) -> list[str]:
-    """Get only critical trouble statuses."""
-    critical = {"AC Fail", "Box Tamper", "Fire", "Security Alert"}
-    troubles = parse_trouble_status(panel_object)
-    return [t for t in troubles if any(c in t for c in critical)]
+def format_troubles(raw_status: str) -> str:
+    """Return a human-readable, comma-separated list of active troubles."""
+    active = parse_troubles(raw_status)
+    labels = [
+        label
+        for index, (name, label) in TROUBLE_INDEX_NAMES.items()
+        if active.get(name)
+    ]
+    return ", ".join(labels) if labels else "Normal"

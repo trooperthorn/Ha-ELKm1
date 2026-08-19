@@ -79,6 +79,8 @@ class ElkPanelData:
     outputs_active: list[int] = field(default_factory=list)
     active_output_names: list[str] = field(default_factory=list)
     trouble_status: bool = False
+    troubles: dict[str, bool] = field(default_factory=dict)
+    raw_trouble_status: str = ""
     ac_power: bool = True
     battery_status: str = "Good"
     panel_temperature: float | None = None

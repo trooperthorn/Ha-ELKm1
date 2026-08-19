@@ -19,6 +19,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from .const import ELK_USER_CODE_SERVICE_SCHEMA
 from .coordinator import ElkDataUpdateCoordinator
 from .entity import ElkEntity
+from .helpers.troublestatus import format_troubles
 from .models import ElkRuntimeData
 
 _LOGGER = logging.getLogger(__name__)
@@ -150,30 +151,11 @@ class ElkPanel(ElkSensor):
         if not self.coordinator.data:
             return {}
 
-        panel = self.coordinator.data.panel
-        raw_status = str(getattr(panel, "system_trouble_status", "")) if panel else ""
-        
+        raw_status = self.coordinator.data.raw_trouble_status
         return {
             "system_trouble_status_raw": raw_status,
-            "system_trouble_status_parsed": self._parse_troubles(raw_status),
+            "system_trouble_status_parsed": format_troubles(raw_status),
         }
-
-    def _parse_troubles(self, status: str) -> str:
-        """Parse Elk panel trouble status into a readable string."""
-        if not status or not isinstance(status, str):
-            return "Normal"
-
-        troubles = []
-        if len(status) >= 1 and status[0] != "0": troubles.append("AC Fail")
-        if len(status) >= 2 and status[1] != "0": troubles.append("Box Tamper")
-        if len(status) >= 3 and status[2] != "0": troubles.append("Fail To Communicate")
-        if len(status) >= 4 and status[3] != "0": troubles.append("EEPROM Error")
-        if len(status) >= 5 and status[4] != "0": troubles.append("Low Battery")
-        if len(status) >= 6 and status[5] != "0": troubles.append("Transmitter Low Battery")
-        if len(status) >= 7 and status[6] != "0": troubles.append("Over Current")
-        if len(status) >= 8 and status[7] != "0": troubles.append("Telephone Fault")
-
-        return ", ".join(troubles) if troubles else "Normal"
 
 
 class ElkZone(ElkSensor):

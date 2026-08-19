@@ -10,11 +10,13 @@ from homeassistant.components.binary_sensor import (
     BinarySensorEntity,
 )
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .coordinator import ElkDataUpdateCoordinator
 from .entity import ElkEntity
+from .helpers.troublestatus import TROUBLE_INDEX_NAMES
 from .models import ElkRuntimeData
 
 _LOGGER = logging.getLogger(__name__)
@@ -74,6 +76,11 @@ async def async_setup_entry(
                 zone_index=zone.index,
             )
         )
+
+    entities.extend(
+        ElkTroubleBinarySensor(coordinator, config_entry, name, label)
+        for _index, (name, label) in TROUBLE_INDEX_NAMES.items()
+    )
 
     async_add_entities(entities)
 
@@ -150,3 +157,31 @@ class ElkBinarySensor(ElkEntity, BinarySensorEntity):
             "triggered_alarm": getattr(zone, "triggered_alarm", False),
             "voltage": getattr(zone, "voltage", 0.0),
         }
+
+
+class ElkTroubleBinarySensor(ElkEntity, BinarySensorEntity):
+    """Representation of a single Elk-M1 system trouble condition."""
+
+    _attr_device_class = BinarySensorDeviceClass.PROBLEM
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_entity_registry_enabled_default = False
+
+    def __init__(
+        self,
+        coordinator: ElkDataUpdateCoordinator,
+        config_entry: ConfigEntry,
+        trouble_name: str,
+        trouble_label: str,
+    ) -> None:
+        """Initialize the trouble sensor."""
+        super().__init__(coordinator, config_entry, f"trouble_{trouble_name}")
+        self._trouble_name = trouble_name
+        self._attr_unique_id = f"{config_entry.entry_id}_trouble_{trouble_name}"
+        self._attr_name = trouble_label
+
+    @property
+    def is_on(self) -> bool:
+        """Return true if this trouble condition is currently active."""
+        if not self.coordinator.data:
+            return False
+        return self.coordinator.data.troubles.get(self._trouble_name, False)

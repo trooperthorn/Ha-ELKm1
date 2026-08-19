@@ -31,6 +31,7 @@ from .const import (
     COORDINATOR_UPDATE_INTERVAL,
 )
 from .helpers.transport import attach_baud_state
+from .helpers.troublestatus import parse_troubles
 from .models import AreaData, ElkPanelData
 from .vocabulary import translate_elk_voice
 
@@ -75,6 +76,7 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator[ElkPanelData]):
         self._pin: str = str(config_entry_data.get(CONF_PIN, ""))
         self._on_baud_detected = on_baud_detected
         self._url = self._build_connection_url()
+        self._raw_trouble_status = ""
         self.data = ElkPanelData()
 
     @property
@@ -140,6 +142,7 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator[ElkPanelData]):
 
         elk.add_handler("EE", self._handle_timer_event)
         elk.add_handler("AM", self._handle_alarm_memory)
+        elk.add_handler("SS", self._handle_trouble_status)
         if elk.panel is not None:
             elk.panel.add_callback(self._handle_voice_message)
 
@@ -200,6 +203,17 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator[ElkPanelData]):
             "elkm1_alarm_memory",
             {"areas": [i + 1 for i, flagged in enumerate(alarm_memory) if flagged]},
         )
+
+    def _handle_trouble_status(self, system_trouble_status: str) -> None:
+        """Store the raw SS trouble string and push an updated snapshot.
+
+        Registered alongside elkm1_lib's own Panel._ss_handler (Notifier
+        supports multiple handlers per message type) so we get the raw,
+        per-condition string directly rather than Panel's already-joined
+        display string, which loses which individual conditions are active.
+        """
+        self._raw_trouble_status = system_trouble_status
+        self.async_set_updated_data(self._build_normalized_data())
 
     async def async_disconnect(self) -> None:
         """Disconnect from ELK-M1 panel."""
@@ -285,6 +299,7 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator[ElkPanelData]):
                 break
 
         is_any_armed = any(a.armed_status != 0 for a in areas_dict.values())
+        troubles = parse_troubles(self._raw_trouble_status)
 
         return ElkPanelData(
             panel_version=getattr(panel, "elkm1_version", None),
@@ -307,7 +322,9 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator[ElkPanelData]):
             faulted_zone_names=faulted_names,
             outputs_active=active_outputs,
             active_output_names=active_output_names,
-            trouble_status=bool(getattr(panel, "system_trouble_status", "")),
+            trouble_status=any(troubles.values()),
+            troubles=troubles,
+            raw_trouble_status=self._raw_trouble_status,
             ac_power=True,
             battery_status="Good",
             panel_temperature=panel_temp,
