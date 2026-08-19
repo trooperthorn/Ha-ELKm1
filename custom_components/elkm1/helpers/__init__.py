@@ -8,7 +8,6 @@ from .panel_settings import (
     enable_required_settings,
     verify_panel_configuration,
 )
-from .serial_queue import ElkSerialQueue
 from .troublestatus import (
     get_critical_troubles,
     get_trouble_status_string,
@@ -18,7 +17,6 @@ from .troublestatus import (
 from .usb_discovery import discover_elk_ports, probe_serial_port
 
 __all__ = [
-    "ElkSerialQueue",
     "check_panel_version",
     "check_required_settings",
     "discover_elk_ports",

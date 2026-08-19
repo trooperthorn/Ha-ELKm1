@@ -14,8 +14,8 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .coordinator import ElkDataUpdateCoordinator
-from .data import ELKM1Data
 from .entity import ElkEntity
+from .models import AreaData, ElkRuntimeData
 
 # Safe imports for optional alarm panel features/formats across HA versions
 try:
@@ -50,7 +50,7 @@ async def async_setup_entry(
     coordinator = runtime_data.coordinator
 
     # The coordinator now dictates how many areas exist based on connection parsing
-    num_areas = coordinator.data.get("num_areas", 1) if coordinator.data else 1
+    num_areas = coordinator.data.num_areas if coordinator.data else 1
     
     entities = [
         ElkAlarmControlPanel(
@@ -92,11 +92,11 @@ class ElkAlarmControlPanel(ElkEntity, AlarmControlPanelEntity):
         self._attr_unique_id = f"{config_entry.entry_id}_area_{area_num}"
 
     @property
-    def area_data(self) -> dict[str, Any]:
-        """Helper to get the specific area data dictionary from the coordinator."""
-        if self.coordinator.data and "areas" in self.coordinator.data:
-            return self.coordinator.data["areas"].get(self._area_index, {})
-        return {}
+    def area_data(self) -> AreaData:
+        """Helper to get the specific area data from the coordinator."""
+        if self.coordinator.data:
+            return self.coordinator.data.areas.get(self._area_index, AreaData())
+        return AreaData()
 
     @property
     def alarm_state(self) -> AlarmControlPanelState | None:
@@ -105,20 +105,20 @@ class ElkAlarmControlPanel(ElkEntity, AlarmControlPanelEntity):
             return None
 
         data = self.area_data
-        alarm_state_val = data.get("alarm_state", 0)
-        armed_status_val = data.get("armed_status", 0)
-        arm_up_state_val = data.get("arm_up_state", 0)
+        alarm_state_val = data.alarm_state
+        armed_status_val = data.armed_status
+        arm_up_state_val = data.arm_up_state
 
         # 1. TRIGGERED: Elk AlarmState >= 2
         if alarm_state_val >= 2:
             return STATE_ALARM_TRIGGERED
 
         # 2. PENDING (Entry Delay): Elk AlarmState == 1 OR Timer1 running while armed
-        if alarm_state_val == 1 or (data.get("timer1", 0) > 0 and armed_status_val != 0):
+        if alarm_state_val == 1 or (data.timer1 > 0 and armed_status_val != 0):
             return AlarmControlPanelState.PENDING
 
         # 3. ARMING (Exit Delay): Timer2 running or exit state indicated
-        if data.get("timer2", 0) > 0 or arm_up_state_val in (3, 5):
+        if data.timer2 > 0 or arm_up_state_val in (3, 5):
             return AlarmControlPanelState.ARMING
 
         # 4. ARMED_CUSTOM_BYPASS: Armed with Bypass active
@@ -147,33 +147,33 @@ class ElkAlarmControlPanel(ElkEntity, AlarmControlPanelEntity):
         area_data = self.area_data
 
         return {
-            "armed": global_data.get("armed", False),
-            "armed_mode": global_data.get("armed_mode", "disarmed"),
-            "entry_delay_active": area_data.get("entry_delay_active", False),
-            "exit_delay_active": area_data.get("exit_delay_active", False),
-            "entry_delay_seconds": area_data.get("entry_delay", 0),
-            "exit_delay_seconds": area_data.get("exit_delay", 0),
-            "last_user": global_data.get("last_user"),
-            "last_user_name": global_data.get("last_user_name", "Unknown"),
-            "last_keypad": global_data.get("last_keypad"),
-            "zones_faulted": global_data.get("zones_faulted", []),
-            "zones_faulted_count": len(global_data.get("zones_faulted", [])),
-            "faulted_zone_names": global_data.get("faulted_zone_names", []),
-            "outputs_active": global_data.get("outputs_active", []),
-            "outputs_active_count": len(global_data.get("outputs_active", [])),
-            "active_output_names": global_data.get("active_output_names", []),
-            "trouble_status": global_data.get("trouble_status", False),
-            "ac_power": global_data.get("ac_power", True),
-            "battery_status": global_data.get("battery_status", "Good"),
-            "panel_temperature": global_data.get("panel_temperature"),
+            "armed": global_data.armed,
+            "armed_mode": global_data.armed_mode,
+            "entry_delay_active": area_data.entry_delay_active,
+            "exit_delay_active": area_data.exit_delay_active,
+            "entry_delay_seconds": area_data.entry_delay,
+            "exit_delay_seconds": area_data.exit_delay,
+            "last_user": global_data.last_user,
+            "last_user_name": global_data.last_user_name,
+            "last_keypad": global_data.last_keypad,
+            "zones_faulted": global_data.zones_faulted,
+            "zones_faulted_count": len(global_data.zones_faulted),
+            "faulted_zone_names": global_data.faulted_zone_names,
+            "outputs_active": global_data.outputs_active,
+            "outputs_active_count": len(global_data.outputs_active),
+            "active_output_names": global_data.active_output_names,
+            "trouble_status": global_data.trouble_status,
+            "ac_power": global_data.ac_power,
+            "battery_status": global_data.battery_status,
+            "panel_temperature": global_data.panel_temperature,
             "connection_status": "Connected" if self.coordinator.last_update_success else "Disconnected",
             "last_update": self.coordinator.last_update_success,
-            "alarm_triggered": area_data.get("alarm_state", 0) >= 2,
-            "fire_alarm": global_data.get("fire_alarm_active", False),
-            "panic_alarm": area_data.get("panic_state", False),
-            "alarm_memory": area_data.get("alarm_memory", False),
-            "bypassed_zones": global_data.get("bypassed_zones", []),
-            "bypassed_zones_count": len(global_data.get("bypassed_zones", [])),
+            "alarm_triggered": area_data.alarm_state >= 2,
+            "fire_alarm": global_data.fire_alarm_active,
+            "panic_alarm": area_data.panic_state,
+            "alarm_memory": area_data.alarm_memory,
+            "bypassed_zones": global_data.bypassed_zones,
+            "bypassed_zones_count": len(global_data.bypassed_zones),
         }
 
     def _get_code_val(self, code: str | None) -> int:

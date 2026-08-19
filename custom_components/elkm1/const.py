@@ -22,6 +22,7 @@ CONF_PORT = "port"
 CONF_USERNAME = "username"
 CONF_PASSWORD = "password"
 CONF_PIN = "pin"
+CONF_BAUD_RATE = "baud_rate"
 
 CONNECTION_SERIAL = "serial"
 CONNECTION_NETWORK = "network"

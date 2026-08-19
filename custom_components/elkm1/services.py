@@ -56,33 +56,28 @@ def _get_coordinator(service: ServiceCall) -> ElkDataUpdateCoordinator:
     return coordinator
 
 async def _async_speak_word_service(service: ServiceCall) -> None:
-    """Send the speak word (sw) raw command."""
+    """Speak a word via elkm1_lib's own Panel.speak_word() helper."""
     coordinator = _get_coordinator(service)
     number = service.data["number"]
-    await coordinator.send_raw_elk_command(f"sw{number:03d}")
+    await coordinator.speak_word(number)
 
 async def _async_speak_phrase_service(service: ServiceCall) -> None:
-    """Send the speak phrase (sp) raw command."""
+    """Speak a phrase via elkm1_lib's own Panel.speak_phrase() helper."""
     coordinator = _get_coordinator(service)
     number = service.data["number"]
-    await coordinator.send_raw_elk_command(f"sp{number:03d}")
+    await coordinator.speak_phrase(number)
 
 async def _async_set_time_service(service: ServiceCall) -> None:
-    """Send the change system clock (cs) raw command."""
+    """Write the panel's real-time clock via elkm1_lib's own Panel.set_time() helper."""
     coordinator = _get_coordinator(service)
-    now = dt_util.now()
-    # Elk ASCII 'cs' format: csYYMMDDHHmmD (D = Day of week 1-7, where Sun=1, Mon=2...)
-    # Python isoweekday() is Mon=1, Sun=7.
-    dow = (now.isoweekday() % 7) + 1
-    cmd = f"cs{now.strftime('%y%m%d%H%M')}{dow}"
-    await coordinator.send_raw_elk_command(cmd)
+    await coordinator.set_panel_time(dt_util.now())
 
 async def _async_get_security_summary(service: ServiceCall) -> ServiceResponse:
     """Return live security data to an automation or script."""
     coordinator = _get_coordinator(service)
-    
+
     # Read instantly from our normalized coordinator data
-    faulted_indices = coordinator.data.get("zones_faulted", []) if coordinator.data else []
+    faulted_indices = coordinator.data.zones_faulted if coordinator.data else []
     
     # Elk zones are 1-indexed for the user, indices are 0-indexed
     faulted_zones = [idx + 1 for idx in faulted_indices]

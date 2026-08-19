@@ -55,14 +55,16 @@ async def check_panel_version(coordinator: Any) -> str | None:
         Version string (e.g., "4.6.8" or "5.2.0") or None if not available
     """
     try:
-        # Send the 'vn' command to request the version string
-        await coordinator.send_raw_elk_command("vn")
-        
-        # Give the panel a moment to respond and the coordinator to parse it
-        await asyncio.sleep(2.0)
-        
-        # Read the parsed version from our normalized dictionary
-        version = coordinator.data.get("panel_version")
+        # The panel version is already requested as part of the panel's
+        # sync-on-connect sequence (Panel.sync() sends vn); the reply is
+        # async and may not have arrived yet right after first refresh, so
+        # poll briefly rather than assuming it's already there.
+        version = coordinator.data.panel_version
+        for _ in range(15):
+            if version:
+                break
+            await asyncio.sleep(0.2)
+            version = coordinator.data.panel_version
 
         if version:
             _LOGGER.info(f"ELK-M1 Panel Version: {version}")

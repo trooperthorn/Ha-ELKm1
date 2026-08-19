@@ -48,12 +48,14 @@ async def async_setup_entry(
     coordinator = runtime_data.coordinator
 
     entities = []
-    zones = coordinator.data.get("zones", []) if coordinator.data else []
+    zones = coordinator.data.zones if coordinator.data else []
 
-    for index, zone in enumerate(zones):
-        if not zone:
+    for zone in zones:
+        # elkm1_lib always allocates Max.ZONES.value (208) Zone objects
+        # regardless of how many the panel actually has configured.
+        if not zone.configured:
             continue
-            
+
         # Safely extract the zone definition (integer representation)
         def_val = 0
         if hasattr(zone, "definition"):
@@ -63,13 +65,13 @@ async def async_setup_entry(
         # Skip 33 (TEMPERATURE) and 34 (ANALOG_ZONE) - these are handled natively in sensor.py
         if def_val in (33, 34):
             continue
-            
+
         # Create the Binary Sensor entity
         entities.append(
             ElkBinarySensor(
                 coordinator=coordinator,
                 config_entry=config_entry,
-                zone_index=index,
+                zone_index=zone.index,
             )
         )
 
@@ -100,10 +102,8 @@ class ElkBinarySensor(ElkEntity, BinarySensorEntity):
     @property
     def zone_data(self) -> Any:
         """Helper to get the specific zone object from the coordinator data."""
-        if self.coordinator.data and "zones" in self.coordinator.data:
-            zones = self.coordinator.data["zones"]
-            if self._zone_index < len(zones):
-                return zones[self._zone_index]
+        if self.coordinator.data and self._zone_index < len(self.coordinator.data.zones):
+            return self.coordinator.data.zones[self._zone_index]
         return None
 
     def _get_enum_value(self, obj: Any, default: int = 0) -> int:

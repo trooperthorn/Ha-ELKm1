@@ -8,6 +8,7 @@ from math import ceil
 from typing import Any, override
 
 import voluptuous as vol
+from elkm1_lib.const import ThermostatMode, ThermostatSetting
 
 from homeassistant.components.switch import DOMAIN as SWITCH_DOMAIN, SwitchEntity
 from homeassistant.config_entries import ConfigEntry
@@ -51,16 +52,19 @@ async def async_setup_entry(
     entities.append(ElkArmRequestSwitch(coordinator, config_entry))
 
     # 2. Native Physical Outputs
-    outputs = coordinator.data.get("outputs", []) if coordinator.data else []
-    for i, output in enumerate(outputs):
-        if output:
-            entities.append(ElkOutput(coordinator, config_entry, i))
+    # elkm1_lib always allocates Max.OUTPUTS.value (208) Output objects
+    # regardless of how many the panel actually has - only create switches
+    # for ones that received real sync data, not the library's ceiling.
+    outputs = coordinator.data.outputs if coordinator.data else []
+    for output in outputs:
+        if output.configured:
+            entities.append(ElkOutput(coordinator, config_entry, output.index))
 
     # 3. Thermostat Emergency Heat Switches
-    thermostats = coordinator.data.get("thermostats", []) if coordinator.data else []
-    for i, tstat in enumerate(thermostats):
-        if tstat:
-            entities.append(ElkThermostatEMHeat(coordinator, config_entry, i))
+    thermostats = coordinator.data.thermostats if coordinator.data else []
+    for tstat in thermostats:
+        if tstat.configured:
+            entities.append(ElkThermostatEMHeat(coordinator, config_entry, tstat.index))
 
     async_add_entities(entities)
 
@@ -94,8 +98,9 @@ class ElkArmRequestSwitch(ElkEntity, SwitchEntity):
     @override
     def device_info(self) -> DeviceInfo:
         """Device info connecting via the ElkM1 system."""
-        # Note: requires the Elk instance or similar device reference upstream
-        return create_elk_system_device_info(self.coordinator._elk, self._prefix, self._mac)
+        return create_elk_system_device_info(
+            self._config_entry, sw_version=self.coordinator.data.panel_version
+        )
 
     @property
     @override
@@ -129,37 +134,33 @@ class ElkOutput(ElkEntity, SwitchEntity):
         self._attr_name = getattr(output_obj, "name", f"Output {index+1}") if output_obj else f"Output {index+1}"
 
     def _get_obj(self) -> Any:
-        if self.coordinator.data and "outputs" in self.coordinator.data:
-            outputs = self.coordinator.data["outputs"]
-            if self._index < len(outputs):
-                return outputs[self._index]
+        if self.coordinator.data and self._index < len(self.coordinator.data.outputs):
+            return self.coordinator.data.outputs[self._index]
         return None
 
     @property
     @override
     def is_on(self) -> bool:
         """Get the current output status."""
-        if not self.coordinator.data:
-            return False
-        # Check if this index exists in the active outputs array cached by the coordinator
-        return self._index in self.coordinator.data.get("outputs_active", [])
+        obj = self._get_obj()
+        return bool(obj and obj.output_on)
 
     @override
     async def async_turn_on(self, **kwargs: Any) -> None:
-        """Turn on the output indefinitely (Timer = 00000)."""
-        # Elk ASCII 'cn' command: cn + Output(3) + Timer(5)
-        await self.coordinator.send_raw_elk_command(f"cn{self._index + 1:03d}00000")
+        """Turn on the output indefinitely."""
+        if obj := self._get_obj():
+            obj.turn_on(0)
 
     @override
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Turn off the output."""
-        # Elk ASCII 'cf' command: cf + Output(3)
-        await self.coordinator.send_raw_elk_command(f"cf{self._index + 1:03d}")
+        if obj := self._get_obj():
+            obj.turn_off()
 
     async def async_switch_output_turn_on_for(self, duration: timedelta) -> None:
         """Turn on an output for specified length of time."""
-        seconds = ceil(duration.total_seconds())
-        await self.coordinator.send_raw_elk_command(f"cn{self._index + 1:03d}{seconds:05d}")
+        if obj := self._get_obj():
+            obj.turn_on(ceil(duration.total_seconds()))
 
 
 class ElkThermostatEMHeat(ElkEntity, SwitchEntity):
@@ -176,10 +177,8 @@ class ElkThermostatEMHeat(ElkEntity, SwitchEntity):
         self._attr_name = f"{base_name} Emergency Heat"
 
     def _get_obj(self) -> Any:
-        if self.coordinator.data and "thermostats" in self.coordinator.data:
-            thermostats = self.coordinator.data["thermostats"]
-            if self._index < len(thermostats):
-                return thermostats[self._index]
+        if self.coordinator.data and self._index < len(self.coordinator.data.thermostats):
+            return self.coordinator.data.thermostats[self._index]
         return None
 
     @property
@@ -189,22 +188,25 @@ class ElkThermostatEMHeat(ElkEntity, SwitchEntity):
         obj = self._get_obj()
         if not obj:
             return False
-        # Assuming Elk mode 4 is EM HEAT
-        mode = getattr(obj, "mode", 0)
-        return mode == 4
+        mode = self._get_enum_value(getattr(obj, "mode", 0))
+        return mode == ThermostatMode.EMERGENCY_HEAT.value
+
+    def _get_enum_value(self, obj: Any, default: int = 0) -> int:
+        if hasattr(obj, "value"):
+            return int(obj.value)
+        return int(obj) if isinstance(obj, (int, float)) else default
 
     @override
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Turn on Emergency Heat."""
-        # Elk ASCII 'ts' command: ts + Tstat(2) + ValueType(1) + Value(2)
-        # ValueType 0 = Mode. Value 04 = EmHeat
-        await self.coordinator.send_raw_elk_command(f"ts{self._index + 1:02d}004")
+        if obj := self._get_obj():
+            obj.set(ThermostatSetting.MODE, ThermostatMode.EMERGENCY_HEAT)
 
     @override
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Turn off Emergency Heat by reverting to Auto."""
-        # ValueType 0 = Mode. Value 03 = Auto
-        await self.coordinator.send_raw_elk_command(f"ts{self._index + 1:02d}003")
+        if obj := self._get_obj():
+            obj.set(ThermostatSetting.MODE, ThermostatMode.AUTO)
 
     async def async_switch_output_turn_on_for(self, duration: timedelta) -> None:
         """Not supported for thermostat."""

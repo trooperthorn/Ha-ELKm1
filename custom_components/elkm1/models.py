@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Any
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, Any
 
-from .coordinator import ElkDataUpdateCoordinator
+if TYPE_CHECKING:
+    from .coordinator import ElkDataUpdateCoordinator
 
 
-@dataclass
+@dataclass(slots=True)
 class ElkRuntimeData:
     """Data class for Elk-M1 runtime data storage in Home Assistant config entries."""
 
@@ -18,6 +19,68 @@ class ElkRuntimeData:
     config: dict[str, Any]
     coordinator: ElkDataUpdateCoordinator
     connection: Any | None = None
+
+
+@dataclass(slots=True)
+class AreaData:
+    """Normalized per-area state.
+
+    Field values are plain ints (not elkm1_lib enums) so entity code can
+    compare against literal Elk protocol values without importing/handling
+    enum types - the coordinator does that conversion once, here.
+    """
+
+    alarm_state: int = 0
+    armed_status: int = 0
+    arm_up_state: int = 0
+    timer1: int = 0
+    timer2: int = 0
+    entry_delay_active: bool = False
+    exit_delay_active: bool = False
+    entry_delay: int = 0
+    exit_delay: int = 0
+    panic_state: bool = False
+    alarm_memory: bool = False
+
+
+@dataclass(slots=True)
+class ElkPanelData:
+    """Typed snapshot of Elk-M1 panel state, as built by the coordinator.
+
+    `zones`/`outputs`/`tasks`/`thermostats`/`panel` are references to
+    elkm1_lib's own already-typed Element objects (Zone, Output, Task,
+    Thermostat, Panel) rather than being converted into a second, parallel
+    set of dataclasses - elkm1_lib's objects are the source of truth and
+    entities read live attributes off them directly. Only the panel-wide
+    aggregates the old code built ad hoc from raw dict/string parsing
+    (areas, faulted/active summaries, connection-derived fields) are
+    promoted to typed fields here, since those previously lived in an
+    untyped dict[str, Any] with stringly-typed keys.
+    """
+
+    panel_version: str | None = None
+    num_areas: int = 1
+    areas: dict[int, AreaData] = field(default_factory=dict)
+    zones: list[Any] = field(default_factory=list)
+    panel: Any = None
+    outputs: list[Any] = field(default_factory=list)
+    tasks: list[Any] = field(default_factory=list)
+    thermostats: list[Any] = field(default_factory=list)
+    armed: bool = False
+    armed_mode: str = "disarmed"
+    last_user: int | None = None
+    last_user_name: str = "Unknown"
+    last_keypad: int | None = None
+    zones_faulted: list[int] = field(default_factory=list)
+    faulted_zone_names: list[str] = field(default_factory=list)
+    outputs_active: list[int] = field(default_factory=list)
+    active_output_names: list[str] = field(default_factory=list)
+    trouble_status: bool = False
+    ac_power: bool = True
+    battery_status: str = "Good"
+    panel_temperature: float | None = None
+    fire_alarm_active: bool = False
+    bypassed_zones: list[str] = field(default_factory=list)
 
 
 # Alias to prevent import crashes during migration
