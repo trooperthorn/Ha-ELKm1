@@ -7,8 +7,6 @@ from typing import Any
 
 import voluptuous as vol
 
-from elkm1_lib.const import Max
-
 from homeassistant.const import ATTR_CODE, CONF_ZONE
 
 DOMAIN = "elkm1"
@@ -43,17 +41,17 @@ CONF_THERMOSTAT = "thermostat"
 DISCOVER_SCAN_TIMEOUT = 10
 DISCOVERY_INTERVAL = timedelta(minutes=15)
 
-# Element map required for __init__.py auto_configure logic
+# Hardcoded M1 Gold Hardware Maximums to replace elkm1_lib.const.Max
 ELK_ELEMENTS = {
-    CONF_AREA: Max.AREAS.value,
-    CONF_COUNTER: Max.COUNTERS.value,
-    CONF_KEYPAD: Max.KEYPADS.value,
-    CONF_OUTPUT: Max.OUTPUTS.value,
-    CONF_PLC: Max.LIGHTS.value,
-    CONF_SETTING: Max.SETTINGS.value,
-    CONF_TASK: Max.TASKS.value,
-    CONF_THERMOSTAT: Max.THERMOSTATS.value,
-    CONF_ZONE: Max.ZONES.value,
+    CONF_AREA: 8,
+    CONF_COUNTER: 64,
+    CONF_KEYPAD: 16,
+    CONF_OUTPUT: 208,
+    CONF_PLC: 256,
+    CONF_SETTING: 20,
+    CONF_TASK: 32,
+    CONF_THERMOSTAT: 16,
+    CONF_ZONE: 208,
 }
 
 # Keypad and automation event constants
