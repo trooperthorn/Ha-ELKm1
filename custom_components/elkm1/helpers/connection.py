@@ -112,8 +112,8 @@ class ElkConnectionManager:
             except ConnectionError as err:
                 _LOGGER.error(f"Elk-M1 connection error: {err}")
                 await self._handle_disconnect()
-            except Exception as err:
-                _LOGGER.error(f"Unexpected read error: {err}")
+            except Exception as err:  # noqa: BLE001
+                _LOGGER.debug("Unexpected read error: %s", err)
                 await self._handle_disconnect()
 
     async def _handle_disconnect(self) -> None:
