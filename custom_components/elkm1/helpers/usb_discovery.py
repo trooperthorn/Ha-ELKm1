@@ -32,14 +32,14 @@ def get_in_use_serial_ports(hass: HomeAssistant) -> set[str]:
                 val = source.get(key)
                 
                 # Standard String Path (e.g., Modbus, Serial, ELK)
-                if isinstance(val, str) and (val.startswith("/dev/") or val.startswith("COM") or val.startswith("serial://")):
+                if isinstance(val, str) and val.startswith(("/dev/", "COM", "serial://")):
                     clean_path = val.replace("serial://", "")
                     in_use.add(clean_path)
                     
                 # Dictionary Path (e.g., ZHA stores it as {'path': '/dev/ttyUSB0'})
                 elif key == "device" and isinstance(val, dict):
                     dict_path = val.get("path")
-                    if isinstance(dict_path, str) and (dict_path.startswith("/dev/") or dict_path.startswith("COM")):
+                    if isinstance(dict_path, str) and dict_path.startswith(("/dev/", "COM")):
                         in_use.add(dict_path)
                         
     return in_use
