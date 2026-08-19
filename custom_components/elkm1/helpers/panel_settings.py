@@ -1,39 +1,40 @@
 """Panel settings configuration and verification."""
 
+import asyncio
 import logging
 from typing import Any
 
-from elkm1_lib import Elk
-
 _LOGGER = logging.getLogger(__name__)
 
-# Global settings that should be enabled for proper event reporting
-REQUIRED_SETTINGS = {
-    35: "Transmit Event Log",
-    36: "Transmit Zone Changes",
-    37: "Transmit Output Changes",
-    38: "Transmit Automation Task Changes",
-    39: "Transmit Light Changes",
-    40: "Transmit Keypad Changes",
-}
+# Global settings that must be enabled via ElkRP Software for HA to receive broadcasts
+REQUIRED_SETTINGS = [
+    "Transmit Event Log (G35)",
+    "Transmit Zone Changes (G36)",
+    "Transmit Output Changes (G37)",
+    "Transmit Automation Task Changes (G38)",
+    "Transmit Light Changes (G39)",
+    "Transmit Keypad Changes (G40)",
+]
 
 
-async def check_panel_version(elk_connection: Elk) -> str | None:
-    """Check ELK-M1 panel version.
+async def check_panel_version(coordinator: Any) -> str | None:
+    """Check ELK-M1 panel version by sending the 'vn' command.
 
     Args:
-        elk_connection: Elk instance
+        coordinator: ElkDataUpdateCoordinator instance
 
     Returns:
         Version string (e.g., "4.6.8" or "5.2.0") or None if not available
     """
     try:
-        panel = getattr(elk_connection, "panel", None)
-        version = (
-            getattr(elk_connection, "panel_version", None)
-            or (getattr(panel, "elkm1_version", None) if panel else None)
-            or (getattr(panel, "version", None) if panel else None)
-        )
+        # Send the 'vn' command to request the version string
+        await coordinator.send_raw_elk_command("vn")
+        
+        # Give the panel a moment to respond and the coordinator to parse it
+        await asyncio.sleep(2.0)
+        
+        # Read the parsed version from our normalized dictionary
+        version = coordinator.data.get("panel_version")
 
         if version:
             _LOGGER.info(f"ELK-M1 Panel Version: {version}")
@@ -54,128 +55,36 @@ async def check_panel_version(elk_connection: Elk) -> str | None:
             )
             return str(version)
         
-        _LOGGER.warning("Could not determine panel version")
+        _LOGGER.warning("Could not determine panel version. Did the panel respond?")
         return None
 
-    except (OSError, TimeoutError, ValueError, AttributeError) as err:
+    except Exception as err:
         _LOGGER.debug(f"Error checking panel version: {err}")
         return None
 
 
-async def read_global_setting(elk_connection: Elk, setting_number: int) -> int | None:
-    """Read a global setting from the panel safely."""
-    try:
-        get_setting_fn = getattr(elk_connection, "get_setting", None)
-        if not get_setting_fn and hasattr(elk_connection, "panel"):
-            get_setting_fn = getattr(elk_connection.panel, "get_setting", None)
-
-        if not get_setting_fn:
-            return None
-
-        value = await get_setting_fn(setting_number) if callable(get_setting_fn) else None
-        return value
-
-    except (OSError, TimeoutError, ValueError, AttributeError) as err:
-        _LOGGER.debug(f"Error reading global setting {setting_number}: {err}")
-        return None
-
-
-async def write_global_setting(elk_connection: Elk, setting_number: int, value: int) -> bool:
-    """Write a global setting to the panel safely."""
-    try:
-        set_setting_fn = getattr(elk_connection, "set_setting", None)
-        if not set_setting_fn and hasattr(elk_connection, "panel"):
-            set_setting_fn = getattr(elk_connection.panel, "set_setting", None)
-
-        if not set_setting_fn:
-            return False
-
-        if callable(set_setting_fn):
-            await set_setting_fn(setting_number, value)
-
-        _LOGGER.info(f"Set global setting {setting_number} to {value}")
-        return True
-
-    except (OSError, TimeoutError, ValueError, AttributeError) as err:
-        _LOGGER.debug(f"Error writing global setting {setting_number}: {err}")
-        return False
-
-
-async def check_required_settings(elk_connection: Elk) -> dict[int, dict[str, Any]]:
-    """Check all required global settings."""
-    settings_status = {}
-
-    for setting_num, setting_name in REQUIRED_SETTINGS.items():
-        value = await read_global_setting(elk_connection, setting_num)
-        is_enabled = value == 1 if value is not None else None
-
-        settings_status[setting_num] = {
-            "name": setting_name,
-            "enabled": is_enabled,
-            "value": value,
-        }
-
-        status_str = "✓ Enabled" if is_enabled else "✗ Disabled" if is_enabled is False else "? Unknown"
-        _LOGGER.info(f"Setting {setting_num} ({setting_name}): {status_str}")
-
-    return settings_status
-
-
-async def enable_required_settings(elk_connection: Elk) -> dict[int, bool]:
-    """Enable all required global settings."""
-    results = {}
-    _LOGGER.info("Attempting to enable required global settings...")
-
-    for setting_num, setting_name in REQUIRED_SETTINGS.items():
-        current_value = await read_global_setting(elk_connection, setting_num)
-
-        if current_value == 1:
-            _LOGGER.info(f"Setting {setting_num} ({setting_name}) is already enabled")
-            results[setting_num] = True
-        elif current_value == 0:
-            _LOGGER.info(f"Enabling setting {setting_num} ({setting_name})...")
-            success = await write_global_setting(elk_connection, setting_num, 1)
-            results[setting_num] = success
-        else:
-            _LOGGER.debug(f"Could not read setting {setting_num} (skipping write)")
-            results[setting_num] = False
-
-    return results
-
-
-async def verify_panel_configuration(elk_connection: Elk) -> tuple[bool, dict[str, Any]]:
+async def verify_panel_configuration(coordinator: Any) -> tuple[bool, dict[str, Any]]:
     """Verify panel is properly configured for Home Assistant."""
     _LOGGER.info("Verifying ELK-M1 panel configuration...")
 
     details: dict[str, Any] = {}
 
     # Check version
-    version = await check_panel_version(elk_connection)
+    version = await check_panel_version(coordinator)
     details["version"] = version
 
-    # Check settings
-    settings_status = await check_required_settings(elk_connection)
-    details["settings"] = settings_status
-
-    # Determine if all required settings are enabled or unknown
-    all_configured = all(
-        status["enabled"] is not False
-        for status in settings_status.values()
+    # Log Required Settings Reminders
+    # We no longer attempt to blindly overwrite EEPROM memory via raw ASCII.
+    _LOGGER.warning(
+        "ELK-M1 INTEGRATION NOTE: Please ensure the following 'Serial Port Transmit Options' "
+        "are enabled in your ElkRP software under 'Global Programming' > 'G35-G40' for this "
+        "integration to receive real-time state updates:"
     )
+    for setting in REQUIRED_SETTINGS:
+        _LOGGER.warning(f"  - {setting}")
 
-    if all_configured:
-        _LOGGER.info("✓ Panel configuration verified")
-        details["configured"] = True
-    else:
-        disabled_settings = [
-            f"{num} ({status['name']})"
-            for num, status in settings_status.items()
-            if status["enabled"] is False
-        ]
-        _LOGGER.warning(
-            f"Panel has disabled settings: {', '.join(disabled_settings)}"
-        )
-        details["configured"] = False
-        details["disabled_settings"] = disabled_settings
+    # We assume configuration is valid if we successfully connected and got a version
+    is_configured = version is not None
+    details["configured"] = is_configured
 
-    return all_configured, details
+    return is_configured, details
