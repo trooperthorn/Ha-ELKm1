@@ -129,8 +129,8 @@ class ElkBinarySensor(ElkEntity, BinarySensorEntity):
             return False
             
         logical_status = self._get_enum_value(getattr(zone, "logical_status", 0))
-        # 2 = Violated (Unbypassed), 5 = Violated (Bypassed)
-        return logical_status in (2, 5)
+        # ZoneLogicalStatus: 0=normal, 1=trouble, 2=violated, 3=bypassed.
+        return logical_status == 2
 
     @property
     def device_class(self) -> BinarySensorDeviceClass | None:
@@ -148,12 +148,16 @@ class ElkBinarySensor(ElkEntity, BinarySensorEntity):
         zone = self.zone_data
         if not zone:
             return {}
-            
+
+        logical_status = self._get_enum_value(getattr(zone, "logical_status", 0))
         return {
             "physical_status": self._get_enum_value(getattr(zone, "physical_status", 0)),
-            "logical_status": self._get_enum_value(getattr(zone, "logical_status", 0)),
+            "logical_status": logical_status,
             "definition": self._get_enum_value(getattr(zone, "definition", 0)),
-            "bypassed": getattr(zone, "bypassed", False),
+            # ZoneLogicalStatus.BYPASSED == 3; Zone has no separate
+            # "bypassed" attribute of its own (bypass is its own logical
+            # status value, not a flag layered on top of another one).
+            "bypassed": logical_status == 3,
             "triggered_alarm": getattr(zone, "triggered_alarm", False),
             "voltage": getattr(zone, "voltage", 0.0),
         }

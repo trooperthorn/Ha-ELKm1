@@ -66,6 +66,12 @@ async def async_setup_entry(
         if tstat.configured:
             entities.append(ElkThermostatEMHeat(coordinator, config_entry, tstat.index))
 
+    # 4. Zone Bypass Switches
+    zones = coordinator.data.zones if coordinator.data else []
+    for zone in zones:
+        if zone.configured:
+            entities.append(ElkZoneBypassSwitch(coordinator, config_entry, zone.index))
+
     async_add_entities(entities)
 
     service.async_register_platform_entity_service(
@@ -211,3 +217,61 @@ class ElkThermostatEMHeat(ElkEntity, SwitchEntity):
     async def async_switch_output_turn_on_for(self, duration: timedelta) -> None:
         """Not supported for thermostat."""
         raise HomeAssistantError("supported only on ElkM1 output switch entities")
+
+
+class ElkZoneBypassSwitch(ElkEntity, SwitchEntity):
+    """Representation of an Elk-M1 zone's bypass state as a switch.
+
+    The Elk protocol's `zb` bypass command toggles a zone's bypass state -
+    there's no separate "set bypassed"/"set unbypassed" command - so
+    turn_on/turn_off only send it when the zone isn't already in the
+    requested state, keeping the switch's on/off semantics idempotent
+    despite the underlying toggle-only command.
+    """
+
+    _attr_entity_category = None
+    _attr_icon = "mdi:shield-off"
+
+    def __init__(
+        self, coordinator: ElkDataUpdateCoordinator, config_entry: ConfigEntry, index: int
+    ) -> None:
+        """Initialize the zone bypass switch."""
+        super().__init__(coordinator, config_entry, f"zone_{index + 1}_bypass")
+        self._index = index
+        self._attr_unique_id = f"{config_entry.entry_id}_zone_{index + 1}_bypass"
+        obj = self._get_obj()
+        base_name = getattr(obj, "name", f"Zone {index + 1}") if obj else f"Zone {index + 1}"
+        self._attr_name = f"{base_name} Bypass"
+
+    def _get_obj(self) -> Any:
+        if self.coordinator.data and self._index < len(self.coordinator.data.zones):
+            return self.coordinator.data.zones[self._index]
+        return None
+
+    @staticmethod
+    def _enum_value(obj: Any, default: int = 0) -> int:
+        if hasattr(obj, "value"):
+            return int(obj.value)
+        return int(obj) if isinstance(obj, (int, float)) else default
+
+    @property
+    @override
+    def is_on(self) -> bool:
+        """Return True if the zone is currently bypassed."""
+        obj = self._get_obj()
+        if not obj:
+            return False
+        # ZoneLogicalStatus.BYPASSED == 3.
+        return self._enum_value(getattr(obj, "logical_status", 0)) == 3
+
+    @override
+    async def async_turn_on(self, **kwargs: Any) -> None:
+        """Bypass the zone (no-op if already bypassed)."""
+        if not self.is_on:
+            await self.coordinator.bypass_zone(self._index + 1)
+
+    @override
+    async def async_turn_off(self, **kwargs: Any) -> None:
+        """Clear the zone's bypass (no-op if not currently bypassed)."""
+        if self.is_on:
+            await self.coordinator.bypass_zone(self._index + 1)

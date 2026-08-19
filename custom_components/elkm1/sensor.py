@@ -222,11 +222,13 @@ class ElkZone(ElkSensor):
         obj = self._get_obj()
         if not obj:
             return {}
+        logical_status = self._get_enum_value(getattr(obj, "logical_status", 0))
         return {
             "physical_status": self._get_enum_value(getattr(obj, "physical_status", 0)),
-            "logical_status": self._get_enum_value(getattr(obj, "logical_status", 0)),
+            "logical_status": logical_status,
             "definition": self._get_enum_value(getattr(obj, "definition", 0)),
-            "bypassed": getattr(obj, "bypassed", False),
+            # ZoneLogicalStatus.BYPASSED == 3 (there's no separate attribute).
+            "bypassed": logical_status == 3,
         }
 
     async def async_zone_bypass(self, code: str | None = None) -> None:

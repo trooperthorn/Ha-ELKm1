@@ -276,13 +276,15 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator[ElkPanelData]):
             logical = self._get_enum_value(zone.logical_status)
             definition = self._get_enum_value(zone.definition)
 
-            # ZoneLogicalStatus: 2 = violated, 5 = violated-and-bypassed.
-            if logical in (2, 5):
+            # ZoneLogicalStatus: 0=normal, 1=trouble, 2=violated, 3=bypassed
+            # (only 4 values - not the "violated-and-bypassed=5" this used
+            # to check for, which isn't a value the enum has).
+            if logical == 2:
                 faulted_indices.append(zone.index)
                 faulted_names.append(f"Zone {zone.index + 1}: {zone.name}")
-            if logical == 5:
+            if logical == 3:
                 bypassed_names.append(f"Zone {zone.index + 1}: {zone.name}")
-            if definition in (9, 10) and logical in (2, 5):
+            if definition in (9, 10) and logical == 2:
                 fire_alarm = True
 
         active_outputs: list[int] = []
