@@ -38,13 +38,16 @@ else:
 
 _LOGGER = logging.getLogger(__name__)
 
-# Only platforms that actually exist today; climate/light/number/scene/time
-# are added back to this list as each lands (tracked in the rework plan).
 PLATFORMS = [
     Platform.ALARM_CONTROL_PANEL,
     Platform.BINARY_SENSOR,
+    Platform.CLIMATE,
+    Platform.LIGHT,
+    Platform.NUMBER,
+    Platform.SCENE,
     Platform.SENSOR,
     Platform.SWITCH,
+    Platform.TIME,
 ]
 
 

@@ -66,6 +66,9 @@ class ElkPanelData:
     outputs: list[Any] = field(default_factory=list)
     tasks: list[Any] = field(default_factory=list)
     thermostats: list[Any] = field(default_factory=list)
+    lights: list[Any] = field(default_factory=list)
+    counters: list[Any] = field(default_factory=list)
+    settings: list[Any] = field(default_factory=list)
     armed: bool = False
     armed_mode: str = "disarmed"
     last_user: int | None = None

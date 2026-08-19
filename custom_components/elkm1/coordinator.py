@@ -166,7 +166,16 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator[ElkPanelData]):
         def _on_change(_element: Any, _changeset: dict[str, Any]) -> None:
             self.async_set_updated_data(self._build_normalized_data())
 
-        for collection_name in ("areas", "zones", "outputs", "tasks", "thermostats"):
+        for collection_name in (
+            "areas",
+            "zones",
+            "outputs",
+            "tasks",
+            "thermostats",
+            "lights",
+            "counters",
+            "settings",
+        ):
             for element in getattr(self._elk, collection_name):
                 element.add_callback(_on_change)
 
@@ -214,6 +223,9 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator[ElkPanelData]):
         outputs = list(self._elk.outputs)
         tasks = list(self._elk.tasks)
         thermostats = list(self._elk.thermostats)
+        lights = list(self._elk.lights)
+        counters = list(self._elk.counters)
+        settings = list(self._elk.settings)
 
         # elkm1_lib always allocates Max.AREAS.value (8) Area objects
         # regardless of how many the panel actually has configured; treat
@@ -283,6 +295,9 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator[ElkPanelData]):
             outputs=outputs,
             tasks=tasks,
             thermostats=thermostats,
+            lights=lights,
+            counters=counters,
+            settings=settings,
             armed=is_any_armed,
             armed_mode="armed" if is_any_armed else "disarmed",
             last_user=None,

@@ -1,0 +1,136 @@
+"""Support for Elk-M1 counters and numeric custom values."""
+
+from __future__ import annotations
+
+import logging
+from typing import Any, override
+
+from elkm1_lib.const import SettingFormat
+from homeassistant.components.number import NumberEntity, NumberMode
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
+
+from .coordinator import ElkDataUpdateCoordinator
+from .entity import ElkEntity
+from .models import ElkRuntimeData
+
+_LOGGER = logging.getLogger(__name__)
+
+PARALLEL_UPDATES = 1
+
+
+def _enum_value(obj: Any, default: int = 0) -> int:
+    if hasattr(obj, "value"):
+        return int(obj.value)
+    return int(obj) if isinstance(obj, (int, float)) else default
+
+
+async def async_setup_entry(
+    hass: HomeAssistant,
+    config_entry: ConfigEntry,
+    async_add_entities: AddEntitiesCallback,
+) -> None:
+    """Create the Elk-M1 number platform.
+
+    Only counters/custom values the panel has actually given a real name to
+    (via the `sd` text-description command) are created automatically -
+    elkm1_lib always allocates the hardware maximum (64 counters, 20
+    custom values) regardless of how many are actually in use, and most
+    installations only use a handful. Unnamed slots are left for a future
+    options-flow opt-in rather than flooding every install with mostly-
+    unused entities.
+    """
+    runtime_data: ElkRuntimeData = config_entry.runtime_data
+    coordinator = runtime_data.coordinator
+    if not coordinator.data:
+        return
+
+    entities: list[NumberEntity] = [
+        ElkCounter(coordinator, config_entry, counter.index)
+        for counter in coordinator.data.counters
+        if counter.configured and not counter.is_default_name()
+    ]
+    entities.extend(
+        ElkCustomValue(coordinator, config_entry, setting.index)
+        for setting in coordinator.data.settings
+        if setting.configured
+        and not setting.is_default_name()
+        and _enum_value(setting.value_format) in (SettingFormat.NUMBER.value, SettingFormat.TIMER.value)
+    )
+    async_add_entities(entities)
+
+
+class ElkCounter(ElkEntity, NumberEntity):
+    """Representation of an Elk-M1 RAM counter."""
+
+    _attr_native_min_value = 0
+    _attr_native_max_value = 65535
+    _attr_native_step = 1
+    _attr_mode = NumberMode.BOX
+    _attr_icon = "mdi:counter"
+
+    def __init__(
+        self, coordinator: ElkDataUpdateCoordinator, config_entry: ConfigEntry, index: int
+    ) -> None:
+        """Initialize the counter."""
+        super().__init__(coordinator, config_entry, f"counter_{index + 1}")
+        self._index = index
+        self._attr_unique_id = f"{config_entry.entry_id}_counter_{index + 1}"
+        obj = self._get_obj()
+        self._attr_name = getattr(obj, "name", f"Counter {index + 1}") if obj else None
+
+    def _get_obj(self) -> Any:
+        if self.coordinator.data and self._index < len(self.coordinator.data.counters):
+            return self.coordinator.data.counters[self._index]
+        return None
+
+    @property
+    @override
+    def native_value(self) -> float | None:
+        obj = self._get_obj()
+        return obj.value if obj else None
+
+    @override
+    async def async_set_native_value(self, value: float) -> None:
+        """Set the counter value."""
+        if obj := self._get_obj():
+            obj.set(int(value))
+
+
+class ElkCustomValue(ElkEntity, NumberEntity):
+    """Representation of a numeric (Number or Timer format) Elk-M1 custom value."""
+
+    _attr_native_min_value = 0
+    _attr_native_max_value = 65535
+    _attr_native_step = 1
+    _attr_mode = NumberMode.BOX
+
+    def __init__(
+        self, coordinator: ElkDataUpdateCoordinator, config_entry: ConfigEntry, index: int
+    ) -> None:
+        """Initialize the custom value."""
+        super().__init__(coordinator, config_entry, f"custom_value_{index + 1}")
+        self._index = index
+        self._attr_unique_id = f"{config_entry.entry_id}_custom_value_{index + 1}"
+        obj = self._get_obj()
+        self._attr_name = getattr(obj, "name", f"Custom Value {index + 1}") if obj else None
+
+    def _get_obj(self) -> Any:
+        if self.coordinator.data and self._index < len(self.coordinator.data.settings):
+            return self.coordinator.data.settings[self._index]
+        return None
+
+    @property
+    @override
+    def native_value(self) -> float | None:
+        obj = self._get_obj()
+        if not obj or isinstance(obj.value, tuple):
+            return None
+        return obj.value
+
+    @override
+    async def async_set_native_value(self, value: float) -> None:
+        """Set the custom value."""
+        if obj := self._get_obj():
+            obj.set(int(value))
