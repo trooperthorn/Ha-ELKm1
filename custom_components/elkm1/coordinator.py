@@ -411,7 +411,7 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             raise UpdateFailed("Not connected to ELK-M1")
         try:
             return self._build_normalized_data()
-        except Exception as err:
+        except Exception as err:  # noqa: BLE001
             _LOGGER.exception("Error fetching coordinator data")
             raise UpdateFailed(f"Failed to fetch data: {err}") from err
 
@@ -475,7 +475,7 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             await self.send_raw_elk_command(f"zb{zone_number:03d}{formatted_pin}")
             await self.async_request_refresh()
             return True
-        except Exception as err:
+        except Exception as err:  # noqa: BLE001
             _LOGGER.error("Failed to bypass zone %s: %s", zone_number, err)
             return False
 
@@ -489,7 +489,7 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             await self.send_raw_elk_command(f"zu{zone_number:03d}{formatted_pin}")
             await self.async_request_refresh()
             return True
-        except Exception as err:
+        except Exception as err:  # noqa: BLE001
             _LOGGER.error("Failed to unbypass zone %s: %s", zone_number, err)
             return False
 
@@ -503,7 +503,7 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             await self.send_raw_elk_command(f"ap1{formatted_pin}")
             await self.async_request_refresh()
             return True
-        except Exception as err:
+        except Exception as err:  # noqa: BLE001
             _LOGGER.error("Failed to trigger panic: %s", err)
             return False
 
