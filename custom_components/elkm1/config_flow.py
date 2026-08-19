@@ -14,8 +14,8 @@ except ImportError:
     from typing_extensions import override
 
 from urllib.parse import urlparse
-import voluptuous as vol
 
+import voluptuous as vol
 from homeassistant.config_entries import ConfigFlow, ConfigFlowResult
 from homeassistant.const import (
     CONF_ADDRESS,
@@ -27,7 +27,8 @@ from homeassistant.const import (
     CONF_USERNAME,
 )
 from homeassistant.exceptions import HomeAssistantError
-from homeassistant.helpers import device_registry as dr, selector
+from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import selector
 from homeassistant.helpers.service_info.dhcp import DhcpServiceInfo
 from homeassistant.helpers.typing import DiscoveryInfoType, VolDictType
 from homeassistant.util import slugify
@@ -44,7 +45,12 @@ from .discovery import (
     _short_mac,
     async_discover_devices,
 )
-from .helpers.connection import ElkConnectionManager
+from .helpers.transport import (
+    ConnectionTimeoutError,
+    InvalidAuthError,
+    validate_network_connection,
+    validate_serial_port,
+)
 from .helpers.usb_discovery import probe_serial_port
 
 NON_SECURE_PORT = 2101
@@ -107,7 +113,7 @@ def get_persistent_port_path(device_path: str) -> str:
 
 
 async def validate_input(data: dict[str, str], mac: str | None) -> dict[str, str]:
-    """Validate the user input allows us to connect natively without elkm1_lib."""
+    """Validate the user input by opening a real, briefly-lived connection."""
     userid = data.get(CONF_USERNAME)
     password = data.get(CONF_PASSWORD)
     prefix = data.get(CONF_PREFIX, "")
@@ -117,32 +123,15 @@ async def validate_input(data: dict[str, str], mac: str | None) -> dict[str, str
     if requires_password and (not userid or not password):
         raise InvalidAuth
 
-    connected_event = asyncio.Event()
-
-    def _on_message(msg: str) -> None:
-        """Callback to prove the connection is receiving live Elk data."""
-        if len(msg) >= 4:
-            connected_event.set()
-
-    conn = ElkConnectionManager(
-        connection_url=url,
-        on_message_callback=_on_message,
-        is_serial=url.startswith("serial://")
-    )
-
     try:
-        await conn.connect()
-        # Request panel version to force a response
-        await conn.write("vn")
-        
-        # Wait up to 10 seconds for the panel to respond
-        await asyncio.wait_for(connected_event.wait(), timeout=10.0)
-    except asyncio.TimeoutError as exc:
+        if url.startswith("serial://"):
+            await validate_serial_port(url.removeprefix("serial://"))
+        else:
+            await validate_network_connection(url, userid, password)
+    except InvalidAuthError as exc:
+        raise InvalidAuth from exc
+    except (ConnectionTimeoutError, OSError) as exc:
         raise CannotConnect from exc
-    except Exception as exc:
-        raise CannotConnect from exc
-    finally:
-        await conn.disconnect()
 
     short_mac = _short_mac(mac) if mac else None
 
@@ -409,7 +398,10 @@ class Elkm1ConfigFlow(ConfigFlow, domain=DOMAIN):
             # Verify device exists on this port ONLY upon user selection
             if user_input.get(CONF_VERIFY_DEVICE, True):
                 try:
-                    if not await probe_serial_port(port, timeout=5.0):
+                    # Generous enough to sweep all standard baud rates (up to
+                    # 5 rates x ~2s each) rather than cutting the probe off
+                    # partway through baud auto-detection.
+                    if not await probe_serial_port(port, timeout=12.0):
                         errors["base"] = "cannot_connect"
                 except (OSError, asyncio.TimeoutError, ValueError) as e:
                     _LOGGER.debug("Error probing serial port %s: %s", port, e)

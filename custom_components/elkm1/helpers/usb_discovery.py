@@ -4,8 +4,8 @@ import asyncio
 import logging
 from typing import Any
 
-from serial.tools import list_ports
 from homeassistant.core import HomeAssistant
+from serial.tools import list_ports
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -90,40 +90,21 @@ def _get_friendly_name(port_info: Any) -> str:
 
 async def probe_serial_port(port: str, timeout: float = 5.0) -> bool:
     """Test if a serial port actually has an ELK-M1 panel connected.
-    
+
     Wrapped in extensive error handling to prevent event loop crashes.
     """
-    from .connection import ElkConnectionManager
-
-    data_received = asyncio.Event()
-
-    def _on_message(msg: str) -> None:
-        if len(msg) >= 4:
-            data_received.set()
-
-    url = f"serial://{port}"
-    connection = ElkConnectionManager(
-        connection_url=url,
-        on_message_callback=_on_message,
-        is_serial=True
-    )
+    from .baud_probe import BaudProbeError
+    from .transport import validate_serial_port
 
     try:
-        await connection.connect()
-        await connection.write("vn")
-        
-        # Wait safely for the panel to respond
-        await asyncio.wait_for(data_received.wait(), timeout=timeout)
+        await asyncio.wait_for(validate_serial_port(port), timeout=timeout)
         return True
-
+    except BaudProbeError as e:
+        _LOGGER.debug("Port %s probe failed gracefully: %s", port, e)
+        return False
     except (asyncio.TimeoutError, ConnectionError, OSError, ValueError) as e:
         _LOGGER.debug("Port %s probe failed gracefully: %s", port, e)
         return False
     except Exception as e:  # noqa: BLE001
         _LOGGER.error("Unexpected error during serial probe on %s: %s", port, e)
         return False
-    finally:
-        try:
-            await connection.disconnect()
-        except Exception as err:  # noqa: BLE001
-            _LOGGER.error("Disconnect failed gracefully on port %s: %s", port, err)
