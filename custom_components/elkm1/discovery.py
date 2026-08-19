@@ -7,6 +7,7 @@ import logging
 from typing import Any
 
 from homeassistant.core import HomeAssistant
+from homeassistant.config_entries import ConfigEntry
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -46,7 +47,10 @@ async def async_discover_devices(
     entry: ConfigEntry | None = None,
 ) -> list[Any]:
     """Discover all Elk-M1 device elements."""
-    return []
+    devices: list[dict[str, Any]] = []
+    discovery_event = asyncio.Event()
+    loop = asyncio.get_running_loop()
+    timeout = 5.0
 
     try:
         # Elk M1XEP listens for UDP broadcasts on port 2362
@@ -71,6 +75,31 @@ async def async_discover_devices(
         _LOGGER.error(f"Network discovery failed: {e}")
 
     return devices
+
+async def async_discover_device(
+    hass: HomeAssistant, entry: ConfigEntry, connection_type: str, port: int
+) -> dict[str, Any] | None:
+    """Discover a single Elk-M1 device (Used by __init__.py)."""
+    devices = await async_discover_devices(hass, entry)
+    for device in devices:
+        if device.get("port") == port or connection_type == "network":
+            return device
+    return None
+
+async def async_update_entry_from_discovery(
+    hass: HomeAssistant, entry: ConfigEntry, device: dict[str, Any]
+) -> None:
+    """Update a config entry from discovery data (Used by __init__.py)."""
+    changed = False
+    
+    if "mac_address" in device and not entry.unique_id:
+        hass.config_entries.async_update_entry(
+            entry, unique_id=_short_mac(device["mac_address"])
+        )
+        changed = True
+        
+    if changed:
+        _LOGGER.debug(f"Updated Elk-M1 entry {entry.entry_id} from discovery")
 
 def _short_mac(mac: str) -> str:
     """Format a MAC address to a short, colon-less string."""
