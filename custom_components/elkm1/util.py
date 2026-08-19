@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
 
@@ -28,10 +29,9 @@ def deprecate_entity(
         entity_id = entity_registry.async_get_entity_id(platform, "elkm1", unique_id)
         if entity_id:
             entry = entity_registry.async_get(entity_id)
-            if entry and entry.entity_id != new_entity_id:
-                # If the target entity ID doesn't exist yet, update the unique ID
-                if not entity_registry.async_get(new_entity_id):
-                    _LOGGER.info(
+            # If the target entity ID doesn't exist yet, update the unique ID
+            if entry and entry.entity_id != new_entity_id and not entity_registry.async_get(new_entity_id):
+                _LOGGER.info(
                         "Migrating legacy Elk-M1 entity %s to new structure",
                         entry.entity_id,
                     )
