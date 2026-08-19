@@ -5,8 +5,6 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from elkm1_lib.const import ArmLevel
-
 from homeassistant.components.alarm_control_panel import (
     AlarmControlPanelEntity,
     AlarmControlPanelState,
@@ -51,27 +49,17 @@ async def async_setup_entry(
     runtime_data: ElkRuntimeData = config_entry.runtime_data
     coordinator = runtime_data.coordinator
 
-    entities = []
-    if coordinator._elk and getattr(coordinator._elk, "areas", None):
-        for index, area in enumerate(coordinator._elk.areas):
-            if area:
-                entities.append(
-                    ElkAlarmControlPanel(
-                        coordinator=coordinator,
-                        config_entry=config_entry,
-                        area_index=index,
-                    )
-                )
-
-    # Fallback if no areas detected via elk instance
-    if not entities:
-        entities.append(
-            ElkAlarmControlPanel(
-                coordinator=coordinator,
-                config_entry=config_entry,
-                area_index=0,
-            )
+    # The coordinator now dictates how many areas exist based on connection parsing
+    num_areas = coordinator.data.get("num_areas", 1) if coordinator.data else 1
+    
+    entities = [
+        ElkAlarmControlPanel(
+            coordinator=coordinator,
+            config_entry=config_entry,
+            area_index=i,
         )
+        for i in range(num_areas)
+    ]
 
     async_add_entities(entities)
 
@@ -104,45 +92,33 @@ class ElkAlarmControlPanel(ElkEntity, AlarmControlPanelEntity):
         self._attr_unique_id = f"{config_entry.entry_id}_area_{area_num}"
 
     @property
-    def area(self) -> Any:
-        """Helper to get the specific area object from elkm1_lib."""
-        if (
-            self.coordinator._elk
-            and getattr(self.coordinator._elk, "areas", None)
-            and self._area_index < len(self.coordinator._elk.areas)
-        ):
-            return self.coordinator._elk.areas[self._area_index]
-        return None
-
-    def _get_enum_value(self, obj: Any, default: int = 0) -> int:
-        """Safely extract the raw integer value from elkm1_lib Enum objects."""
-        if hasattr(obj, "value"):
-            return int(obj.value)
-        if isinstance(obj, str):
-            return int(obj) if obj.isdigit() else default
-        return int(obj) if isinstance(obj, (int, float)) else default
+    def area_data(self) -> dict[str, Any]:
+        """Helper to get the specific area data dictionary from the coordinator."""
+        if self.coordinator.data and "areas" in self.coordinator.data:
+            return self.coordinator.data["areas"].get(self._area_index, {})
+        return {}
 
     @property
     def alarm_state(self) -> AlarmControlPanelState | None:
         """Return state strictly mapped to HA AlarmControlPanelState."""
-        area = self.area
-        if not self.coordinator.data or not area:
+        if not self.coordinator.data:
             return None
 
-        alarm_state_val = self._get_enum_value(getattr(area, "alarm_state", 0))
-        armed_status_val = self._get_enum_value(getattr(area, "armed_status", 0))
-        arm_up_state_val = self._get_enum_value(getattr(area, "arm_up_state", 0))
+        data = self.area_data
+        alarm_state_val = data.get("alarm_state", 0)
+        armed_status_val = data.get("armed_status", 0)
+        arm_up_state_val = data.get("arm_up_state", 0)
 
         # 1. TRIGGERED: Elk AlarmState >= 2
         if alarm_state_val >= 2:
             return STATE_ALARM_TRIGGERED
 
         # 2. PENDING (Entry Delay): Elk AlarmState == 1 OR Timer1 running while armed
-        if alarm_state_val == 1 or (getattr(area, "timer1", 0) > 0 and armed_status_val != 0):
+        if alarm_state_val == 1 or (data.get("timer1", 0) > 0 and armed_status_val != 0):
             return AlarmControlPanelState.PENDING
 
         # 3. ARMING (Exit Delay): Timer2 running or exit state indicated
-        if getattr(area, "timer2", 0) > 0 or arm_up_state_val in (3, 5):
+        if data.get("timer2", 0) > 0 or arm_up_state_val in (3, 5):
             return AlarmControlPanelState.ARMING
 
         # 4. ARMED_CUSTOM_BYPASS: Armed with Bypass active
@@ -164,129 +140,41 @@ class ElkAlarmControlPanel(ElkEntity, AlarmControlPanelEntity):
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         """Return extra state attributes with detailed panel information."""
-        if not self.coordinator.data or not self.coordinator._elk:
+        if not self.coordinator.data:
             return {}
 
-        panel = self.coordinator._elk.panel
-        area = self.area
-        data = self.coordinator.data
-
-        faulted_indices, faulted_names = self._get_live_faulted_zones()
-        alarm_state_val = self._get_enum_value(getattr(area, "alarm_state", 0)) if area else 0
-
-        def safe_bool(val: Any) -> bool:
-            if isinstance(val, bool):
-                return val
-            if isinstance(val, (int, float)):
-                return val != 0
-            if isinstance(val, str):
-                return val.lower() not in ("0", "false", "no", "off", "")
-            return bool(val)
+        global_data = self.coordinator.data
+        area_data = self.area_data
 
         return {
-            "armed": safe_bool(data.get("armed", False)),
-            "armed_mode": data.get("armed_mode", "disarmed"),
-            "entry_delay_active": safe_bool(getattr(area, "entry_delay_active", False)) if area else False,
-            "exit_delay_active": safe_bool(getattr(area, "exit_delay_active", False)) if area else False,
-            "entry_delay_seconds": getattr(area, "entry_delay", 0) if area else 0,
-            "exit_delay_seconds": getattr(area, "exit_delay", 0) if area else 0,
-            "last_user": data.get("last_user"),
-            "last_user_name": data.get("last_user_name", "Unknown"),
-            "last_keypad": getattr(panel, "last_keypad", None),
-            "zones_faulted": faulted_indices,
-            "zones_faulted_count": len(faulted_indices),
-            "faulted_zone_names": faulted_names,
-            "outputs_active": data.get("outputs_active", []),
-            "outputs_active_count": len(data.get("outputs_active", [])),
-            "active_output_names": self._get_active_output_names(),
-            "trouble_status": safe_bool(getattr(panel, "trouble_status", False)),
-            "ac_power": safe_bool(getattr(panel, "ac_power", True)),
-            "battery_status": getattr(panel, "battery_status", "Good"),
-            "panel_temperature": self._get_primary_temperature(),
+            "armed": global_data.get("armed", False),
+            "armed_mode": global_data.get("armed_mode", "disarmed"),
+            "entry_delay_active": area_data.get("entry_delay_active", False),
+            "exit_delay_active": area_data.get("exit_delay_active", False),
+            "entry_delay_seconds": area_data.get("entry_delay", 0),
+            "exit_delay_seconds": area_data.get("exit_delay", 0),
+            "last_user": global_data.get("last_user"),
+            "last_user_name": global_data.get("last_user_name", "Unknown"),
+            "last_keypad": global_data.get("last_keypad"),
+            "zones_faulted": global_data.get("zones_faulted", []),
+            "zones_faulted_count": len(global_data.get("zones_faulted", [])),
+            "faulted_zone_names": global_data.get("faulted_zone_names", []),
+            "outputs_active": global_data.get("outputs_active", []),
+            "outputs_active_count": len(global_data.get("outputs_active", [])),
+            "active_output_names": global_data.get("active_output_names", []),
+            "trouble_status": global_data.get("trouble_status", False),
+            "ac_power": global_data.get("ac_power", True),
+            "battery_status": global_data.get("battery_status", "Good"),
+            "panel_temperature": global_data.get("panel_temperature"),
             "connection_status": "Connected" if self.coordinator.last_update_success else "Disconnected",
             "last_update": self.coordinator.last_update_success,
-            "alarm_triggered": alarm_state_val >= 2,
-            "fire_alarm": self._get_fire_alarm_status(),
-            "panic_alarm": safe_bool(getattr(area, "panic_state", False)) if area else False,
-            "alarm_memory": self._get_alarm_memory_status(),
-            "bypassed_zones": self._get_bypassed_zones(),
-            "bypassed_zones_count": len(self._get_bypassed_zones()),
+            "alarm_triggered": area_data.get("alarm_state", 0) >= 2,
+            "fire_alarm": global_data.get("fire_alarm_active", False),
+            "panic_alarm": area_data.get("panic_state", False),
+            "alarm_memory": area_data.get("alarm_memory", False),
+            "bypassed_zones": global_data.get("bypassed_zones", []),
+            "bypassed_zones_count": len(global_data.get("bypassed_zones", [])),
         }
-
-    def _get_primary_temperature(self) -> int | float | None:
-        """Safely retrieve temperature from keypads."""
-        if self.coordinator._elk and hasattr(self.coordinator._elk, "keypads"):
-            for keypad in self.coordinator._elk.keypads:
-                if keypad and getattr(keypad, "temperature", None) is not None:
-                    return keypad.temperature
-        return None
-
-    def _is_zone_open(self, zone: Any) -> bool:
-        """Helper to check if zone is open."""
-        if not zone:
-            return False
-        logical_val = self._get_enum_value(getattr(zone, "logical_status", 0))
-        physical_val = self._get_enum_value(getattr(zone, "physical_status", 0))
-        return logical_val == 2 or physical_val in (1, 3)
-
-    def _get_live_faulted_zones(self) -> tuple[list[int], list[str]]:
-        """Dynamically scan hardware zones to find open/faulted ones."""
-        if not self.coordinator._elk or not hasattr(self.coordinator._elk, "zones"):
-            return [], []
-
-        faulted_indices = []
-        faulted_names = []
-        for i, zone in enumerate(self.coordinator._elk.zones):
-            if self._is_zone_open(zone):
-                faulted_indices.append(i)
-                zone_name = getattr(zone, "name", f"Zone {i + 1}")
-                faulted_names.append(f"Zone {i + 1}: {zone_name}")
-        return faulted_indices, faulted_names
-
-    def _get_active_output_names(self) -> list[str]:
-        """Get names of active outputs."""
-        if not self.coordinator.data or not self.coordinator._elk:
-            return []
-        active_indices = self.coordinator.data.get("outputs_active", [])
-        names = []
-        for output_index in active_indices:
-            if output_index < len(self.coordinator._elk.outputs):
-                output = self.coordinator._elk.outputs[output_index]
-                if output and output.name:
-                    names.append(f"Output {output_index + 1}: {output.name}")
-        return names
-
-    def _get_bypassed_zones(self) -> list[str]:
-        """Get list of bypassed zones."""
-        if not self.coordinator._elk:
-            return []
-        bypassed = []
-        for i, zone in enumerate(self.coordinator._elk.zones):
-            if zone and getattr(zone, "bypassed", False):
-                bypassed.append(f"Zone {i + 1}: {zone.name}")
-        return bypassed
-
-    def _get_fire_alarm_status(self) -> bool:
-        """Get fire alarm status."""
-        if not self.coordinator._elk:
-            return False
-        for zone in self.coordinator._elk.zones:
-            if not zone:
-                continue
-            definition = self._get_enum_value(getattr(zone, "definition", 0))
-            logical_status = self._get_enum_value(getattr(zone, "logical_status", 0))
-            if definition in (9, 10) and logical_status == 2:
-                return True
-        return False
-
-    def _get_alarm_memory_status(self) -> bool:
-        """Check if any area has an active alarm memory state."""
-        if not self.coordinator._elk:
-            return False
-        for area in self.coordinator._elk.areas:
-            if area and getattr(area, "alarm_memory", False):
-                return True
-        return False
 
     def _get_code_val(self, code: str | None) -> int:
         """Safely convert HA string PIN to Elk required integer."""
@@ -299,64 +187,50 @@ class ElkAlarmControlPanel(ElkEntity, AlarmControlPanelEntity):
             return 0
 
     async def async_alarm_disarm(self, code: str | None = None) -> None:
-        """Send disarm command to the area."""
+        """Send disarm command to the area via the coordinator."""
         try:
-            if self.area:
-                self.area.disarm(self._get_code_val(code))
-                _LOGGER.info(f"Area {self._area_index + 1} disarmed")
-        except Exception as err:  # noqa: BLE001
+            await self.coordinator.async_alarm_disarm(self._area_index, self._get_code_val(code))
+        except Exception as err:
             _LOGGER.error(f"Error disarming area {self._area_index + 1}: {err}")
 
     async def async_alarm_arm_home(self, code: str | None = None) -> None:
-        """Send arm stay command to the area."""
+        """Send arm stay command to the area via the coordinator."""
         try:
-            if self.area:
-                self.area.arm(ArmLevel.ARMED_STAY, self._get_code_val(code))
-                _LOGGER.info(f"Area {self._area_index + 1} armed home (stay)")
-        except Exception as err:  # noqa: BLE001
+            await self.coordinator.async_alarm_arm_home(self._area_index, self._get_code_val(code))
+        except Exception as err:
             _LOGGER.error(f"Error arming home area {self._area_index + 1}: {err}")
 
     async def async_alarm_arm_away(self, code: str | None = None) -> None:
-        """Send arm away command to the area."""
+        """Send arm away command to the area via the coordinator."""
         try:
-            if self.area:
-                self.area.arm(ArmLevel.ARMED_AWAY, self._get_code_val(code))
-                _LOGGER.info(f"Area {self._area_index + 1} armed away")
-        except Exception as err:  # noqa: BLE001
+            await self.coordinator.async_alarm_arm_away(self._area_index, self._get_code_val(code))
+        except Exception as err:
             _LOGGER.error(f"Error arming away area {self._area_index + 1}: {err}")
 
     async def async_alarm_arm_night(self, code: str | None = None) -> None:
-        """Send arm night command to the area."""
+        """Send arm night command to the area via the coordinator."""
         try:
-            if self.area:
-                self.area.arm(ArmLevel.ARMED_NIGHT, self._get_code_val(code))
-                _LOGGER.info(f"Area {self._area_index + 1} armed night")
-        except Exception as err:  # noqa: BLE001
+            await self.coordinator.async_alarm_arm_night(self._area_index, self._get_code_val(code))
+        except Exception as err:
             _LOGGER.error(f"Error arming night area {self._area_index + 1}: {err}")
 
     async def async_alarm_arm_vacation(self, code: str | None = None) -> None:
-        """Send arm vacation command to the area."""
+        """Send arm vacation command to the area via the coordinator."""
         try:
-            if self.area:
-                self.area.arm(ArmLevel.ARMED_VACATION, self._get_code_val(code))
-                _LOGGER.info(f"Area {self._area_index + 1} armed vacation")
-        except Exception as err:  # noqa: BLE001
+            await self.coordinator.async_alarm_arm_vacation(self._area_index, self._get_code_val(code))
+        except Exception as err:
             _LOGGER.error(f"Error arming vacation area {self._area_index + 1}: {err}")
 
     async def async_alarm_arm_custom_bypass(self, code: str | None = None) -> None:
-        """Handle custom bypass request."""
+        """Handle custom bypass request via the coordinator."""
         try:
-            if self.area:
-                self.area.arm(ArmLevel.ARMED_AWAY, self._get_code_val(code))
-                _LOGGER.info(f"Area {self._area_index + 1} armed custom bypass mode")
-        except Exception as err:  # noqa: BLE001
+            await self.coordinator.async_alarm_arm_custom_bypass(self._area_index, self._get_code_val(code))
+        except Exception as err:
             _LOGGER.error(f"Error arming custom bypass area {self._area_index + 1}: {err}")
 
     async def async_alarm_trigger(self, code: str | None = None) -> None:
-        """Trigger the alarm on the area."""
+        """Trigger the alarm on the area via the coordinator."""
         try:
-            if self.area and hasattr(self.area, "trigger"):
-                self.area.trigger(self._get_code_val(code))
-                _LOGGER.warning(f"Area {self._area_index + 1} alarm manually triggered via HA")
-        except Exception as err:  # noqa: BLE001
+            await self.coordinator.async_alarm_trigger(self._area_index, self._get_code_val(code))
+        except Exception as err:
             _LOGGER.error(f"Error triggering alarm area {self._area_index + 1}: {err}")
