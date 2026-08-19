@@ -190,47 +190,47 @@ class ElkAlarmControlPanel(ElkEntity, AlarmControlPanelEntity):
         """Send disarm command to the area via the coordinator."""
         try:
             await self.coordinator.async_alarm_disarm(self._area_index, self._get_code_val(code))
-        except Exception as err:
+        except Exception as err:  # noqa: BLE001
             _LOGGER.error(f"Error disarming area {self._area_index + 1}: {err}")
 
     async def async_alarm_arm_home(self, code: str | None = None) -> None:
         """Send arm stay command to the area via the coordinator."""
         try:
             await self.coordinator.async_alarm_arm_home(self._area_index, self._get_code_val(code))
-        except Exception as err:
+        except Exception as err:  # noqa: BLE001
             _LOGGER.error(f"Error arming home area {self._area_index + 1}: {err}")
 
     async def async_alarm_arm_away(self, code: str | None = None) -> None:
         """Send arm away command to the area via the coordinator."""
         try:
             await self.coordinator.async_alarm_arm_away(self._area_index, self._get_code_val(code))
-        except Exception as err:
+        except Exception as err:  # noqa: BLE001
             _LOGGER.error(f"Error arming away area {self._area_index + 1}: {err}")
 
     async def async_alarm_arm_night(self, code: str | None = None) -> None:
         """Send arm night command to the area via the coordinator."""
         try:
             await self.coordinator.async_alarm_arm_night(self._area_index, self._get_code_val(code))
-        except Exception as err:
+        except Exception as err:  # noqa: BLE001
             _LOGGER.error(f"Error arming night area {self._area_index + 1}: {err}")
 
     async def async_alarm_arm_vacation(self, code: str | None = None) -> None:
         """Send arm vacation command to the area via the coordinator."""
         try:
             await self.coordinator.async_alarm_arm_vacation(self._area_index, self._get_code_val(code))
-        except Exception as err:
+        except Exception as err:  # noqa: BLE001
             _LOGGER.error(f"Error arming vacation area {self._area_index + 1}: {err}")
 
     async def async_alarm_arm_custom_bypass(self, code: str | None = None) -> None:
         """Handle custom bypass request via the coordinator."""
         try:
             await self.coordinator.async_alarm_arm_custom_bypass(self._area_index, self._get_code_val(code))
-        except Exception as err:
+        except Exception as err:  # noqa: BLE001
             _LOGGER.error(f"Error arming custom bypass area {self._area_index + 1}: {err}")
 
     async def async_alarm_trigger(self, code: str | None = None) -> None:
         """Trigger the alarm on the area via the coordinator."""
         try:
             await self.coordinator.async_alarm_trigger(self._area_index, self._get_code_val(code))
-        except Exception as err:
+        except Exception as err:  # noqa: BLE001
             _LOGGER.error(f"Error triggering alarm area {self._area_index + 1}: {err}")
