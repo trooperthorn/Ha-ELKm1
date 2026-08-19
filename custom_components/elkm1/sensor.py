@@ -24,6 +24,7 @@ from .const import ATTR_VALUE, ELK_USER_CODE_SERVICE_SCHEMA
 from .coordinator import ElkDataUpdateCoordinator
 from .data import ElkM1Data
 from .entity import ElkEntity
+from .models import ElkRuntimeData
 from .util import deprecate_entity
 
 _LOGGER = logging.getLogger(__name__)
