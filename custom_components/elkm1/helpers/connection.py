@@ -2,7 +2,7 @@
 
 import asyncio
 import logging
-from typing import Callable
+from collections.abc import Callable
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -65,7 +65,7 @@ class ElkConnectionManager:
                 self._reconnect_delay = 2.0  # Reset delay on success
                 _LOGGER.info(f"Successfully connected to Elk-M1 at {self._url}")
 
-            except Exception as err:
+            except Exception as err: # noqa: BLE001
                 _LOGGER.error(f"Connection failed: {err}. Retrying in {self._reconnect_delay}s...")
                 await asyncio.sleep(self._reconnect_delay)
                 self._reconnect_delay = min(self._reconnect_delay * 2, self._max_reconnect_delay)
@@ -83,8 +83,8 @@ class ElkConnectionManager:
             self._writer.close()
             try:
                 await self._writer.wait_closed()
-            except Exception:
-                pass
+            except Exception as err:  # noqa: BLE001
+                _LOGGER.debug(f"Error closing writer: {err}")
         
         self._reader = None
         self._writer = None
@@ -149,7 +149,7 @@ class ElkConnectionManager:
             _LOGGER.debug(f"Sent Elk Command: {final_string.strip()}")
             return True
 
-        except Exception as err:
+        except Exception as err: # noqa: BLE001
             _LOGGER.error(f"Failed to write to Elk-M1: {err}")
             await self._handle_disconnect()
             return False
