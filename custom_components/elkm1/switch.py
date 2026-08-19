@@ -2,37 +2,30 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import timedelta
 from math import ceil
 from typing import Any, override
 
 import voluptuous as vol
 
-from elkm1_lib.const import ThermostatMode, ThermostatSetting
-from elkm1_lib.elements import Element
-from elkm1_lib.elk import Elk
-from elkm1_lib.outputs import Output
-from elkm1_lib.thermostats import Thermostat
-
 from homeassistant.components.switch import DOMAIN as SWITCH_DOMAIN
 from homeassistant.components.switch import SwitchEntity
+from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import service
 from homeassistant.helpers.device_registry import DeviceInfo
-from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.typing import VolDictType
 
-from . import ElkM1ConfigEntry
 from .const import ATTR_DURATION, DOMAIN
-from .entity import (
-    ElkAttachedEntity,
-    ElkEntity,
-    create_elk_entities,
-    create_elk_system_device_info,
-)
-from .models import ELKM1Data
+from .coordinator import ElkDataUpdateCoordinator
+from .data import ElkRuntimeData
+from .entity import ElkEntity, create_elk_system_device_info
+
+_LOGGER = logging.getLogger(__name__)
 
 SERVICE_SWITCH_OUTPUT_TURN_ON_FOR = "switch_output_turn_on_for"
 
@@ -43,25 +36,33 @@ ELK_OUTPUT_TURN_ON_FOR_SERVICE_SCHEMA: VolDictType = {
     ),
 }
 
+
 async def async_setup_entry(
     hass: HomeAssistant,
-    config_entry: ElkM1ConfigEntry,
-    async_add_entities: AddConfigEntryEntitiesCallback,
+    config_entry: ConfigEntry,
+    async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Create the Elk-M1 switch platform."""
-    elk_data = config_entry.runtime_data
-    elk = elk_data.elk
-    entities: list[ElkEntity | SwitchEntity] = []
+    runtime_data: ElkRuntimeData = config_entry.runtime_data
+    coordinator = runtime_data.coordinator
+
+    entities: list[SwitchEntity] = []
 
     # 1. Native Proxy Switch for Atmospheric Pre-Arm Blueprint
-    entities.append(ElkArmRequestSwitch(elk, elk_data))
+    entities.append(ElkArmRequestSwitch(coordinator, config_entry))
 
-    # 2. Native Physical Outputs & Thermostats (Respects auto_configure)
-    create_elk_entities(elk_data, elk.outputs, "output", ElkOutput, entities)
-    create_elk_entities(
-        elk_data, elk.thermostats, "thermostat", ElkThermostatEMHeat, entities
-    )
-    
+    # 2. Native Physical Outputs
+    outputs = coordinator.data.get("outputs", []) if coordinator.data else []
+    for i, output in enumerate(outputs):
+        if output:
+            entities.append(ElkOutput(coordinator, config_entry, i))
+
+    # 3. Thermostat Emergency Heat Switches
+    thermostats = coordinator.data.get("thermostats", []) if coordinator.data else []
+    for i, tstat in enumerate(thermostats):
+        if tstat:
+            entities.append(ElkThermostatEMHeat(coordinator, config_entry, i))
+
     async_add_entities(entities)
 
     service.async_register_platform_entity_service(
@@ -74,19 +75,19 @@ async def async_setup_entry(
     )
 
 
-class ElkArmRequestSwitch(SwitchEntity):
+class ElkArmRequestSwitch(ElkEntity, SwitchEntity):
     """Native proxy switch for triggering pre-arm validation automations."""
 
-    _attr_name = "Arm System Request"
     _attr_icon = "mdi:shield-sync"
     _attr_should_poll = False
-    _attr_has_entity_name = True
 
-    def __init__(self, elk: Elk, elk_data: ELKM1Data) -> None:
+    def __init__(self, coordinator: ElkDataUpdateCoordinator, config_entry: ConfigEntry) -> None:
         """Initialize the arm request proxy switch."""
-        self._elk = elk
-        self._prefix = elk_data.prefix
-        self._mac = elk_data.mac
+        super().__init__(coordinator, config_entry, "arm_request")
+        self._prefix = config_entry.data.get("prefix", "")
+        self._mac = config_entry.unique_id
+        
+        self._attr_name = "Arm System Request"
         self._attr_unique_id = f"elkm1_{self._prefix}_arm_request".lower()
         self._attr_is_on = False
 
@@ -94,7 +95,8 @@ class ElkArmRequestSwitch(SwitchEntity):
     @override
     def device_info(self) -> DeviceInfo:
         """Device info connecting via the ElkM1 system."""
-        return create_elk_system_device_info(self._elk, self._prefix, self._mac)
+        # Note: requires the Elk instance or similar device reference upstream
+        return create_elk_system_device_info(self.coordinator._elk, self._prefix, self._mac)
 
     @property
     @override
@@ -115,63 +117,96 @@ class ElkArmRequestSwitch(SwitchEntity):
         self.async_write_ha_state()
 
 
-class ElkOutput(ElkAttachedEntity, SwitchEntity):
+class ElkOutput(ElkEntity, SwitchEntity):
     """Elk output as switch."""
 
-    _element: Output
+    def __init__(self, coordinator: ElkDataUpdateCoordinator, config_entry: ConfigEntry, index: int) -> None:
+        """Initialize the Elk physical output."""
+        super().__init__(coordinator, config_entry, f"output_{index+1}")
+        self._index = index
+        self._attr_unique_id = f"{config_entry.entry_id}_output_{index+1}"
+        
+        output_obj = self._get_obj()
+        self._attr_name = getattr(output_obj, "name", f"Output {index+1}") if output_obj else f"Output {index+1}"
+
+    def _get_obj(self) -> Any:
+        if self.coordinator.data and "outputs" in self.coordinator.data:
+            outputs = self.coordinator.data["outputs"]
+            if self._index < len(outputs):
+                return outputs[self._index]
+        return None
 
     @property
     @override
     def is_on(self) -> bool:
         """Get the current output status."""
-        return self._element.output_on
+        if not self.coordinator.data:
+            return False
+        # Check if this index exists in the active outputs array cached by the coordinator
+        return self._index in self.coordinator.data.get("outputs_active", [])
 
     @override
     async def async_turn_on(self, **kwargs: Any) -> None:
-        """Turn on the output."""
-        self._element.turn_on(0)
+        """Turn on the output indefinitely (Timer = 00000)."""
+        # Elk ASCII 'cn' command: cn + Output(3) + Timer(5)
+        await self.coordinator.send_raw_elk_command(f"cn{self._index + 1:03d}00000")
 
     @override
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Turn off the output."""
-        self._element.turn_off()
+        # Elk ASCII 'cf' command: cf + Output(3)
+        await self.coordinator.send_raw_elk_command(f"cf{self._index + 1:03d}")
 
     async def async_switch_output_turn_on_for(self, duration: timedelta) -> None:
         """Turn on an output for specified length of time."""
-        self._element.turn_on(ceil(duration.total_seconds()))
+        seconds = ceil(duration.total_seconds())
+        await self.coordinator.send_raw_elk_command(f"cn{self._index + 1:03d}{seconds:05d}")
 
 
 class ElkThermostatEMHeat(ElkEntity, SwitchEntity):
     """Elk Thermostat emergency heat as switch."""
 
-    _element: Thermostat
-
-    def __init__(self, element: Element, elk: Elk, elk_data: ELKM1Data) -> None:
+    def __init__(self, coordinator: ElkDataUpdateCoordinator, config_entry: ConfigEntry, index: int) -> None:
         """Initialize the emergency heat switch."""
-        super().__init__(element, elk, elk_data)
-        self._unique_id = f"{self._unique_id}emheat"
-        self._attr_name = f"{element.name} emergency heat"
+        super().__init__(coordinator, config_entry, f"thermostat_{index+1}_emheat")
+        self._index = index
+        self._attr_unique_id = f"{config_entry.entry_id}_thermostat_{index+1}_emheat"
+        
+        tstat_obj = self._get_obj()
+        base_name = getattr(tstat_obj, "name", f"Thermostat {index+1}") if tstat_obj else f"Thermostat {index+1}"
+        self._attr_name = f"{base_name} Emergency Heat"
+
+    def _get_obj(self) -> Any:
+        if self.coordinator.data and "thermostats" in self.coordinator.data:
+            thermostats = self.coordinator.data["thermostats"]
+            if self._index < len(thermostats):
+                return thermostats[self._index]
+        return None
 
     @property
     @override
     def is_on(self) -> bool:
         """Get the current emergency heat status."""
-        return self._element.mode is ThermostatMode.EMERGENCY_HEAT
-
-    def _elk_set(self, mode: ThermostatMode) -> None:
-        """Set the thermostat mode."""
-        self._element.set(ThermostatSetting.MODE, mode)
+        obj = self._get_obj()
+        if not obj:
+            return False
+        # Assuming Elk mode 4 is EM HEAT
+        mode = getattr(obj, "mode", 0)
+        return mode == 4
 
     @override
     async def async_turn_on(self, **kwargs: Any) -> None:
-        """Turn on the output."""
-        self._elk_set(ThermostatMode.EMERGENCY_HEAT)
+        """Turn on Emergency Heat."""
+        # Elk ASCII 'ts' command: ts + Tstat(2) + ValueType(1) + Value(2)
+        # ValueType 0 = Mode. Value 04 = EmHeat
+        await self.coordinator.send_raw_elk_command(f"ts{self._index + 1:02d}004")
 
     @override
     async def async_turn_off(self, **kwargs: Any) -> None:
-        """Turn off the output."""
-        self._elk_set(ThermostatMode.EMERGENCY_HEAT)
+        """Turn off Emergency Heat by reverting to Auto."""
+        # ValueType 0 = Mode. Value 03 = Auto
+        await self.coordinator.send_raw_elk_command(f"ts{self._index + 1:02d}003")
 
     async def async_switch_output_turn_on_for(self, duration: timedelta) -> None:
-        """Turn on an output for specified length of time: not supported for thermostat."""
+        """Not supported for thermostat."""
         raise HomeAssistantError("supported only on ElkM1 output switch entities")
