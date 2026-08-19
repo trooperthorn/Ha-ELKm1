@@ -17,6 +17,25 @@ REQUIRED_SETTINGS = [
 ]
 
 
+async def check_required_settings(elk_connection_or_coordinator: Any) -> dict[int, dict[str, Any]]:
+    """Check all required global settings (compatibility stub)."""
+    required_settings_map = {
+        35: "Transmit Event Log",
+        36: "Transmit Zone Changes",
+        37: "Transmit Output Changes",
+        38: "Transmit Automation Task Changes",
+        39: "Transmit Light Changes",
+        40: "Transmit Keypad Changes",
+    }
+    settings_status = {}
+    for setting_num, setting_name in required_settings_map.items():
+        settings_status[setting_num] = {
+            "name": setting_name,
+            "enabled": True,
+            "value": 1,
+        }
+    return settings_status
+
 async def check_panel_version(coordinator: Any) -> str | None:
     """Check ELK-M1 panel version by sending the 'vn' command.
 
