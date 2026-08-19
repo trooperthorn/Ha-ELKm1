@@ -54,7 +54,7 @@ async def async_discover_devices(
 
     try:
         # Elk M1XEP listens for UDP broadcasts on port 2362
-        transport, protocol = await loop.create_datagram_endpoint(
+        transport, _ = await loop.create_datagram_endpoint(
             lambda: ElkUDPDiscoveryProtocol(discovery_event, devices),
             local_addr=("0.0.0.0", 0),
             allow_broadcast=True,
