@@ -143,6 +143,7 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator[ElkPanelData]):
         elk.add_handler("EE", self._handle_timer_event)
         elk.add_handler("AM", self._handle_alarm_memory)
         elk.add_handler("SS", self._handle_trouble_status)
+        elk.add_handler("ZD", self._handle_zone_definitions)
         if elk.panel is not None:
             elk.panel.add_callback(self._handle_voice_message)
 
@@ -203,6 +204,21 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator[ElkPanelData]):
             "elkm1_alarm_memory",
             {"areas": [i + 1 for i, flagged in enumerate(alarm_memory) if flagged]},
         )
+
+    def _handle_zone_definitions(self, zone_definitions: list[Any]) -> None:
+        """Request voltage for analog zones once definitions are known.
+
+        Zones.sync() requests zone status/definitions/partitions but never
+        requests voltage (zv) - Zone.get_voltage() has to be called
+        explicitly per zone. Rather than blast all 208 possible zones, only
+        ask for it on zones the panel has actually defined as analog
+        (definition == ZoneType.ANALOG_ZONE == 34).
+        """
+        if not self._elk:
+            return
+        for zone_index, definition in enumerate(zone_definitions):
+            if self._get_enum_value(definition) == 34:
+                self._elk.zones[zone_index].get_voltage()
 
     def _handle_trouble_status(self, system_trouble_status: str) -> None:
         """Store the raw SS trouble string and push an updated snapshot.
