@@ -224,7 +224,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ElkM1ConfigEntry) -> boo
     try:
         # This will natively connect to the Elk panel, start the background tasks, and fetch state
         await coordinator.async_config_entry_first_refresh()
-    except Exception as exc:
+    except Exception as err:  # noqa: BLE001
         raise ConfigEntryNotReady(f"Timed out or failed connecting to {connection_url}") from exc
 
     # Run the setup wizard to verify panel version and configure global settings if serial
