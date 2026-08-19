@@ -4,11 +4,12 @@ ruff==0.16.3
 # Type Checking
 mypy>=1.8.0
 
-# Testing
+# Home Assistant Core & Testing
+homeassistant==2026.8.0
 pytest>=8.0.0
 pytest-asyncio>=0.23.5
 pytest-homeassistant-custom-component>=0.13.111
 
-# Integration Dependencies (so tests/type-checkers know what they are)
+# Integration Dependencies
 pyserial>=3.5
 pyserial-asyncio>=0.6
