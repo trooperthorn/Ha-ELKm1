@@ -50,12 +50,12 @@ from .discovery import (
     async_update_entry_from_discovery,
 )
 from .entity import create_elk_system_device_info
-from .models import ELKM1Data
+from .models import ElkRuntimeData
 from .helpers.panel_settings import verify_panel_configuration
 from .services import async_setup_services
 
 if TYPE_CHECKING:
-    ElkM1ConfigEntry = ConfigEntry[ELKM1Data]
+    ElkM1ConfigEntry = ConfigEntry[ElkRuntimeData]
 else:
     ElkM1ConfigEntry = ConfigEntry
 
@@ -230,7 +230,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ElkM1ConfigEntry) -> boo
     prefix: str = conf.get(CONF_PREFIX, "")
     auto_configure: bool = conf.get(CONF_AUTO_CONFIGURE, False)
 
-    entry.runtime_data = ELKM1Data(
+    entry.runtime_data = ElkRuntimeData(
         prefix=prefix,
         mac=entry.unique_id,
         auto_configure=auto_configure,
