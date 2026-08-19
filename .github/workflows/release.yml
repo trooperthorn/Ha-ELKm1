@@ -1,18 +1,45 @@
-name: Release Integration
+name: Create Daily Release
 
 on:
-  push:
-    tags:
-      - 'v*'
+  workflow_dispatch: # Allows manual triggering from the GitHub Actions UI
 
 jobs:
   release:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write # Required to create tags and releases
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Pulls full tag history needed for version math
 
-      - name: Refresh HACS Action
-        uses: hacs/integration@main
+      - name: Calculate next vYYYY.MM.DD.XX version
+        id: version
+        run: |
+          TODAY=$(date +'%Y.%m.%d')
+          
+          # Find the highest daily revision using sort
+          LATEST_REV=$(git tag -l "v$TODAY.*" | sort -V | tail -n 1 | awk -F. '{print $NF}')
+          
+          if [ -z "$LATEST_REV" ]; then
+            NEXT_REV="01"
+          else
+            # Strip leading zero for math, add 1, then pad back to 2 digits
+            NEXT_REV=$(printf "%02d" $((10#$LATEST_REV + 1)))
+          fi
+          
+          NEW_TAG="v$TODAY.$NEXT_REV"
+          echo "Calculated new tag: $NEW_TAG"
+          echo "new_tag=$NEW_TAG" >> $GITHUB_OUTPUT
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.new_tag }}
+          name: Elk-M1 Release ${{ steps.version.outputs.new_tag }}
+          generate_release_notes: true
+          make_latest: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
