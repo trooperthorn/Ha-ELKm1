@@ -37,6 +37,7 @@ CONF_PLC = "plc"
 CONF_SETTING = "setting"
 CONF_TASK = "task"
 CONF_THERMOSTAT = "thermostat"
+CONF_TEMPERATURE_UNIT = "temperature_unit"
 
 DISCOVER_SCAN_TIMEOUT = 10
 DISCOVERY_INTERVAL = timedelta(minutes=15)
