@@ -22,6 +22,10 @@ from homeassistant.const import (
     CONF_ZONE,
     Platform,
     CONF_TEMPERATURE_UNIT,
+    CONNECTION_NETWORK,
+    CONNECTION_SERIAL,
+    CONF_CONNECTION_TYPE
+    
 )
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import ConfigEntryNotReady
