@@ -6,17 +6,36 @@
 
 Built though Gemini AI using the ElkM1 Technical manual, the Elk Library, lots of QA.
 
-A fully-featured custom integration for Home Assistant to monitor and control **Elk-M1 Gold** and **Elk-M1 EZ8** alarm and automation panels. A robust, asynchronous custom integration for the Elk-M1 Gold and Elk-M1 EZ8 security/automation panels in Home Assistant. This integration communicates directly with your Elk panel via serial or network connections, providing real-time state updates and advanced control.
 
-This integration uses the modern [elkm1_lib](https://github.com/gwww/elkm1) Python library and supports both direct Serial/USB connections and Network connections via the Elk M1XEP.
+# Elk-M1 Security Control Integration for Home Assistant
 
+A modern, native-async Home Assistant custom integration for controlling **Elk-M1 Gold** and **M1EZ8** security control panels[cite: 1, 19, 31]. This integration bypasses legacy third-party libraries in favor of a direct, high-performance asynchronous connection manager designed for Home Assistant 2026.8 and Python 3.14.2.
 
-
-# ELK-M1 Custom Integration for Home Assistant
-
-A high-performance, asynchronous Home Assistant integration for ELK-M1 Gold security and automation controls[cite: 1]. This integration provides real-time state synchronization, full area partition control[cite: 1], live zone status tracking, dynamic open door/window counting, voice phrase broadcasting, and automated setup integration with **Alarmo** and **Better Thermostat**.
+## Features
+* **100% Native Async Architecture:** Direct non-blocking TCP (M1XEP) and Serial/USB communication with zero legacy library overhead.
+* **Bulletproof Reliability:** Built-in TCP keep-alive heartbeats and exponential backoff reconnection routines to handle network drops and alarm events gracefully.
+* **Smart Serial Discovery:** Automatically scans operating system ports, resolves persistent `/dev/serial/by-id/` paths, and probes hardware to identify active Elk panels.
+* **Deep Ecosystem Integration:** Fully compatible with **Alarmo**, **Better Thermostat**, **Unifi Protect**, **Browser Mod**, and **ESP32 Bluetooth Proxies**.
+* **Real-Time State Streaming:** Instantaneous updates via raw ASCII broadcast interceptors (`AS`, `EE`, `AM`, `VN`).
 
 ---
+
+## Requirements
+* Home Assistant 2026.8 or newer.
+* Python 3.14.2 or newer.
+* An Elk-M1 Security Panel connected via an M1XEP Ethernet module or a direct serial/USB cable.
+
+---
+
+## Installation via HACS
+1. Open **HACS** in your Home Assistant instance.
+2. Navigate to **Integrations**.
+3. Click the three dots in the top right corner and select **Custom repositories**.
+4. Paste your repository URL, select category **Integration**, and click **Add**.
+5. Search for **Elk-M1 Security**, click **Download**, and restart Home Assistant.
+
+
+
 
 ## Features
 
@@ -30,6 +49,9 @@ A high-performance, asynchronous Home Assistant integration for ELK-M1 Gold secu
 - **Better Thermostat Ready**: Proper `device_class` attributes on all contact sensors to enable automatic HVAC suspension when windows or doors are opened.
 
 ---
+
+
+## OLD INFO I WANT TO ADD BACK AND VERIFY
 
 ##  Integration Ecosystem & Automation Blueprints
 - Alarmo & Better Thermostat Compatibility: Standardized binary sensor device classes enable automatic Alarmo zone mapping and HVAC cut-off when doors or windows open.
