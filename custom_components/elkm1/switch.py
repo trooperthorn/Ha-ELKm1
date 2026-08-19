@@ -2,15 +2,14 @@
 
 from __future__ import annotations
 
-import logging
 from datetime import timedelta
+import logging
 from math import ceil
 from typing import Any, override
 
 import voluptuous as vol
 
-from homeassistant.components.switch import DOMAIN as SWITCH_DOMAIN
-from homeassistant.components.switch import SwitchEntity
+from homeassistant.components.switch import DOMAIN as SWITCH_DOMAIN, SwitchEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
@@ -22,8 +21,8 @@ from homeassistant.helpers.typing import VolDictType
 
 from .const import ATTR_DURATION, DOMAIN
 from .coordinator import ElkDataUpdateCoordinator
-from .data import ElkRuntimeData
 from .entity import ElkEntity, create_elk_system_device_info
+from .models import ElkRuntimeData
 
 _LOGGER = logging.getLogger(__name__)
 
