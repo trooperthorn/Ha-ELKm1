@@ -1,8 +1,6 @@
 """Elk-M1 Control integration."""
-
 from __future__ import annotations
 
-# 1. CLEAN UP IMPORTS (Remove asyncio, UnitOfTemperature, DISCOVERY constants, etc.)
 import logging
 import re
 from typing import TYPE_CHECKING, Any
@@ -14,8 +12,11 @@ from homeassistant.config_entries import SOURCE_IMPORT, ConfigEntry
 from homeassistant.const import (
     CONF_ENABLED,
     CONF_EXCLUDE,
+    CONF_HOST,
     CONF_INCLUDE,
+    CONF_PASSWORD,
     CONF_PREFIX,
+    CONF_USERNAME,
     CONF_ZONE,
     Platform,
 )
@@ -32,20 +33,16 @@ from .const import (
     CONF_AUTO_CONFIGURE,
     CONF_CONNECTION_TYPE,
     CONF_COUNTER,
-    CONF_HOST,
     CONF_KEYPAD,
     CONF_OUTPUT,
-    CONF_PASSWORD,
     CONF_PLC,
     CONF_SETTING,
     CONF_TASK,
     CONF_TEMPERATURE_UNIT,
     CONF_THERMOSTAT,
-    CONF_USERNAME,
     CONNECTION_NETWORK,
     CONNECTION_SERIAL,
     DOMAIN,
-    ELK_ELEMENTS,
 )
 from .coordinator import ElkDataUpdateCoordinator
 from .discovery import (
