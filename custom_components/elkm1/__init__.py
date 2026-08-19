@@ -20,8 +20,8 @@ from homeassistant.const import (
     CONF_PREFIX,
     CONF_USERNAME,
     CONF_ZONE,
-    CONF_TEMPERATURE_UNIT,
     Platform,
+    CONF_TEMPERATURE_UNIT,
 )
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import ConfigEntryNotReady
@@ -202,7 +202,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ElkM1ConfigEntry) -> boo
         connection_type = "serial"
     else:
         connection_url = conf.get(CONF_HOST, "")
-        connection_type = "serial" if connection_url.startswith("serial://") else "network"
+        conf[CONF_CONNECTION_TYPE] = (
+            CONNECTION_SERIAL
+            if connection_url.startswith("serial://")
+            else CONNECTION_NETWORK
+        )
+
+    host = hostname_from_url(connection_url)
         
     host = hostname_from_url(connection_url)
     _LOGGER.info(f"Setting up elkm1 at {connection_url}")
