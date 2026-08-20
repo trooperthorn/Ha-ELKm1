@@ -63,7 +63,7 @@ async def async_setup_entry(
     runtime_data: ElkRuntimeData = config_entry.runtime_data
     coordinator = runtime_data.coordinator
 
-    entities = []
+    entities: list[BinarySensorEntity] = []
     zones = coordinator.data.zones if coordinator.data else []
 
     for zone in zones:
@@ -157,7 +157,7 @@ class ElkBinarySensor(ElkEntity, BinarySensorEntity):
         zone = self.zone_data
         if not zone:
             return False
-            
+
         logical_status = self._get_enum_value(getattr(zone, "logical_status", 0))
         # ZoneLogicalStatus: 0=normal, 1=trouble, 2=violated, 3=bypassed.
         return logical_status == 2
@@ -168,7 +168,7 @@ class ElkBinarySensor(ElkEntity, BinarySensorEntity):
         zone = self.zone_data
         if not zone:
             return None
-            
+
         def_val = self._get_enum_value(getattr(zone, "definition", 0))
         return _DEVICE_CLASS_MAP.get(def_val)
 

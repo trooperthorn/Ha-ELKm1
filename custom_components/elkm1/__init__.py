@@ -118,7 +118,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ElkM1ConfigEntry) -> boo
     async def _background_verify() -> None:
         try:
             await verify_panel_configuration(coordinator)
-        except Exception as err:  # noqa: BLE001
+        except Exception as err:
             _LOGGER.warning("Panel verification encountered non-fatal error: %s", err)
 
     entry.async_create_background_task(

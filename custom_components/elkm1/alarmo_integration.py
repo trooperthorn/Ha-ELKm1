@@ -96,7 +96,7 @@ Auto-Setup Complete! {len(elk_zones)} ELK-M1 zones found and ready to configure 
 Zones are automatically detected by Alarmo. No manual configuration needed!
 """
 
-        _LOGGER.info(f"Found {len(elk_zones)} ELK-M1 zones ready for Alarmo")
+        _LOGGER.info("Found %d ELK-M1 zones ready for Alarmo", len(elk_zones))
 
         async_create_notification(
             hass,

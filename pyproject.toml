@@ -1,0 +1,36 @@
+[tool.ruff]
+target-version = "py313"
+line-length = 100
+
+[tool.ruff.lint]
+select = [
+    "E",       # pycodestyle errors
+    "W",       # pycodestyle warnings
+    "F",       # pyflakes
+    "I",       # isort
+    "UP",      # pyupgrade
+    "B",       # flake8-bugbear
+    "SIM",     # flake8-simplify
+    "C4",      # flake8-comprehensions
+    "ASYNC",   # flake8-async
+    "RUF",     # ruff-native rules
+    "LOG",     # flake8-logging
+    "G",       # flake8-logging-format
+    "PIE",     # flake8-pie
+    "RET",     # flake8-return
+]
+ignore = [
+    "E501",    # line length is a soft target, not a hard failure - long
+               # entity descriptions/log strings are common in this domain
+    "ASYNC109", # our `timeout: float` parameters are passed straight into
+               # asyncio.wait_for()/asyncio.timeout() internally - the rule
+               # wants call sites to wrap themselves instead, which would
+               # just move the same parameter to every caller
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["custom_components.elkm1"]
+combine-as-imports = true
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["RET504"]

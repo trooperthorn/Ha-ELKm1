@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import glob
 import logging
 import os
@@ -11,7 +10,7 @@ from typing import Any, Self
 try:
     from typing import override
 except ImportError:
-    from typing_extensions import override
+    from typing import override
 
 from urllib.parse import urlparse
 
@@ -33,8 +32,7 @@ from homeassistant.const import (
 )
 from homeassistant.core import callback
 from homeassistant.exceptions import HomeAssistantError
-from homeassistant.helpers import device_registry as dr
-from homeassistant.helpers import selector
+from homeassistant.helpers import device_registry as dr, selector
 from homeassistant.helpers.service_info.dhcp import DhcpServiceInfo
 from homeassistant.helpers.service_info.usb import UsbServiceInfo
 from homeassistant.helpers.typing import DiscoveryInfoType, VolDictType
@@ -105,7 +103,7 @@ def get_persistent_port_path(device_path: str) -> str:
         resolved_target = os.path.realpath(device_path)
     except OSError:
         return device_path
-    
+
     for symlink in glob.glob("/dev/serial/by-id/*"):
         try:
             if os.path.realpath(symlink) == resolved_target:
@@ -168,7 +166,7 @@ def _address_from_discovery(device: dict[str, Any]) -> str:
 def _make_url_from_data(data: dict[str, str]) -> str:
     if host := data.get(CONF_HOST):
         return host
-    
+
     protocol = PROTOCOL_MAP.get(data.get(CONF_PROTOCOL, "serial"), "serial://")
     address = data.get(CONF_ADDRESS, data.get("serial_port", ""))
     return f"{protocol}{address}"
@@ -317,16 +315,15 @@ class Elkm1ConfigFlow(ConfigFlow, domain=DOMAIN):
             if mac := user_input[CONF_DEVICE]:
                 if mac == "serial_port_flow":
                     return await self.async_step_serial()
-                elif mac == "manual_network_flow":
+                if mac == "manual_network_flow":
                     return await self.async_step_manual_connection()
-                else:
-                    await self.async_set_unique_id(mac, raise_on_progress=False)
-                    self._discovered_device = self._discovered_devices[mac]
-                    return await self.async_step_discovered_connection()
+                await self.async_set_unique_id(mac, raise_on_progress=False)
+                self._discovered_device = self._discovered_devices[mac]
+                return await self.async_step_discovered_connection()
             return await self.async_step_manual_connection()
 
         current_unique_ids = self._async_current_ids(include_ignore=False)
-        
+
         discovered_devices = await async_discover_devices(self.hass)
         self._discovered_devices = {
             dr.format_mac(device["mac_address"]): device for device in discovered_devices
@@ -449,16 +446,16 @@ class Elkm1ConfigFlow(ConfigFlow, domain=DOMAIN):
 
         if user_input is not None:
             raw_port = user_input[CONF_SERIAL_PORT]
-            
+
             # Map dynamic ttyUSB to persistent by-id path
             port = await self.hass.async_add_executor_job(
                 get_persistent_port_path, raw_port
             )
-            
+
             # Check if already configured using the persistent path
             await self.async_set_unique_id(port)
             self._abort_if_unique_id_configured()
-            
+
             # Verify device exists on this port ONLY upon user selection
             if user_input.get(CONF_VERIFY_DEVICE, True):
                 try:
@@ -467,13 +464,13 @@ class Elkm1ConfigFlow(ConfigFlow, domain=DOMAIN):
                     # partway through baud auto-detection.
                     if not await probe_serial_port(port, timeout=12.0):
                         errors["base"] = "cannot_connect"
-                except (OSError, asyncio.TimeoutError, ValueError) as e:
+                except (TimeoutError, OSError, ValueError) as e:
                     _LOGGER.debug("Error probing serial port %s: %s", port, e)
                     errors["base"] = "cannot_connect"
-                except Exception as e:  # noqa: BLE001
+                except Exception as e:
                     _LOGGER.debug("Unexpected error probing serial port %s: %s", port, e)
                     errors["base"] = "cannot_connect"
-            
+
             if not errors:
                 # Normalize PIN: ignore if empty, None, 0, or "0"
                 raw_pin = user_input.get(CONF_PIN)
@@ -507,24 +504,24 @@ class Elkm1ConfigFlow(ConfigFlow, domain=DOMAIN):
         port_options = []
         for port_info in ports:
             device_path = port_info.device
-            
+
             # Get the reboot-safe persistent path
             persistent_path = await self.hass.async_add_executor_job(
                 get_persistent_port_path, device_path
             )
-            
+
             # Skip this port entirely if another HA integration is already using it
             if device_path in ha_configured_ports or persistent_path in ha_configured_ports:
                 continue
 
             # Build a clean label for the UI
             label = f"{persistent_path} - {port_info.description}" if port_info.description and port_info.description != "n/a" else persistent_path
-            
+
             port_options.append({
-                "value": persistent_path, 
+                "value": persistent_path,
                 "label": label,
             })
-        
+
         # Fallback if the system literally has 0 serial ports available
         if not port_options:
             port_options = [{"value": "", "label": "No available serial ports discovered"}]

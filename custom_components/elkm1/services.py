@@ -101,7 +101,7 @@ async def _async_get_security_summary(service: ServiceCall) -> ServiceResponse:
 
     # Read instantly from our normalized coordinator data
     faulted_indices = coordinator.data.zones_faulted if coordinator.data else []
-    
+
     # Elk zones are 1-indexed for the user, indices are 0-indexed
     faulted_zones = [idx + 1 for idx in faulted_indices]
 
@@ -129,9 +129,9 @@ async def async_setup_services(hass: HomeAssistant) -> None:
         DISPLAY_MESSAGE_SERVICE_SCHEMA,
     )
     hass.services.async_register(
-        DOMAIN, 
-        "get_security_summary", 
-        _async_get_security_summary, 
+        DOMAIN,
+        "get_security_summary",
+        _async_get_security_summary,
         SECURITY_SUMMARY_SCHEMA,
         supports_response=SupportsResponse.ONLY
     )

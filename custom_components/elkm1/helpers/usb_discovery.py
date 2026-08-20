@@ -24,31 +24,31 @@ def get_in_use_serial_ports(hass: HomeAssistant) -> set[str]:
     in_use = set()
     # Common dictionary keys integrations use to store serial port paths
     serial_keys = {"device", "port", "serial_port", "path", "url"}
-    
+
     for entry in hass.config_entries.async_entries():
         # Check both the static data and dynamic options dicts
         for source in (entry.data, entry.options):
             for key in serial_keys:
                 val = source.get(key)
-                
+
                 # Standard String Path (e.g., Modbus, Serial, ELK)
                 if isinstance(val, str) and val.startswith(("/dev/", "COM", "serial://")):
                     clean_path = val.replace("serial://", "")
                     in_use.add(clean_path)
-                    
+
                 # Dictionary Path (e.g., ZHA stores it as {'path': '/dev/ttyUSB0'})
                 elif key == "device" and isinstance(val, dict):
                     dict_path = val.get("path")
                     if isinstance(dict_path, str) and dict_path.startswith(("/dev/", "COM")):
                         in_use.add(dict_path)
-                        
+
     return in_use
 
 
 async def discover_elk_ports(hass: HomeAssistant) -> dict[str, str]:
     """Discover available ELK-M1 compatible serial ports, excluding those in use."""
     loop = asyncio.get_running_loop()
-    
+
     # 1. Get the blacklist of ports already claimed by Home Assistant
     in_use_ports = get_in_use_serial_ports(hass)
 
@@ -102,9 +102,9 @@ async def probe_serial_port(port: str, timeout: float = 5.0) -> bool:
     except BaudProbeError as e:
         _LOGGER.debug("Port %s probe failed gracefully: %s", port, e)
         return False
-    except (asyncio.TimeoutError, ConnectionError, OSError, ValueError) as e:
+    except (TimeoutError, ConnectionError, OSError, ValueError) as e:
         _LOGGER.debug("Port %s probe failed gracefully: %s", port, e)
         return False
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         _LOGGER.error("Unexpected error during serial probe on %s: %s", port, e)
         return False

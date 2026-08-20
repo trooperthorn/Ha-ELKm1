@@ -1,24 +1,236 @@
 rules:
-  # Bronze tier
+  # Bronze
+  action-setup: done
+  appropriate-polling:
+    status: done
+    comment: |
+      local_push primary (elk.add_handler per message type); update_interval
+      is a configurable fallback poll rate (options flow) for panels with
+      broadcast categories disabled in Global Programming.
+  brands:
+    status: todo
+    comment: |
+      Requires submitting a logo/icon to home-assistant/brands, an external
+      repo - not something this codebase can complete on its own.
+  common-modules: done
+  config-flow-test-coverage:
+    status: todo
+    comment: |
+      tests/test_config_flow.py has one test, and it fails: it patches a
+      class name (ElkM1Connection) that hasn't existed since the hybrid
+      transport rework. Real coverage of the user/serial/network/
+      reconfigure/reauth/options flows is Milestone 7's job.
   config-flow: done
+  dependency-transparency:
+    status: done
+    comment: |
+      elkm1-lib is public on PyPI, source at github.com/gwww/elkm1, pinned
+      to 2.2.15 in manifest.json.
+  docs-actions:
+    status: todo
+    comment: Pending the README rewrite (see docs-high-level-description).
+  docs-high-level-description:
+    status: todo
+    comment: |
+      README.md currently has duplicate H1/Features/Installation/Services
+      sections and a literal "## OLD INFO I WANT TO ADD BACK AND VERIFY"
+      draft section - it needs a full rewrite, not incremental edits.
+  docs-installation-instructions:
+    status: todo
+    comment: Pending the README rewrite (see docs-high-level-description).
+  docs-removal-instructions:
+    status: todo
+    comment: Pending the README rewrite (see docs-high-level-description).
+  entity-event-setup:
+    status: done
+    comment: |
+      Entities are CoordinatorEntity-based; push updates are registered
+      once per message type at the coordinator (elk.add_handler in
+      _register_push_callbacks), not ad hoc per entity, so there's no
+      per-entity listener setup/teardown to get wrong.
   entity-unique-id: done
+  has-entity-name: done
   runtime-data: done
-  test-before-setup: done
-  
-  # Silver tier
-  entity-unavailable: done
-  parallel-updates: done
-    # Set PARALLEL_UPDATES = 1 in each platform to serialize writes
-  
-  # Gold tier
+  test-before-configure:
+    status: done
+    comment: config_flow.py's validate_input() opens a real, briefly-lived connection before creating the entry.
+  test-before-setup:
+    status: done
+    comment: |
+      coordinator._async_setup() waits for the panel's own "login" event
+      (success or failure) before the first refresh is considered
+      complete, rather than assuming a raw socket/serial open means the
+      panel is actually there and responding.
+  unique-config-entry: done
+
+  # Silver
+  action-exceptions:
+    status: done
+    comment: |
+      alarm_control_panel.py's command methods used to catch and only log
+      failures, so a failed arm/disarm/bypass command looked like success
+      to HA. Fixed to raise HomeAssistantError via a shared
+      _async_run_command() helper. Other write-capable platforms
+      (switch/number/light/climate) don't wrap their calls in a swallowing
+      try/except, so exceptions already propagated correctly there.
+  config-entry-unloading: done
+  docs-configuration-parameters:
+    status: todo
+    comment: |
+      The options flow (poll_interval) and reconfigure/reauth flows exist
+      in code but aren't documented yet - pending the README rewrite.
+  docs-installation-parameters:
+    status: todo
+    comment: Pending the README rewrite.
+  entity-unavailable:
+    status: done
+    comment: Inherited from CoordinatorEntity, tracking coordinator.last_update_success.
+  integration-owner: done
+  log-when-unavailable:
+    status: todo
+    comment: |
+      No verified log-once-then-suppress behavior for repeated connection
+      failures; needs a dedicated check rather than assuming the
+      reconnect/backoff logic in helpers/transport.py already covers this
+      rule's specific intent.
+  parallel-updates:
+    status: done
+    comment: |
+      PARALLEL_UPDATES = 1 on every platform that writes to the panel's
+      single serialized command buffer: alarm_control_panel, switch,
+      sensor (zone bypass/trigger services), climate, light, number,
+      scene, time. binary_sensor is read-only and left unset.
+  reauthentication-flow:
+    status: done
+    comment: |
+      async_step_reauth/async_step_reauth_confirm, triggered by
+      ConfigEntryAuthFailed on a real "login" failure from the panel.
+      Serial connections (no username/password) abort as
+      reauth_unsupported rather than showing an inapplicable form.
+  test-coverage:
+    status: todo
+    comment: |
+      tests/ is two near-placeholder files (test_init.py: one trivial
+      test; test_config_flow.py: one failing test). Real coverage against
+      pytest_homeassistant_custom_component is Milestone 7's job -
+      extensive manual/scripted verification against real elkm1_lib
+      objects and a real installed Home Assistant has been done
+      throughout development, but that isn't a substitute for a
+      committed, repeatable test suite.
+
+  # Gold
+  devices:
+    status: done
+    comment: |
+      All entities attach to one panel-wide device via
+      create_elk_system_device_info(). Splitting into per-area/per-keypad
+      devices is tracked as follow-up work, not a rule failure - the rule
+      requires entities belong to a device, not a specific device
+      granularity.
   diagnostics: done
-  discovery: done
-    # mDNS discovery of Elk-M1 devices
-  test-coverage: done
-    # pytest with >90% coverage
-  
-  # Platinum tier
-  strict-typing: done
-    # Full type hints validated with mypy
-  async-dependency: done
-    # elkm1_lib is fully async
+  discovery-update-info:
+    status: done
+    comment: async_update_entry_from_discovery updates a config entry's host if the panel's discovered IP changes.
+  discovery:
+    status: done
+    comment: |
+      DHCP discovery (network) and USB discovery (manifest.json usb key,
+      async_step_usb) for serial adapters. No zeroconf/mDNS key: the
+      M1XEP's discovery beacon is a proprietary UDP broadcast (handled by
+      discovery.py), not mDNS, so a zeroconf manifest entry would be
+      inaccurate.
+  docs-data-update:
+    status: todo
+    comment: Pending the README rewrite.
+  docs-examples:
+    status: todo
+    comment: docs/cross_integration.md covers cross-integration examples; a general usage-examples section is still pending the README rewrite.
+  docs-known-limitations:
+    status: todo
+    comment: |
+      Real, documented limitations exist (e.g. the zone
+      door/window-vs-motion device_class mapping in binary_sensor.py is
+      best-effort - see the comment above _DEVICE_CLASS_MAP) but aren't
+      yet pulled into user-facing docs.
+  docs-supported-devices:
+    status: todo
+    comment: Pending the README rewrite.
+  docs-supported-functions:
+    status: todo
+    comment: Pending the README rewrite.
+  docs-troubleshooting:
+    status: todo
+    comment: README has a Troubleshooting section already; needs review against the current codebase during the Milestone 8 rewrite, not assumed accurate.
+  docs-use-cases:
+    status: todo
+    comment: docs/cross_integration.md covers the cross-integration use cases; general use-case docs pending the README rewrite.
+  dynamic-devices:
+    status: exempt
+    comment: |
+      The panel's hardware configuration (zone/output/task/etc. counts) is
+      fixed at panel-programming time, not something devices can appear
+      into after Home Assistant setup.
+  entity-category: done
+  entity-device-class:
+    status: done
+    comment: |
+      Applied wherever the protocol actually signals a physical type
+      (temperature, voltage, trouble/problem, etc.). Zone door/window/
+      motion classification is best-effort by protocol necessity - see
+      the comment above binary_sensor.py's _DEVICE_CLASS_MAP.
+  entity-disabled-by-default:
+    status: done
+    comment: ElkTroubleBinarySensor (one per trouble condition) is disabled by default; enabling all 23 on every install by default would be noisy.
+  entity-translations:
+    status: todo
+    comment: strings.json has no top-level "entity" section yet for translating generic entity-type names.
+  exception-translations:
+    status: todo
+    comment: Exceptions raised throughout (HomeAssistantError, ConfigEntryAuthFailed, etc.) use plain f-string messages, not translation_domain/translation_key.
+  icon-translations:
+    status: todo
+    comment: |
+      A few entities set _attr_icon directly (mdi:shield-sync,
+      mdi:shield-off, mdi:counter, mdi:shield-alert-outline) instead of
+      going through icons.json, which doesn't exist yet.
+  reconfiguration-flow:
+    status: done
+    comment: async_step_reconfigure (network) and async_step_reconfigure_serial, both via async_update_reload_and_abort.
+  repair-issues:
+    status: todo
+    comment: |
+      helpers/panel_settings.py's verify_panel_configuration() only logs a
+      warning when a required Global Programming broadcast setting can't
+      be confirmed; it doesn't raise a Repair issue the user would
+      actually see in Settings > Repairs.
+  stale-devices:
+    status: exempt
+    comment: Single static panel device; there's no per-device removal case to handle.
+
+  # Platinum
+  async-dependency:
+    status: done
+    comment: |
+      elkm1_lib's message encode/decode and Elk/subsystem orchestration
+      are used as-is; the one synchronous coupling point
+      (Connection.connect()'s transport open) is replaced by native
+      asyncio in helpers/transport.py via a monkeypatch of
+      Connection.connect at the class level.
+  inject-websession:
+    status: exempt
+    comment: No HTTP requests - this integration only speaks the Elk-M1 ASCII protocol over serial/TCP.
+  strict-typing:
+    status: todo
+    comment: |
+      `mypy --config-file mypy.ini` (now strict = true, scoped to
+      custom_components/elkm1) reports 42 real errors across 10 files as
+      of this check (coordinator.py 15, climate.py 7, config_flow.py 6,
+      light.py 3, alarm_control_panel.py 3, switch.py/number.py/
+      device_action.py 2 each, services.py/discovery.py 1 each). The
+      largest category (coordinator.py) is elkm1_lib's Elements[T]
+      collections being typed as the generic Element base class rather
+      than the real Zone/Area/Output/etc. subclasses the coordinator
+      actually reads subclass-only attributes off - an upstream typing
+      gap in elkm1_lib, not a runtime bug (verified via real elkm1_lib
+      object behavioral tests throughout development). Working through
+      the rest is tracked as follow-up.

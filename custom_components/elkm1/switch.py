@@ -9,13 +9,11 @@ from typing import Any, override
 
 import voluptuous as vol
 from elkm1_lib.const import ThermostatMode, ThermostatSetting
-from homeassistant.components.switch import DOMAIN as SWITCH_DOMAIN
-from homeassistant.components.switch import SwitchEntity
+from homeassistant.components.switch import DOMAIN as SWITCH_DOMAIN, SwitchEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
-from homeassistant.helpers import config_validation as cv
-from homeassistant.helpers import service
+from homeassistant.helpers import config_validation as cv, service
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.typing import VolDictType
@@ -26,6 +24,10 @@ from .entity import ElkEntity, create_elk_system_device_info
 from .models import ElkRuntimeData
 
 _LOGGER = logging.getLogger(__name__)
+
+# The panel has a single serialized command buffer with no flow control -
+# concurrent writes from multiple entities must not overlap.
+PARALLEL_UPDATES = 1
 
 SERVICE_SWITCH_OUTPUT_TURN_ON_FOR = "switch_output_turn_on_for"
 
@@ -95,7 +97,7 @@ class ElkArmRequestSwitch(ElkEntity, SwitchEntity):
         super().__init__(coordinator, config_entry, "arm_request")
         self._prefix = config_entry.data.get("prefix", "")
         self._mac = config_entry.unique_id
-        
+
         self._attr_name = "Arm System Request"
         self._attr_unique_id = f"elkm1_{self._prefix}_arm_request".lower()
         self._attr_is_on = False

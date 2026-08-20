@@ -7,10 +7,13 @@ from typing import Any
 
 from homeassistant.components.alarm_control_panel import (
     AlarmControlPanelEntity,
+    AlarmControlPanelEntityFeature,
     AlarmControlPanelState,
+    CodeFormat,
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import entity_platform
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
@@ -24,19 +27,6 @@ SERVICE_ALARM_CLEAR_BYPASS = "alarm_clear_bypass"
 SERVICE_ALARM_ARM_HOME_INSTANT = "alarm_arm_home_instant"
 SERVICE_ALARM_ARM_NIGHT_INSTANT = "alarm_arm_night_instant"
 
-# Safe imports for optional alarm panel features/formats across HA versions
-try:
-    from homeassistant.components.alarm_control_panel import (
-        AlarmControlPanelEntityFeature,
-    )
-except ImportError:
-    AlarmControlPanelEntityFeature = None
-
-try:
-    from homeassistant.components.alarm_control_panel import CodeFormat
-except ImportError:
-    CodeFormat = None
-
 # Map modern enum states
 STATE_ALARM_TRIGGERED = AlarmControlPanelState.TRIGGERED
 STATE_ARMED_AWAY = AlarmControlPanelState.ARMED_AWAY
@@ -45,6 +35,10 @@ STATE_ARMED_NIGHT = AlarmControlPanelState.ARMED_NIGHT
 STATE_DISARMED = AlarmControlPanelState.DISARMED
 
 _LOGGER: logging.Logger = logging.getLogger(__name__)
+
+# The panel has a single serialized command buffer with no flow control -
+# concurrent writes from multiple entities must not overlap.
+PARALLEL_UPDATES = 1
 
 
 async def async_setup_entry(
@@ -58,7 +52,7 @@ async def async_setup_entry(
 
     # The coordinator now dictates how many areas exist based on connection parsing
     num_areas = coordinator.data.num_areas if coordinator.data else 1
-    
+
     entities = [
         ElkAlarmControlPanel(
             coordinator=coordinator,
@@ -95,14 +89,14 @@ class ElkAlarmControlPanel(ElkEntity, AlarmControlPanelEntity):
     """Elk-M1 alarm control panel partition."""
 
     _attr_supported_features = (
-        (AlarmControlPanelEntityFeature.ARM_AWAY if AlarmControlPanelEntityFeature else 0)
-        | (AlarmControlPanelEntityFeature.ARM_HOME if AlarmControlPanelEntityFeature else 0)
-        | (AlarmControlPanelEntityFeature.ARM_NIGHT if AlarmControlPanelEntityFeature else 0)
-        | (AlarmControlPanelEntityFeature.ARM_VACATION if AlarmControlPanelEntityFeature else 0)
-        | (AlarmControlPanelEntityFeature.ARM_CUSTOM_BYPASS if AlarmControlPanelEntityFeature else 0)
-        | (AlarmControlPanelEntityFeature.TRIGGER if AlarmControlPanelEntityFeature else 0)
+        AlarmControlPanelEntityFeature.ARM_AWAY
+        | AlarmControlPanelEntityFeature.ARM_HOME
+        | AlarmControlPanelEntityFeature.ARM_NIGHT
+        | AlarmControlPanelEntityFeature.ARM_VACATION
+        | AlarmControlPanelEntityFeature.ARM_CUSTOM_BYPASS
+        | AlarmControlPanelEntityFeature.TRIGGER
     )
-    _attr_code_format = CodeFormat.NUMBER if CodeFormat else None
+    _attr_code_format = CodeFormat.NUMBER
     _attr_code_arm_required = True
 
     def __init__(
@@ -155,11 +149,11 @@ class ElkAlarmControlPanel(ElkEntity, AlarmControlPanelEntity):
         # 5. Stable Arming Modes
         if armed_status_val == 1:
             return STATE_ARMED_AWAY
-        elif armed_status_val in (2, 3):
+        if armed_status_val in (2, 3):
             return STATE_ARMED_HOME
-        elif armed_status_val in (4, 5):
+        if armed_status_val in (4, 5):
             return STATE_ARMED_NIGHT
-        elif armed_status_val == 6:
+        if armed_status_val == 6:
             return AlarmControlPanelState.ARMED_VACATION
 
         return STATE_DISARMED
@@ -213,79 +207,96 @@ class ElkAlarmControlPanel(ElkEntity, AlarmControlPanelEntity):
             _LOGGER.warning("Invalid PIN code format. Expected numeric digits.")
             return 0
 
+    async def _async_run_command(self, coro: Any, action_desc: str) -> None:
+        """Await a coordinator command, raising HomeAssistantError on failure.
+
+        Without this, a failed command would only be logged - HA's service
+        call/automation trace would show success even though the panel
+        never got (or rejected) the command.
+        """
+        try:
+            await coro
+        except HomeAssistantError:
+            raise
+        except Exception as err:
+            raise HomeAssistantError(
+                f"Error {action_desc} area {self._area_index + 1}: {err}"
+            ) from err
+
     async def async_alarm_disarm(self, code: str | None = None) -> None:
         """Send disarm command to the area via the coordinator."""
-        try:
-            await self.coordinator.async_alarm_disarm(self._area_index, self._get_code_val(code))
-        except Exception as err:  # noqa: BLE001
-            _LOGGER.error(f"Error disarming area {self._area_index + 1}: {err}")
+        await self._async_run_command(
+            self.coordinator.async_alarm_disarm(self._area_index, self._get_code_val(code)),
+            "disarming",
+        )
 
     async def async_alarm_arm_home(self, code: str | None = None) -> None:
         """Send arm stay command to the area via the coordinator."""
-        try:
-            await self.coordinator.async_alarm_arm_home(self._area_index, self._get_code_val(code))
-        except Exception as err:  # noqa: BLE001
-            _LOGGER.error(f"Error arming home area {self._area_index + 1}: {err}")
+        await self._async_run_command(
+            self.coordinator.async_alarm_arm_home(self._area_index, self._get_code_val(code)),
+            "arming home",
+        )
 
     async def async_alarm_arm_away(self, code: str | None = None) -> None:
         """Send arm away command to the area via the coordinator."""
-        try:
-            await self.coordinator.async_alarm_arm_away(self._area_index, self._get_code_val(code))
-        except Exception as err:  # noqa: BLE001
-            _LOGGER.error(f"Error arming away area {self._area_index + 1}: {err}")
+        await self._async_run_command(
+            self.coordinator.async_alarm_arm_away(self._area_index, self._get_code_val(code)),
+            "arming away",
+        )
 
     async def async_alarm_arm_night(self, code: str | None = None) -> None:
         """Send arm night command to the area via the coordinator."""
-        try:
-            await self.coordinator.async_alarm_arm_night(self._area_index, self._get_code_val(code))
-        except Exception as err:  # noqa: BLE001
-            _LOGGER.error(f"Error arming night area {self._area_index + 1}: {err}")
+        await self._async_run_command(
+            self.coordinator.async_alarm_arm_night(self._area_index, self._get_code_val(code)),
+            "arming night",
+        )
 
     async def async_alarm_arm_vacation(self, code: str | None = None) -> None:
         """Send arm vacation command to the area via the coordinator."""
-        try:
-            await self.coordinator.async_alarm_arm_vacation(self._area_index, self._get_code_val(code))
-        except Exception as err:  # noqa: BLE001
-            _LOGGER.error(f"Error arming vacation area {self._area_index + 1}: {err}")
+        await self._async_run_command(
+            self.coordinator.async_alarm_arm_vacation(self._area_index, self._get_code_val(code)),
+            "arming vacation",
+        )
 
     async def async_alarm_arm_custom_bypass(self, code: str | None = None) -> None:
         """Handle custom bypass request via the coordinator."""
-        try:
-            await self.coordinator.async_alarm_arm_custom_bypass(self._area_index, self._get_code_val(code))
-        except Exception as err:  # noqa: BLE001
-            _LOGGER.error(f"Error arming custom bypass area {self._area_index + 1}: {err}")
+        await self._async_run_command(
+            self.coordinator.async_alarm_arm_custom_bypass(
+                self._area_index, self._get_code_val(code)
+            ),
+            "arming custom bypass",
+        )
 
     async def async_alarm_trigger(self, code: str | None = None) -> None:
         """Trigger the alarm on the area via the coordinator."""
-        try:
-            await self.coordinator.async_alarm_trigger(self._area_index, self._get_code_val(code))
-        except Exception as err:  # noqa: BLE001
-            _LOGGER.error(f"Error triggering alarm area {self._area_index + 1}: {err}")
+        await self._async_run_command(
+            self.coordinator.async_alarm_trigger(self._area_index, self._get_code_val(code)),
+            "triggering alarm",
+        )
 
     async def async_alarm_arm_home_instant(self, code: str | None = None) -> None:
         """Arm stay-instant (no entry delay) via the elkm1.alarm_arm_home_instant service."""
-        try:
-            await self.coordinator.async_alarm_arm_home_instant(
+        await self._async_run_command(
+            self.coordinator.async_alarm_arm_home_instant(
                 self._area_index, self._get_code_val(code)
-            )
-        except Exception as err:  # noqa: BLE001
-            _LOGGER.error(f"Error arming home instant area {self._area_index + 1}: {err}")
+            ),
+            "arming home instant",
+        )
 
     async def async_alarm_arm_night_instant(self, code: str | None = None) -> None:
         """Arm night-instant (no entry delay) via the elkm1.alarm_arm_night_instant service."""
-        try:
-            await self.coordinator.async_alarm_arm_night_instant(
+        await self._async_run_command(
+            self.coordinator.async_alarm_arm_night_instant(
                 self._area_index, self._get_code_val(code)
-            )
-        except Exception as err:  # noqa: BLE001
-            _LOGGER.error(f"Error arming night instant area {self._area_index + 1}: {err}")
+            ),
+            "arming night instant",
+        )
 
     async def async_alarm_bypass(self, code: str | None = None) -> None:
         """Toggle bypass of all zones in the area via the elkm1.alarm_bypass service."""
-        try:
-            await self.coordinator.bypass_area(self._area_index, code)
-        except Exception as err:  # noqa: BLE001
-            _LOGGER.error(f"Error bypassing area {self._area_index + 1}: {err}")
+        await self._async_run_command(
+            self.coordinator.bypass_area(self._area_index, code), "bypassing"
+        )
 
     async def async_alarm_clear_bypass(self, code: str | None = None) -> None:
         """Toggle bypass of all zones in the area via the elkm1.alarm_clear_bypass service.
@@ -294,7 +305,6 @@ class ElkAlarmControlPanel(ElkEntity, AlarmControlPanelEntity):
         separate "clear" variant, so this sends the same command as
         `async_alarm_bypass` - resending it clears an active area bypass.
         """
-        try:
-            await self.coordinator.bypass_area(self._area_index, code)
-        except Exception as err:  # noqa: BLE001
-            _LOGGER.error(f"Error clearing area bypass {self._area_index + 1}: {err}")
+        await self._async_run_command(
+            self.coordinator.bypass_area(self._area_index, code), "clearing bypass on"
+        )

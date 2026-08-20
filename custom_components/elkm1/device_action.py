@@ -3,8 +3,7 @@ from __future__ import annotations
 
 import voluptuous as vol
 from homeassistant.core import Context, HomeAssistant
-from homeassistant.helpers import config_validation as cv
-from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import config_validation as cv, device_registry as dr
 
 from .const import DOMAIN
 
@@ -21,7 +20,7 @@ async def async_get_actions(hass: HomeAssistant, device_id: str) -> list[dict]:
     """Populate the 'Add Action' dropdown in the device UI."""
     registry = dr.async_get(hass)
     device = registry.async_get(device_id)
-    
+
     # Verify this device actually belongs to our integration
     if device and any(entry[0] == DOMAIN for entry in device.identifiers):
         return [
@@ -35,7 +34,7 @@ async def async_call_action_from_config(
 ) -> None:
     """Execute the action when the automation fires."""
     action_type = config["type"]
-    
+
     if action_type == "speak_phrase":
         await hass.services.async_call(
             DOMAIN, "speak_phrase",
@@ -44,7 +43,7 @@ async def async_call_action_from_config(
         )
     elif action_type == "display_message":
         await hass.services.async_call(
-            DOMAIN, "display_message", 
-            {"line1": config.get("line1", "")}, 
+            DOMAIN, "display_message",
+            {"line1": config.get("line1", "")},
             context=context
         )

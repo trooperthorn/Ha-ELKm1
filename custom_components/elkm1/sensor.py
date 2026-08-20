@@ -24,6 +24,10 @@ from .models import ElkRuntimeData
 
 _LOGGER = logging.getLogger(__name__)
 
+# Zone bypass/trigger are entity services on this platform that write to
+# the panel's single serialized command buffer - must not overlap.
+PARALLEL_UPDATES = 1
+
 SERVICE_SENSOR_ZONE_BYPASS = "sensor_zone_bypass"
 SERVICE_SENSOR_ZONE_TRIGGER = "sensor_zone_trigger"
 
@@ -212,12 +216,12 @@ class ElkZone(ElkSensor):
         obj = self._get_obj()
         if not obj:
             return None
-            
+
         def_val = self._get_enum_value(getattr(obj, "definition", 0))
         if def_val == 33:
             temp = getattr(obj, "temperature", UNDEFINED_TEMPERATURE)
             return str(temp) if temp > UNDEFINED_TEMPERATURE else None
-        elif def_val == 34:
+        if def_val == 34:
             return str(getattr(obj, "voltage", 0.0))
         return None
 

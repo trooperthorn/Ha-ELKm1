@@ -72,7 +72,7 @@ async def check_panel_version(coordinator: Any) -> str | None:
             version = coordinator.data.panel_version
 
         if version:
-            _LOGGER.info(f"ELK-M1 Panel Version: {version}")
+            _LOGGER.info("ELK-M1 Panel Version: %s", version)
 
             parts = str(version).split(".")
             major = int(parts[0]) if len(parts) > 0 and parts[0].isdigit() else 0
@@ -81,20 +81,21 @@ async def check_panel_version(coordinator: Any) -> str | None:
 
             # Minimum: 4.6.8 or 5.2.0+
             if (major >= 5 and minor >= 2) or (major == 4 and minor >= 6 and patch >= 8):
-                _LOGGER.info(f"✓ Panel version {version} is supported")
+                _LOGGER.info("Panel version %s is supported", version)
                 return str(version)
 
             _LOGGER.warning(
-                f"Panel version {version} may have limited feature support. "
-                f"Recommended: 4.6.8+ or 5.2.0+"
+                "Panel version %s may have limited feature support. "
+                "Recommended: 4.6.8+ or 5.2.0+",
+                version,
             )
             return str(version)
 
         _LOGGER.warning("Could not determine panel version. Did the panel respond?")
         return None
 
-    except Exception as err:  # noqa: BLE001
-        _LOGGER.debug(f"Error checking panel version: {err}")
+    except Exception as err:
+        _LOGGER.debug("Error checking panel version: %s", err)
         return None
 
 
