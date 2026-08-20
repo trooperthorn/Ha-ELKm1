@@ -15,7 +15,7 @@ from homeassistant.helpers import entity_platform
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .coordinator import ElkDataUpdateCoordinator
-from .entity import ElkEntity
+from .entity import ElkEntity, async_add_dynamic_entities
 from .models import ElkRuntimeData
 
 _LOGGER = logging.getLogger(__name__)
@@ -53,22 +53,35 @@ async def async_setup_entry(
     """
     runtime_data: ElkRuntimeData = config_entry.runtime_data
     coordinator = runtime_data.coordinator
-    if not coordinator.data:
-        return
 
-    entities: list[NumberEntity] = [
-        ElkCounter(coordinator, config_entry, counter.index)
-        for counter in coordinator.data.counters
-        if counter.configured and not counter.is_default_name()
-    ]
-    entities.extend(
-        ElkCustomValue(coordinator, config_entry, setting.index)
-        for setting in coordinator.data.settings
-        if setting.configured
-        and not setting.is_default_name()
-        and _enum_value(setting.value_format) in (SettingFormat.NUMBER.value, SettingFormat.TIMER.value)
+    # elkm1_lib always allocates the hardware maximum (64 counters, 20
+    # custom values) regardless of how many are actually in use, and only
+    # marks one `.configured` once its panel-assigned name has synced - a
+    # sequential, one-index-at-a-time exchange that can still be in
+    # progress after this function returns, so each is added as it
+    # individually becomes configured (and named) rather than only in
+    # this one pass.
+    def _counter_entity(counter: Any) -> NumberEntity | None:
+        if counter.is_default_name():
+            return None
+        return ElkCounter(coordinator, config_entry, counter.index)
+
+    def _custom_value_entity(setting: Any) -> NumberEntity | None:
+        if setting.is_default_name() or _enum_value(setting.value_format) not in (
+            SettingFormat.NUMBER.value,
+            SettingFormat.TIMER.value,
+        ):
+            return None
+        return ElkCustomValue(coordinator, config_entry, setting.index)
+
+    counters = coordinator.data.counters if coordinator.data else []
+    async_add_dynamic_entities(
+        config_entry, coordinator, async_add_entities, counters, _counter_entity
     )
-    async_add_entities(entities)
+    settings = coordinator.data.settings if coordinator.data else []
+    async_add_dynamic_entities(
+        config_entry, coordinator, async_add_entities, settings, _custom_value_entity
+    )
 
     platform = entity_platform.async_get_current_platform()
     platform.async_register_entity_service(

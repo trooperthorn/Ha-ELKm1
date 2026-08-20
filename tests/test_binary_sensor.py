@@ -13,8 +13,9 @@ from custom_components.elkm1.binary_sensor import (
     _DEVICE_CLASS_MAP,
     _OPENING_DEFINITIONS,
     ElkAreaOpeningsBinarySensor,
+    async_setup_entry,
 )
-from custom_components.elkm1.models import ElkPanelData
+from custom_components.elkm1.models import ElkPanelData, ElkRuntimeData
 
 
 def _make_zone(index: int, definition: ZoneType, area: int = 0, name: str = "") -> Zone:
@@ -93,3 +94,81 @@ def test_area_openings_sensor_isolates_areas():
 
     assert sensor_area_1.is_on is False
     assert sensor_area_2.is_on is True
+
+
+class _FakeCoordinator:
+    """Stands in for ElkDataUpdateCoordinator's async_add_listener/
+    async_update_listeners pair, without needing a real DataUpdateCoordinator.
+    """
+
+    def __init__(self, data: ElkPanelData) -> None:
+        self.data = data
+        self._listeners: list = []
+
+    def async_add_listener(self, callback):
+        self._listeners.append(callback)
+        return lambda: self._listeners.remove(callback)
+
+    def async_update_listeners(self) -> None:
+        for callback in list(self._listeners):
+            callback()
+
+
+async def test_zone_binary_sensor_appears_once_configured_after_setup(
+    hass, mock_network_entry
+):
+    """Regression test for the reported bug: a zone not yet `.configured` at
+    async_setup_entry time (the panel's per-index name sync for it hasn't
+    arrived yet - a sequential, one-at-a-time exchange that commonly
+    outlasts coordinator setup) must still get its binary_sensor entity once
+    it does become configured, not be silently skipped forever.
+    """
+    conn = MagicMock()
+    notifier = MagicMock()
+    zone = Zone(0, conn, notifier)
+    zone.setattr("definition", ZoneType.BURGLAR_ENTRY_EXIT_1, False)
+    # Not yet configured - the panel hasn't replied with this zone's name yet.
+    assert zone.configured is False
+
+    coordinator = _FakeCoordinator(ElkPanelData(num_areas=1, zones=[zone]))
+    mock_network_entry.add_to_hass(hass)
+    mock_network_entry.runtime_data = ElkRuntimeData(
+        prefix="",
+        mac=mock_network_entry.unique_id,
+        auto_configure=True,
+        config={},
+        coordinator=coordinator,
+    )
+
+    added_batches: list[list] = []
+
+    def _async_add_entities(new_entities):
+        added_batches.append(list(new_entities))
+
+    await async_setup_entry(hass, mock_network_entry, _async_add_entities)
+
+    # First pass: only the fixed trouble/area-openings entities, no zone
+    # sensor yet - this is exactly what the user reported (no per-zone
+    # binary sensors visible).
+    first_pass_zone_entities = [
+        e for e in added_batches[0] if getattr(e, "_zone_index", None) == 0
+    ]
+    assert first_pass_zone_entities == []
+
+    # Simulate the panel's SD reply for this zone arriving afterward.
+    zone.setattr("name", "Front Door", False)
+    zone._configured = True
+    coordinator.async_update_listeners()
+
+    zone_entities = [
+        e for batch in added_batches for e in batch if getattr(e, "_zone_index", None) == 0
+    ]
+    assert len(zone_entities) == 1
+    assert zone_entities[0].name == "Front Door"
+
+    # Firing the listener again must not re-add the same zone a second time.
+    coordinator.async_update_listeners()
+    zone_entities = [
+        e for batch in added_batches for e in batch if getattr(e, "_zone_index", None) == 0
+    ]
+    assert len(zone_entities) == 1

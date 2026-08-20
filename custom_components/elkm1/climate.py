@@ -17,7 +17,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .coordinator import ElkDataUpdateCoordinator
-from .entity import ElkEntity
+from .entity import ElkEntity, async_add_dynamic_entities
 from .models import ElkRuntimeData
 
 _LOGGER = logging.getLogger(__name__)
@@ -62,11 +62,20 @@ async def async_setup_entry(
     runtime_data: ElkRuntimeData = config_entry.runtime_data
     coordinator = runtime_data.coordinator
 
+    # elkm1_lib always allocates the hardware-maximum number of
+    # Thermostat objects regardless of how many the panel actually has,
+    # and only marks one `.configured` once its panel-assigned name has
+    # synced - a sequential, one-index-at-a-time exchange that can still
+    # be in progress after this function returns, so thermostats are
+    # added as they individually become configured rather than only in
+    # this one pass.
     thermostats = coordinator.data.thermostats if coordinator.data else []
-    async_add_entities(
-        ElkThermostat(coordinator, config_entry, tstat.index)
-        for tstat in thermostats
-        if tstat.configured
+    async_add_dynamic_entities(
+        config_entry,
+        coordinator,
+        async_add_entities,
+        thermostats,
+        lambda tstat: ElkThermostat(coordinator, config_entry, tstat.index),
     )
 
 
