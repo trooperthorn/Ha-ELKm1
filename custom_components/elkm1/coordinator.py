@@ -163,6 +163,7 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator[ElkPanelData]):
         elk.add_handler("AM", self._handle_alarm_memory)
         elk.add_handler("SS", self._handle_trouble_status)
         elk.add_handler("ZD", self._handle_zone_definitions)
+        elk.add_handler("SD", self._handle_description_sync)
         for msg_type in self._broadcast_counts:
             elk.add_handler(msg_type, self._count_broadcast(msg_type))
         if elk.panel is not None:
@@ -306,6 +307,24 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator[ElkPanelData]):
         for zone_index, definition in enumerate(zone_definitions):
             if self._get_enum_value(definition) == 34:
                 self._elk.zones[zone_index].get_voltage()
+
+    def _handle_description_sync(
+        self, desc_type: int, unit: int, desc: str, show_on_keypad: bool
+    ) -> None:
+        """Notify listeners as each element's panel-assigned name arrives.
+
+        elkm1_lib only marks an element `.configured` once its name
+        ("SD") reply has been processed, and names sync sequentially, one
+        index at a time - a 208-zone panel's zone names alone can still be
+        arriving well after this coordinator's setup already returned
+        (login only proves the panel is responding, not that every
+        element's name sync has finished). Platforms use
+        entity.async_add_dynamic_entities(), which listens here via
+        coordinator.async_add_listener(), to add entities for elements as
+        they individually become configured rather than only once, at
+        their platform's single async_setup_entry() call.
+        """
+        self.async_update_listeners()
 
     def _handle_trouble_status(self, system_trouble_status: str) -> None:
         """Store the raw SS trouble string and push an updated snapshot.

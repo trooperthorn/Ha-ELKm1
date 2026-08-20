@@ -13,7 +13,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .coordinator import ElkDataUpdateCoordinator
-from .entity import ElkEntity
+from .entity import ElkEntity, async_add_dynamic_entities
 from .models import ElkRuntimeData
 
 _LOGGER = logging.getLogger(__name__)
@@ -35,15 +35,22 @@ async def async_setup_entry(
     """Create the Elk-M1 time platform (time-of-day custom values only)."""
     runtime_data: ElkRuntimeData = config_entry.runtime_data
     coordinator = runtime_data.coordinator
-    if not coordinator.data:
-        return
 
-    async_add_entities(
-        ElkTimeOfDay(coordinator, config_entry, setting.index)
-        for setting in coordinator.data.settings
-        if setting.configured
-        and not setting.is_default_name()
-        and _enum_value(setting.value_format) == SettingFormat.TIME_OF_DAY.value
+    # elkm1_lib only marks a custom value `.configured` once its
+    # panel-assigned name has synced - a sequential, one-index-at-a-time
+    # exchange that can still be in progress after this function returns,
+    # so entities are added as each custom value individually becomes
+    # configured (and named) rather than only in this one pass.
+    def _time_of_day_entity(setting: Any) -> TimeEntity | None:
+        if setting.is_default_name() or _enum_value(
+            setting.value_format
+        ) != SettingFormat.TIME_OF_DAY.value:
+            return None
+        return ElkTimeOfDay(coordinator, config_entry, setting.index)
+
+    settings = coordinator.data.settings if coordinator.data else []
+    async_add_dynamic_entities(
+        config_entry, coordinator, async_add_entities, settings, _time_of_day_entity
     )
 
 

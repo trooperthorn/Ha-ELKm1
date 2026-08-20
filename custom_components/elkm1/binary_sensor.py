@@ -15,7 +15,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .coordinator import ElkDataUpdateCoordinator
-from .entity import ElkEntity
+from .entity import ElkEntity, async_add_dynamic_entities
 from .helpers.troublestatus import TROUBLE_INDEX_NAMES
 from .models import ElkRuntimeData
 
@@ -63,15 +63,7 @@ async def async_setup_entry(
     runtime_data: ElkRuntimeData = config_entry.runtime_data
     coordinator = runtime_data.coordinator
 
-    entities: list[BinarySensorEntity] = []
-    zones = coordinator.data.zones if coordinator.data else []
-
-    for zone in zones:
-        # elkm1_lib always allocates Max.ZONES.value (208) Zone objects
-        # regardless of how many the panel actually has configured.
-        if not zone.configured:
-            continue
-
+    def _zone_entity(zone: Any) -> BinarySensorEntity | None:
         # Safely extract the zone definition (integer representation)
         def_val = 0
         if hasattr(zone, "definition"):
@@ -80,17 +72,20 @@ async def async_setup_entry(
 
         # Skip 33 (TEMPERATURE) and 34 (ANALOG_ZONE) - these are handled natively in sensor.py
         if def_val in (33, 34):
-            continue
+            return None
 
-        # Create the Binary Sensor entity
-        entities.append(
-            ElkBinarySensor(
-                coordinator=coordinator,
-                config_entry=config_entry,
-                zone_index=zone.index,
-            )
+        return ElkBinarySensor(
+            coordinator=coordinator,
+            config_entry=config_entry,
+            zone_index=zone.index,
         )
 
+    zones = coordinator.data.zones if coordinator.data else []
+    async_add_dynamic_entities(
+        config_entry, coordinator, async_add_entities, zones, _zone_entity
+    )
+
+    entities: list[BinarySensorEntity] = []
     entities.extend(
         ElkTroubleBinarySensor(coordinator, config_entry, name, label)
         for _index, (name, label) in TROUBLE_INDEX_NAMES.items()

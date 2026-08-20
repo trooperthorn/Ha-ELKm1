@@ -77,6 +77,32 @@ async def test_async_setup_raises_update_failed_on_timeout(hass):
     assert coordinator._elk is None
 
 
+@pytest.mark.parametrize("_patch_login", [True], indirect=True)
+async def test_sd_reply_notifies_coordinator_listeners(hass, _patch_login):
+    """An "SD" (element name) reply must wake up coordinator.async_add_listener
+    subscribers - this is what lets entity.async_add_dynamic_entities() add a
+    zone/output/etc. entity as soon as it individually becomes `.configured`,
+    rather than only at the platform's single async_setup_entry() call.
+    """
+    coordinator = _make_coordinator(hass)
+    await coordinator._async_setup()
+    assert coordinator._elk is not None
+
+    calls = 0
+
+    def _listener() -> None:
+        nonlocal calls
+        calls += 1
+
+    coordinator.async_add_listener(_listener)
+
+    coordinator._elk._notifier.notify(
+        "SD", {"desc_type": 0, "unit": 0, "desc": "Front Door", "show_on_keypad": False}
+    )
+
+    assert calls == 1
+
+
 async def test_poll_interval_is_configurable(hass):
     """poll_interval flows through to DataUpdateCoordinator.update_interval."""
     coordinator = ElkDataUpdateCoordinator(

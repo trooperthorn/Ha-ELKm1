@@ -49,8 +49,10 @@ correctly.
 * `models.py` - `ElkPanelData` (the coordinator's typed snapshot; `zones`/`outputs`/
   `tasks`/`thermostats`/`panel` are references to `elkm1_lib`'s own live objects, not a
   second parallel copy) and `ElkRuntimeData` (`entry.runtime_data`).
-* `entity.py` - `ElkEntity` base class (`CoordinatorEntity` + `_attr_has_entity_name`)
-  and the shared device-info factory.
+* `entity.py` - `ElkEntity` base class (`CoordinatorEntity` + `_attr_has_entity_name`),
+  the shared device-info factory, and `async_add_dynamic_entities()` (see the
+  name-sync timing note in section 3 - every platform that filters on `.configured`
+  uses this instead of a single one-shot `async_add_entities` pass).
 
 ### Helpers (`helpers/`)
 * `transport.py` - the baud-probe monkeypatch, plus `validate_serial_port()`/
@@ -91,6 +93,23 @@ name) before creating entities, and registers any entity services that platform 
 * `vocabulary.py` - Elk voice vocabulary ID -> word/phrase text.
 
 ## 3. Protocol & library notes worth knowing
+
+**`.configured` depends on a slow, sequential per-index name sync - never gate entity
+creation on it with a single one-shot pass.** `elkm1_lib`'s `Elements._sd_handler` only
+sets an element's `._configured = True` once the panel's reply to an `SD` (text
+description) request for that specific index has arrived, and the request loop asks for
+index N+1 only after receiving the reply for index N - a fully sequential exchange
+(208 round-trips for zones alone) that routinely outlasts `coordinator._async_setup()`,
+which only waits for the panel's `"login"` reply, not for this per-index name sync to
+finish. A platform that creates entities once, synchronously, in its `async_setup_entry`
+(the original bug this was found from: zero zone `binary_sensor` entities ever appeared,
+because none of them were `.configured` yet at that single pass) will silently drop
+every element whose name hadn't synced yet - `async_setup_entry` never runs again, so
+they're gone for good until a manual reload. Every platform that filters on
+`.configured` uses `entity.async_add_dynamic_entities()` instead: it does the initial
+pass, then keeps listening (`coordinator.async_add_listener`, woken by the coordinator's
+`"SD"` handler on every description reply) and adds entities for elements as they
+individually become configured.
 
 **Enum/string/int casting.** `elkm1_lib` fields like `logical_status`/`definition`/
 `alarm_state` are typed enums, but code that reads them needs a raw int to compare

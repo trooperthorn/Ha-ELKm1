@@ -20,7 +20,7 @@ from homeassistant.helpers.typing import VolDictType
 
 from .const import ATTR_DURATION, DOMAIN
 from .coordinator import ElkDataUpdateCoordinator
-from .entity import ElkEntity, create_elk_system_device_info
+from .entity import ElkEntity, async_add_dynamic_entities, create_elk_system_device_info
 from .models import ElkRuntimeData
 
 _LOGGER = logging.getLogger(__name__)
@@ -53,28 +53,45 @@ async def async_setup_entry(
     # 1. Native Proxy Switch for Atmospheric Pre-Arm Blueprint
     entities.append(ElkArmRequestSwitch(coordinator, config_entry))
 
+    async_add_entities(entities)
+
+    # elkm1_lib always allocates the hardware-maximum number of Output/
+    # Thermostat/Zone objects regardless of how many the panel actually
+    # has, and only marks one `.configured` once its panel-assigned name
+    # has synced - a sequential, one-index-at-a-time exchange that can
+    # still be in progress after this function returns, so each of these
+    # is added as it individually becomes configured rather than only in
+    # this one pass.
+
     # 2. Native Physical Outputs
-    # elkm1_lib always allocates Max.OUTPUTS.value (208) Output objects
-    # regardless of how many the panel actually has - only create switches
-    # for ones that received real sync data, not the library's ceiling.
     outputs = coordinator.data.outputs if coordinator.data else []
-    for output in outputs:
-        if output.configured:
-            entities.append(ElkOutput(coordinator, config_entry, output.index))
+    async_add_dynamic_entities(
+        config_entry,
+        coordinator,
+        async_add_entities,
+        outputs,
+        lambda output: ElkOutput(coordinator, config_entry, output.index),
+    )
 
     # 3. Thermostat Emergency Heat Switches
     thermostats = coordinator.data.thermostats if coordinator.data else []
-    for tstat in thermostats:
-        if tstat.configured:
-            entities.append(ElkThermostatEMHeat(coordinator, config_entry, tstat.index))
+    async_add_dynamic_entities(
+        config_entry,
+        coordinator,
+        async_add_entities,
+        thermostats,
+        lambda tstat: ElkThermostatEMHeat(coordinator, config_entry, tstat.index),
+    )
 
     # 4. Zone Bypass Switches
     zones = coordinator.data.zones if coordinator.data else []
-    for zone in zones:
-        if zone.configured:
-            entities.append(ElkZoneBypassSwitch(coordinator, config_entry, zone.index))
-
-    async_add_entities(entities)
+    async_add_dynamic_entities(
+        config_entry,
+        coordinator,
+        async_add_entities,
+        zones,
+        lambda zone: ElkZoneBypassSwitch(coordinator, config_entry, zone.index),
+    )
 
     service.async_register_platform_entity_service(
         hass,

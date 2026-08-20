@@ -59,6 +59,18 @@ a bug in `__init__.py` masked every real connection failure behind a `NameError`
   `entity_id` substring check that real (panel-named) installations never matched.
 
 ### Fixed
+- Zone (and output/thermostat/light/task/counter/custom-value) entities could fail to
+  appear at all: `elkm1_lib` only marks an element `.configured` once the panel's
+  reply to a per-index name request for it has arrived, and that sync is a fully
+  sequential, one-index-at-a-time exchange (up to 208 round-trips for zones alone)
+  that routinely outlasts the coordinator's setup, which only waits for the panel's
+  login to be confirmed. Every platform that filters entity creation on `.configured`
+  was doing so in a single pass at startup, so any element not yet synced at that
+  moment was silently dropped for good - on a real panel, this could mean **no**
+  zone `binary_sensor` entities (door/window/motion/etc.) appeared at all. Fixed via
+  a new `entity.async_add_dynamic_entities()` helper: platforms now keep adding
+  entities as elements individually become configured, woken by a new coordinator
+  handler for the panel's `"SD"` name-reply message.
 - `hass.components.persistent_notification` (removed from Home Assistant core) was
   called unconditionally by the Alarmo auto-setup service - every invocation crashed.
 - `async_setup_services()` was called without `await` in `async_setup()`, silently

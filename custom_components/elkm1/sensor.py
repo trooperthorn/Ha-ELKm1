@@ -18,7 +18,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import ELK_USER_CODE_SERVICE_SCHEMA
 from .coordinator import ElkDataUpdateCoordinator
-from .entity import ElkEntity
+from .entity import ElkEntity, async_add_dynamic_entities
 from .helpers.troublestatus import format_troubles
 from .models import ElkRuntimeData
 
@@ -63,23 +63,29 @@ async def async_setup_entry(
     # 2. Setup Active Zones Sensor (Summary)
     entities.append(ElkActiveZonesSensor(coordinator, config_entry))
 
-    # 3. Setup Zones (Only 33=Temperature and 34=Analog)
-    # elkm1_lib always allocates Max.ZONES.value (208) Zone objects
-    # regardless of how many the panel actually has configured.
-    zones = coordinator.data.zones if coordinator.data else []
-    for zone in zones:
-        if not zone.configured:
-            continue
+    async_add_entities(entities)
 
+    # 3. Setup Zones (Only 33=Temperature and 34=Analog). elkm1_lib always
+    # allocates Max.ZONES.value (208) Zone objects regardless of how many
+    # the panel actually has configured, and only marks one `.configured`
+    # once its panel-assigned name has synced - a sequential, one-index-
+    # at-a-time exchange that can still be in progress after this
+    # function returns, so zones are added as they individually become
+    # configured rather than only in this one pass.
+    def _zone_entity(zone: Any) -> SensorEntity | None:
         def_val = 0
         if hasattr(zone, "definition"):
             def_obj = zone.definition
             def_val = int(def_obj.value) if hasattr(def_obj, "value") else int(def_obj)
 
         if def_val in (33, 34):
-            entities.append(ElkZone(coordinator, config_entry, zone.index))
+            return ElkZone(coordinator, config_entry, zone.index)
+        return None
 
-    async_add_entities(entities)
+    zones = coordinator.data.zones if coordinator.data else []
+    async_add_dynamic_entities(
+        config_entry, coordinator, async_add_entities, zones, _zone_entity
+    )
 
     # Register entity services
     platform = entity_platform.async_get_current_platform()
