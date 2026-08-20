@@ -31,20 +31,20 @@ rules:
       elkm1-lib is public on PyPI, source at github.com/gwww/elkm1, pinned
       to 2.2.15 in manifest.json.
   docs-actions:
-    status: todo
-    comment: Pending the README rewrite (see docs-high-level-description).
+    status: done
+    comment: README's Services section lists every real domain-level and entity-level service, matching services.yaml.
   docs-high-level-description:
-    status: todo
+    status: done
     comment: |
-      README.md currently has duplicate H1/Features/Installation/Services
-      sections and a literal "## OLD INFO I WANT TO ADD BACK AND VERIFY"
-      draft section - it needs a full rewrite, not incremental edits.
+      README.md rewritten - it previously had duplicate H1/Features/
+      Installation/Services sections and a literal "## OLD INFO I WANT TO
+      ADD BACK AND VERIFY" draft section left in place.
   docs-installation-instructions:
-    status: todo
-    comment: Pending the README rewrite (see docs-high-level-description).
+    status: done
+    comment: README's Installation section covers HACS, manual install, and initial setup (discovery vs. manual vs. serial).
   docs-removal-instructions:
-    status: todo
-    comment: Pending the README rewrite (see docs-high-level-description).
+    status: done
+    comment: README's "Removing the integration" section.
   entity-event-setup:
     status: done
     comment: |
@@ -79,13 +79,14 @@ rules:
       try/except, so exceptions already propagated correctly there.
   config-entry-unloading: done
   docs-configuration-parameters:
-    status: todo
+    status: done
     comment: |
-      The options flow (poll_interval) and reconfigure/reauth flows exist
-      in code but aren't documented yet - pending the README rewrite.
+      strings.json's options/reconfigure step descriptions document each
+      field directly in the flow UI; README's Setup section points to
+      where to find Configure/Reconfigure.
   docs-installation-parameters:
-    status: todo
-    comment: Pending the README rewrite.
+    status: done
+    comment: strings.json's user/manual_connection/serial step descriptions document every field required during setup.
   entity-unavailable:
     status: done
     comment: Inherited from CoordinatorEntity, tracking coordinator.last_update_success.
@@ -153,30 +154,30 @@ rules:
       discovery.py), not mDNS, so a zeroconf manifest entry would be
       inaccurate.
   docs-data-update:
-    status: todo
-    comment: Pending the README rewrite.
+    status: done
+    comment: README's Architecture section explains the push-first/poll-fallback data flow.
   docs-examples:
-    status: todo
-    comment: docs/cross_integration.md covers cross-integration examples; a general usage-examples section is still pending the README rewrite.
+    status: done
+    comment: docs/cross_integration.md's Better Thermostat section and the linked blueprints give concrete usage examples.
   docs-known-limitations:
-    status: todo
+    status: done
     comment: |
-      Real, documented limitations exist (e.g. the zone
-      door/window-vs-motion device_class mapping in binary_sensor.py is
-      best-effort - see the comment above _DEVICE_CLASS_MAP) but aren't
-      yet pulled into user-facing docs.
+      docs/cross_integration.md's Alarmo and Better Thermostat sections
+      explain the door/window device_class best-effort limitation in
+      user-facing terms; PROJECT_MAP.md has the underlying protocol
+      reasoning for contributors.
   docs-supported-devices:
-    status: todo
-    comment: Pending the README rewrite.
+    status: done
+    comment: README states Elk-M1 Gold and M1EZ8 explicitly.
   docs-supported-functions:
-    status: todo
-    comment: Pending the README rewrite.
+    status: done
+    comment: README's "What it creates" table lists every platform and what it covers.
   docs-troubleshooting:
-    status: todo
-    comment: README has a Troubleshooting section already; needs review against the current codebase during the Milestone 8 rewrite, not assumed accurate.
+    status: done
+    comment: README's Troubleshooting section rewritten and verified against the current codebase (debug logging path, diagnostics download) rather than carried over unreviewed.
   docs-use-cases:
-    status: todo
-    comment: docs/cross_integration.md covers the cross-integration use cases; general use-case docs pending the README rewrite.
+    status: done
+    comment: docs/cross_integration.md covers the cross-integration use cases; README's "What it creates" and Services sections cover general usage.
   dynamic-devices:
     status: exempt
     comment: |

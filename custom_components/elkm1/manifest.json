@@ -1,7 +1,7 @@
 {
   "domain": "elkm1",
   "name": "Elk-M1 Security",
-  "version": "2026.08.19",
+  "version": "2026.08.20",
   "codeowners": [
     "@trooperthorn"
   ],
@@ -15,7 +15,6 @@
   ],
   "integration_type": "hub",
   "iot_class": "local_push",
-  "quality_scale": "platinum",
   "single_config_entry": true,
   "data_entry_flow": "handler",
   "diagnostics": true,
