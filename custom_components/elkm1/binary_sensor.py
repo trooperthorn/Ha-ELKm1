@@ -21,12 +21,20 @@ from .models import ElkRuntimeData
 
 _LOGGER = logging.getLogger(__name__)
 
-# Map raw ELK integer definitions to Home Assistant Device Classes
-# 1-2: Entry/Exit, 3: Window, 4-7: Motion, 10-11: Fire, 17: CO, 19: Freeze, 20: Gas, 21: Heat, 25: Water
+# Map raw ELK zone-definition (ZoneType) values to Home Assistant device
+# classes. These are the panel's *response* categories (entry/exit delay,
+# perimeter-instant, interior, etc.) - the protocol has no separate field
+# for physical sensor type, so 1/2 (entry/exit) are assumed to be doors by
+# near-universal installer convention, and 3 (perimeter-instant) is mapped
+# to the generic OPENING class rather than WINDOW specifically, since
+# perimeter-instant is also commonly used for non-entry doors and the
+# protocol gives no way to tell the two apart.
+# 1-2: Entry/Exit (door), 3: Perimeter instant (opening), 4-7: Interior
+# (motion), 10-11: Fire, 17: CO, 19: Freeze, 20: Gas, 21: Heat, 25: Water
 _DEVICE_CLASS_MAP: dict[int, BinarySensorDeviceClass] = {
     1: BinarySensorDeviceClass.DOOR,
-    2: BinarySensorDeviceClass.MOTION,
-    3: BinarySensorDeviceClass.WINDOW,
+    2: BinarySensorDeviceClass.DOOR,
+    3: BinarySensorDeviceClass.OPENING,
     4: BinarySensorDeviceClass.MOTION,
     5: BinarySensorDeviceClass.MOTION,
     6: BinarySensorDeviceClass.MOTION,
@@ -39,6 +47,12 @@ _DEVICE_CLASS_MAP: dict[int, BinarySensorDeviceClass] = {
     21: BinarySensorDeviceClass.HEAT,
     25: BinarySensorDeviceClass.MOISTURE,
 }
+
+# Zone definitions that count as a door/window opening for the per-area
+# aggregate sensor below - entry/exit and perimeter-instant zones, which
+# in practice are overwhelmingly door/window contacts even though the
+# protocol doesn't guarantee it (see _DEVICE_CLASS_MAP comment above).
+_OPENING_DEFINITIONS = {1, 2, 3}
 
 async def async_setup_entry(
     hass: HomeAssistant,
@@ -80,6 +94,19 @@ async def async_setup_entry(
     entities.extend(
         ElkTroubleBinarySensor(coordinator, config_entry, name, label)
         for _index, (name, label) in TROUBLE_INDEX_NAMES.items()
+    )
+
+    # Aggregate "any door/window open" sensor per area - the primary,
+    # hardware-independent integration point for Better Thermostat (or any
+    # other climate integration): it doesn't require the panel to have any
+    # Elk-connected thermostats, just door/window contact zones, which is
+    # the common case. One entity per configured area, not per install,
+    # since a multi-area panel (e.g. house + garage apartment) may want
+    # HVAC in one area unaffected by an open door in another.
+    num_areas = coordinator.data.num_areas if coordinator.data else 1
+    entities.extend(
+        ElkAreaOpeningsBinarySensor(coordinator, config_entry, area_index)
+        for area_index in range(num_areas)
     )
 
     async_add_entities(entities)
@@ -192,3 +219,72 @@ class ElkTroubleBinarySensor(ElkEntity, BinarySensorEntity):
         if not self.coordinator.data:
             return False
         return self.coordinator.data.troubles.get(self._trouble_name, False)
+
+
+class ElkAreaOpeningsBinarySensor(ElkEntity, BinarySensorEntity):
+    """Aggregate 'any door/window open' sensor for one area.
+
+    Feeds Better Thermostat's (or any climate integration's) window/door
+    open-pause feature without requiring the panel to have Elk-connected
+    thermostats - most installs won't. This is the primary Better
+    Thermostat integration point; climate.py's ElkThermostat entity
+    (for installs that do have Elk-connected HVAC) is secondary.
+    """
+
+    _attr_device_class = BinarySensorDeviceClass.OPENING
+
+    def __init__(
+        self,
+        coordinator: ElkDataUpdateCoordinator,
+        config_entry: ConfigEntry,
+        area_index: int,
+    ) -> None:
+        """Initialize the area openings sensor."""
+        area_num = area_index + 1
+        super().__init__(coordinator, config_entry, f"area_{area_num}_openings")
+        self._area_index = area_index
+        self._attr_unique_id = f"{config_entry.entry_id}_area_{area_num}_openings"
+        self._attr_name = f"Area {area_num} Openings"
+
+    def _get_enum_value(self, obj: Any, default: int = 0) -> int:
+        if hasattr(obj, "value"):
+            return int(obj.value)
+        if isinstance(obj, str):
+            return int(obj) if obj.isdigit() else default
+        return int(obj) if isinstance(obj, (int, float)) else default
+
+    def _area_opening_zones(self) -> list[Any]:
+        """Return configured door/window zones assigned to this area."""
+        if not self.coordinator.data:
+            return []
+        return [
+            zone
+            for zone in self.coordinator.data.zones
+            if zone.configured
+            and self._get_enum_value(getattr(zone, "area", -1)) == self._area_index
+            and self._get_enum_value(getattr(zone, "definition", 0))
+            in _OPENING_DEFINITIONS
+        ]
+
+    @property
+    @override
+    def is_on(self) -> bool:
+        """Return True if any door/window zone in this area is open."""
+        return any(
+            self._get_enum_value(getattr(zone, "logical_status", 0)) == 2
+            for zone in self._area_opening_zones()
+        )
+
+    @property
+    @override
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """List which zones are currently open, for automation/debugging use."""
+        open_zones = [
+            zone.name
+            for zone in self._area_opening_zones()
+            if self._get_enum_value(getattr(zone, "logical_status", 0)) == 2
+        ]
+        return {
+            "open_zones": open_zones,
+            "open_zones_count": len(open_zones),
+        }

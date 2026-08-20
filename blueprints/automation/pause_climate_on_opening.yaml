@@ -1,0 +1,98 @@
+blueprint:
+  name: "ELK-M1: Pause Climate While a Door/Window Is Open"
+  description: |
+    Pauses (or resumes) any climate entity based on an Elk-M1 door/window
+    opening sensor - typically one of the integration's per-area
+    "Area N Openings" aggregate binary sensors, but any door/window/opening
+    binary sensor works.
+
+    This is deliberately generic: it does not require the Elk panel to have
+    any Elk-connected thermostats (most installs won't), and it works with
+    any climate integration, not just Better Thermostat. If you use Better
+    Thermostat, its own window-sensor setting is usually a better fit since
+    it restores the exact prior mode/temperature automatically - use this
+    blueprint for climate integrations that have no native window-sensor
+    support of their own.
+  domain: automation
+  source_url: https://github.com/trooperthorn/ha_int_elkm1/blob/main/blueprints/automation/pause_climate_on_opening.yaml
+
+  input:
+    opening_sensor:
+      name: Door/Window Opening Sensor
+      description: >-
+        The aggregate opening sensor for an Elk-M1 area (binary_sensor.elk_m1_area_1_openings,
+        etc.) or any other door/window/opening binary sensor.
+      selector:
+        entity:
+          domain: binary_sensor
+          device_class:
+            - door
+            - window
+            - opening
+
+    climate_entity:
+      name: Climate Entity
+      description: The climate entity to pause. Works with any climate integration, not just Elk's own.
+      selector:
+        entity:
+          domain: climate
+
+    open_duration:
+      name: Open Duration Before Pausing
+      description: How long the sensor must stay open before the climate entity is paused, to ignore brief door openings.
+      default:
+        minutes: 3
+      selector:
+        duration: {}
+
+    resume_hvac_mode:
+      name: HVAC Mode to Resume To
+      description: The HVAC mode to restore once the door/window closes again.
+      default: heat_cool
+      selector:
+        select:
+          mode: dropdown
+          options:
+            - "off"
+            - heat
+            - cool
+            - heat_cool
+            - auto
+            - dry
+            - fan_only
+
+trigger:
+  - platform: state
+    entity_id: !input opening_sensor
+    to: "on"
+    for: !input open_duration
+    id: opened
+
+  - platform: state
+    entity_id: !input opening_sensor
+    to: "off"
+    id: closed
+
+condition: []
+
+action:
+  - choose:
+      - conditions:
+          - condition: trigger
+            id: opened
+        sequence:
+          - action: climate.set_hvac_mode
+            target:
+              entity_id: !input climate_entity
+            data:
+              hvac_mode: "off"
+
+      - conditions:
+          - condition: trigger
+            id: closed
+        sequence:
+          - action: climate.set_hvac_mode
+            target:
+              entity_id: !input climate_entity
+            data:
+              hvac_mode: !input resume_hvac_mode
