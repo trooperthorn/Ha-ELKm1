@@ -16,10 +16,14 @@ rules:
   config-flow-test-coverage:
     status: todo
     comment: |
-      tests/test_config_flow.py has one test, and it fails: it patches a
-      class name (ElkM1Connection) that hasn't existed since the hybrid
-      transport rework. Real coverage of the user/serial/network/
-      reconfigure/reauth/options flows is Milestone 7's job.
+      tests/test_config_flow.py now has 13 real, passing tests (user,
+      manual network, serial, options, reconfigure network/serial, reauth
+      network/serial-unsupported, and their error paths), up from one
+      broken test patching a class (ElkM1Connection) that hasn't existed
+      since the hybrid transport rework. config_flow.py measures at 65%
+      line coverage - real but not complete: discovery-driven steps
+      (dhcp/integration_discovery/discovered_connection/usb/usb_confirm)
+      aren't covered yet.
   config-flow: done
   dependency-transparency:
     status: done
@@ -110,13 +114,22 @@ rules:
   test-coverage:
     status: todo
     comment: |
-      tests/ is two near-placeholder files (test_init.py: one trivial
-      test; test_config_flow.py: one failing test). Real coverage against
-      pytest_homeassistant_custom_component is Milestone 7's job -
-      extensive manual/scripted verification against real elkm1_lib
-      objects and a real installed Home Assistant has been done
-      throughout development, but that isn't a substitute for a
-      committed, repeatable test suite.
+      68 real, passing tests across 8 files (config flow, coordinator
+      login/auth/arm-command/bypass dispatch, the alarm_control_panel
+      action-exceptions fix, the area-openings binary_sensor and its
+      device_class corrections, switch bypass idempotency, number counter
+      services, domain-level services, and setup/unload/options-reload),
+      up from two near-placeholder files with one failing test.
+      `pytest --cov=custom_components.elkm1` measures 64% line coverage
+      (2210 statements, 803 missed) - real, verified progress, not yet
+      the >90% this rule wants. Weakest spots: coordinator.py's push
+      broadcast handlers (54%), several read-only platforms' state/
+      attribute properties, helpers/baud_probe.py and
+      helpers/transport.py (the baud sweep/probe logic was verified
+      extensively by hand against a real PTY during Milestone 1, but
+      those runs weren't committed as repeatable tests), and
+      helpers/usb_discovery.py's actual port enumeration (18%, hard to
+      test meaningfully without real hardware or a pyserial mock).
 
   # Gold
   devices:
