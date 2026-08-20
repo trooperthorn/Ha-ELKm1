@@ -24,7 +24,7 @@ jobs:
           pip install -r requirements-dev.txt
 
       - name: Run Ruff Linter
-        run: ruff check custom_components/elkm1 --ignore I001 F401
+        run: ruff check custom_components/elkm1 --ignore I001
 
       - name: Run Mypy Type Checker
         run: mypy custom_components/elkm1
