@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import voluptuous as vol
-
 from homeassistant.core import (
     HomeAssistant,
     ServiceCall,
@@ -28,6 +27,18 @@ SPEAK_SERVICE_SCHEMA = vol.Schema(
 SET_TIME_SERVICE_SCHEMA = vol.Schema(
     {
         vol.Optional("prefix", default=""): cv.string,
+    }
+)
+
+DISPLAY_MESSAGE_SERVICE_SCHEMA = vol.Schema(
+    {
+        vol.Optional("prefix", default=""): cv.string,
+        vol.Optional("area", default=1): vol.All(vol.Coerce(int), vol.Range(min=1, max=8)),
+        vol.Optional("line1", default=""): vol.All(cv.string, vol.Length(max=16)),
+        vol.Optional("line2", default=""): vol.All(cv.string, vol.Length(max=16)),
+        vol.Optional("beep", default=False): cv.boolean,
+        vol.Optional("clear", default=0): vol.All(vol.Coerce(int), vol.Range(min=0, max=2)),
+        vol.Optional("timeout", default=0): vol.All(vol.Coerce(int), vol.Range(min=0, max=65535)),
     }
 )
 
@@ -56,34 +67,41 @@ def _get_coordinator(service: ServiceCall) -> ElkDataUpdateCoordinator:
     return coordinator
 
 async def _async_speak_word_service(service: ServiceCall) -> None:
-    """Send the speak word (sw) raw command."""
+    """Speak a word via elkm1_lib's own Panel.speak_word() helper."""
     coordinator = _get_coordinator(service)
     number = service.data["number"]
-    await coordinator.send_raw_elk_command(f"sw{number:03d}")
+    await coordinator.speak_word(number)
 
 async def _async_speak_phrase_service(service: ServiceCall) -> None:
-    """Send the speak phrase (sp) raw command."""
+    """Speak a phrase via elkm1_lib's own Panel.speak_phrase() helper."""
     coordinator = _get_coordinator(service)
     number = service.data["number"]
-    await coordinator.send_raw_elk_command(f"sp{number:03d}")
+    await coordinator.speak_phrase(number)
 
 async def _async_set_time_service(service: ServiceCall) -> None:
-    """Send the change system clock (cs) raw command."""
+    """Write the panel's real-time clock via elkm1_lib's own Panel.set_time() helper."""
     coordinator = _get_coordinator(service)
-    now = dt_util.now()
-    # Elk ASCII 'cs' format: csYYMMDDHHmmD (D = Day of week 1-7, where Sun=1, Mon=2...)
-    # Python isoweekday() is Mon=1, Sun=7.
-    dow = (now.isoweekday() % 7) + 1
-    cmd = f"cs{now.strftime('%y%m%d%H%M')}{dow}"
-    await coordinator.send_raw_elk_command(cmd)
+    await coordinator.set_panel_time(dt_util.now())
+
+async def _async_display_message_service(service: ServiceCall) -> None:
+    """Display a message on an area's keypads via elkm1_lib's own Area.display_message()."""
+    coordinator = _get_coordinator(service)
+    await coordinator.display_message(
+        area_index=service.data["area"] - 1,
+        line1=service.data["line1"],
+        line2=service.data["line2"],
+        beep=service.data["beep"],
+        clear=service.data["clear"],
+        timeout=service.data["timeout"],
+    )
 
 async def _async_get_security_summary(service: ServiceCall) -> ServiceResponse:
     """Return live security data to an automation or script."""
     coordinator = _get_coordinator(service)
-    
+
     # Read instantly from our normalized coordinator data
-    faulted_indices = coordinator.data.get("zones_faulted", []) if coordinator.data else []
-    
+    faulted_indices = coordinator.data.zones_faulted if coordinator.data else []
+
     # Elk zones are 1-indexed for the user, indices are 0-indexed
     faulted_zones = [idx + 1 for idx in faulted_indices]
 
@@ -105,9 +123,15 @@ async def async_setup_services(hass: HomeAssistant) -> None:
         DOMAIN, "set_time", _async_set_time_service, SET_TIME_SERVICE_SCHEMA
     )
     hass.services.async_register(
-        DOMAIN, 
-        "get_security_summary", 
-        _async_get_security_summary, 
+        DOMAIN,
+        "display_message",
+        _async_display_message_service,
+        DISPLAY_MESSAGE_SERVICE_SCHEMA,
+    )
+    hass.services.async_register(
+        DOMAIN,
+        "get_security_summary",
+        _async_get_security_summary,
         SECURITY_SUMMARY_SCHEMA,
         supports_response=SupportsResponse.ONLY
     )

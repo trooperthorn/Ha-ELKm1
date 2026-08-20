@@ -4,8 +4,8 @@ import asyncio
 import logging
 from typing import Any
 
-from serial.tools import list_ports
 from homeassistant.core import HomeAssistant
+from serial.tools import list_ports
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -24,31 +24,31 @@ def get_in_use_serial_ports(hass: HomeAssistant) -> set[str]:
     in_use = set()
     # Common dictionary keys integrations use to store serial port paths
     serial_keys = {"device", "port", "serial_port", "path", "url"}
-    
+
     for entry in hass.config_entries.async_entries():
         # Check both the static data and dynamic options dicts
         for source in (entry.data, entry.options):
             for key in serial_keys:
                 val = source.get(key)
-                
+
                 # Standard String Path (e.g., Modbus, Serial, ELK)
                 if isinstance(val, str) and val.startswith(("/dev/", "COM", "serial://")):
                     clean_path = val.replace("serial://", "")
                     in_use.add(clean_path)
-                    
+
                 # Dictionary Path (e.g., ZHA stores it as {'path': '/dev/ttyUSB0'})
                 elif key == "device" and isinstance(val, dict):
                     dict_path = val.get("path")
                     if isinstance(dict_path, str) and dict_path.startswith(("/dev/", "COM")):
                         in_use.add(dict_path)
-                        
+
     return in_use
 
 
 async def discover_elk_ports(hass: HomeAssistant) -> dict[str, str]:
     """Discover available ELK-M1 compatible serial ports, excluding those in use."""
     loop = asyncio.get_running_loop()
-    
+
     # 1. Get the blacklist of ports already claimed by Home Assistant
     in_use_ports = get_in_use_serial_ports(hass)
 
@@ -90,40 +90,21 @@ def _get_friendly_name(port_info: Any) -> str:
 
 async def probe_serial_port(port: str, timeout: float = 5.0) -> bool:
     """Test if a serial port actually has an ELK-M1 panel connected.
-    
+
     Wrapped in extensive error handling to prevent event loop crashes.
     """
-    from .connection import ElkConnectionManager
-
-    data_received = asyncio.Event()
-
-    def _on_message(msg: str) -> None:
-        if len(msg) >= 4:
-            data_received.set()
-
-    url = f"serial://{port}"
-    connection = ElkConnectionManager(
-        connection_url=url,
-        on_message_callback=_on_message,
-        is_serial=True
-    )
+    from .baud_probe import BaudProbeError
+    from .transport import validate_serial_port
 
     try:
-        await connection.connect()
-        await connection.write("vn")
-        
-        # Wait safely for the panel to respond
-        await asyncio.wait_for(data_received.wait(), timeout=timeout)
+        await asyncio.wait_for(validate_serial_port(port), timeout=timeout)
         return True
-
-    except (asyncio.TimeoutError, ConnectionError, OSError, ValueError) as e:
+    except BaudProbeError as e:
         _LOGGER.debug("Port %s probe failed gracefully: %s", port, e)
         return False
-    except Exception as e:  # noqa: BLE001
+    except (TimeoutError, ConnectionError, OSError, ValueError) as e:
+        _LOGGER.debug("Port %s probe failed gracefully: %s", port, e)
+        return False
+    except Exception as e:
         _LOGGER.error("Unexpected error during serial probe on %s: %s", port, e)
         return False
-    finally:
-        try:
-            await connection.disconnect()
-        except Exception as err:  # noqa: BLE001
-            _LOGGER.error("Disconnect failed gracefully on port %s: %s", port, err)

@@ -38,7 +38,7 @@ def deprecate_entity(
                 entity_registry.async_update_entity(
                     entity_id, new_unique_id=new_unique_id
                 )
-    except Exception as err:  # noqa: BLE001
+    except Exception as err:
         _LOGGER.debug("Error during entity deprecation check for %s: %s", unique_id, err)
 
     # Return True so the entity successfully registers and initializes

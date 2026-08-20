@@ -5,28 +5,17 @@ from __future__ import annotations
 from .panel_settings import (
     check_panel_version,
     check_required_settings,
-    enable_required_settings,
     verify_panel_configuration,
 )
-from .serial_queue import ElkSerialQueue
-from .troublestatus import (
-    get_critical_troubles,
-    get_trouble_status_string,
-    has_troubles,
-    parse_trouble_status,
-)
+from .troublestatus import format_troubles, parse_troubles
 from .usb_discovery import discover_elk_ports, probe_serial_port
 
 __all__ = [
-    "ElkSerialQueue",
     "check_panel_version",
     "check_required_settings",
     "discover_elk_ports",
-    "enable_required_settings",
-    "get_critical_troubles",
-    "get_trouble_status_string",
-    "has_troubles",
-    "parse_trouble_status",
+    "format_troubles",
+    "parse_troubles",
     "probe_serial_port",
     "verify_panel_configuration",
 ]

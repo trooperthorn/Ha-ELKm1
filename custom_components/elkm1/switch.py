@@ -2,19 +2,18 @@
 
 from __future__ import annotations
 
-from datetime import timedelta
 import logging
+from datetime import timedelta
 from math import ceil
 from typing import Any, override
 
 import voluptuous as vol
-
+from elkm1_lib.const import ThermostatMode, ThermostatSetting
 from homeassistant.components.switch import DOMAIN as SWITCH_DOMAIN, SwitchEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
-from homeassistant.helpers import config_validation as cv
-from homeassistant.helpers import service
+from homeassistant.helpers import config_validation as cv, service
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.typing import VolDictType
@@ -25,6 +24,10 @@ from .entity import ElkEntity, create_elk_system_device_info
 from .models import ElkRuntimeData
 
 _LOGGER = logging.getLogger(__name__)
+
+# The panel has a single serialized command buffer with no flow control -
+# concurrent writes from multiple entities must not overlap.
+PARALLEL_UPDATES = 1
 
 SERVICE_SWITCH_OUTPUT_TURN_ON_FOR = "switch_output_turn_on_for"
 
@@ -51,16 +54,25 @@ async def async_setup_entry(
     entities.append(ElkArmRequestSwitch(coordinator, config_entry))
 
     # 2. Native Physical Outputs
-    outputs = coordinator.data.get("outputs", []) if coordinator.data else []
-    for i, output in enumerate(outputs):
-        if output:
-            entities.append(ElkOutput(coordinator, config_entry, i))
+    # elkm1_lib always allocates Max.OUTPUTS.value (208) Output objects
+    # regardless of how many the panel actually has - only create switches
+    # for ones that received real sync data, not the library's ceiling.
+    outputs = coordinator.data.outputs if coordinator.data else []
+    for output in outputs:
+        if output.configured:
+            entities.append(ElkOutput(coordinator, config_entry, output.index))
 
     # 3. Thermostat Emergency Heat Switches
-    thermostats = coordinator.data.get("thermostats", []) if coordinator.data else []
-    for i, tstat in enumerate(thermostats):
-        if tstat:
-            entities.append(ElkThermostatEMHeat(coordinator, config_entry, i))
+    thermostats = coordinator.data.thermostats if coordinator.data else []
+    for tstat in thermostats:
+        if tstat.configured:
+            entities.append(ElkThermostatEMHeat(coordinator, config_entry, tstat.index))
+
+    # 4. Zone Bypass Switches
+    zones = coordinator.data.zones if coordinator.data else []
+    for zone in zones:
+        if zone.configured:
+            entities.append(ElkZoneBypassSwitch(coordinator, config_entry, zone.index))
 
     async_add_entities(entities)
 
@@ -85,7 +97,7 @@ class ElkArmRequestSwitch(ElkEntity, SwitchEntity):
         super().__init__(coordinator, config_entry, "arm_request")
         self._prefix = config_entry.data.get("prefix", "")
         self._mac = config_entry.unique_id
-        
+
         self._attr_name = "Arm System Request"
         self._attr_unique_id = f"elkm1_{self._prefix}_arm_request".lower()
         self._attr_is_on = False
@@ -94,8 +106,9 @@ class ElkArmRequestSwitch(ElkEntity, SwitchEntity):
     @override
     def device_info(self) -> DeviceInfo:
         """Device info connecting via the ElkM1 system."""
-        # Note: requires the Elk instance or similar device reference upstream
-        return create_elk_system_device_info(self.coordinator._elk, self._prefix, self._mac)
+        return create_elk_system_device_info(
+            self._config_entry, sw_version=self.coordinator.data.panel_version
+        )
 
     @property
     @override
@@ -124,42 +137,42 @@ class ElkOutput(ElkEntity, SwitchEntity):
         super().__init__(coordinator, config_entry, f"output_{index+1}")
         self._index = index
         self._attr_unique_id = f"{config_entry.entry_id}_output_{index+1}"
-        
-        output_obj = self._get_obj()
-        self._attr_name = getattr(output_obj, "name", f"Output {index+1}") if output_obj else f"Output {index+1}"
+
+    @property
+    @override
+    def name(self) -> str | None:
+        """Return the panel-configured name, which may arrive after entity creation."""
+        obj = self._get_obj()
+        return obj.name if obj else f"Output {self._index + 1}"
 
     def _get_obj(self) -> Any:
-        if self.coordinator.data and "outputs" in self.coordinator.data:
-            outputs = self.coordinator.data["outputs"]
-            if self._index < len(outputs):
-                return outputs[self._index]
+        if self.coordinator.data and self._index < len(self.coordinator.data.outputs):
+            return self.coordinator.data.outputs[self._index]
         return None
 
     @property
     @override
     def is_on(self) -> bool:
         """Get the current output status."""
-        if not self.coordinator.data:
-            return False
-        # Check if this index exists in the active outputs array cached by the coordinator
-        return self._index in self.coordinator.data.get("outputs_active", [])
+        obj = self._get_obj()
+        return bool(obj and obj.output_on)
 
     @override
     async def async_turn_on(self, **kwargs: Any) -> None:
-        """Turn on the output indefinitely (Timer = 00000)."""
-        # Elk ASCII 'cn' command: cn + Output(3) + Timer(5)
-        await self.coordinator.send_raw_elk_command(f"cn{self._index + 1:03d}00000")
+        """Turn on the output indefinitely."""
+        if obj := self._get_obj():
+            obj.turn_on(0)
 
     @override
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Turn off the output."""
-        # Elk ASCII 'cf' command: cf + Output(3)
-        await self.coordinator.send_raw_elk_command(f"cf{self._index + 1:03d}")
+        if obj := self._get_obj():
+            obj.turn_off()
 
     async def async_switch_output_turn_on_for(self, duration: timedelta) -> None:
         """Turn on an output for specified length of time."""
-        seconds = ceil(duration.total_seconds())
-        await self.coordinator.send_raw_elk_command(f"cn{self._index + 1:03d}{seconds:05d}")
+        if obj := self._get_obj():
+            obj.turn_on(ceil(duration.total_seconds()))
 
 
 class ElkThermostatEMHeat(ElkEntity, SwitchEntity):
@@ -170,17 +183,19 @@ class ElkThermostatEMHeat(ElkEntity, SwitchEntity):
         super().__init__(coordinator, config_entry, f"thermostat_{index+1}_emheat")
         self._index = index
         self._attr_unique_id = f"{config_entry.entry_id}_thermostat_{index+1}_emheat"
-        
-        tstat_obj = self._get_obj()
-        base_name = getattr(tstat_obj, "name", f"Thermostat {index+1}") if tstat_obj else f"Thermostat {index+1}"
-        self._attr_name = f"{base_name} Emergency Heat"
 
     def _get_obj(self) -> Any:
-        if self.coordinator.data and "thermostats" in self.coordinator.data:
-            thermostats = self.coordinator.data["thermostats"]
-            if self._index < len(thermostats):
-                return thermostats[self._index]
+        if self.coordinator.data and self._index < len(self.coordinator.data.thermostats):
+            return self.coordinator.data.thermostats[self._index]
         return None
+
+    @property
+    @override
+    def name(self) -> str | None:
+        """Return the panel-configured name (may arrive after entity creation), suffixed."""
+        obj = self._get_obj()
+        base_name = obj.name if obj else f"Thermostat {self._index + 1}"
+        return f"{base_name} Emergency Heat"
 
     @property
     @override
@@ -189,23 +204,89 @@ class ElkThermostatEMHeat(ElkEntity, SwitchEntity):
         obj = self._get_obj()
         if not obj:
             return False
-        # Assuming Elk mode 4 is EM HEAT
-        mode = getattr(obj, "mode", 0)
-        return mode == 4
+        mode = self._get_enum_value(getattr(obj, "mode", 0))
+        return mode == ThermostatMode.EMERGENCY_HEAT.value
+
+    def _get_enum_value(self, obj: Any, default: int = 0) -> int:
+        if hasattr(obj, "value"):
+            return int(obj.value)
+        return int(obj) if isinstance(obj, (int, float)) else default
 
     @override
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Turn on Emergency Heat."""
-        # Elk ASCII 'ts' command: ts + Tstat(2) + ValueType(1) + Value(2)
-        # ValueType 0 = Mode. Value 04 = EmHeat
-        await self.coordinator.send_raw_elk_command(f"ts{self._index + 1:02d}004")
+        if obj := self._get_obj():
+            obj.set(ThermostatSetting.MODE, ThermostatMode.EMERGENCY_HEAT)
 
     @override
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Turn off Emergency Heat by reverting to Auto."""
-        # ValueType 0 = Mode. Value 03 = Auto
-        await self.coordinator.send_raw_elk_command(f"ts{self._index + 1:02d}003")
+        if obj := self._get_obj():
+            obj.set(ThermostatSetting.MODE, ThermostatMode.AUTO)
 
     async def async_switch_output_turn_on_for(self, duration: timedelta) -> None:
         """Not supported for thermostat."""
         raise HomeAssistantError("supported only on ElkM1 output switch entities")
+
+
+class ElkZoneBypassSwitch(ElkEntity, SwitchEntity):
+    """Representation of an Elk-M1 zone's bypass state as a switch.
+
+    The Elk protocol's `zb` bypass command toggles a zone's bypass state -
+    there's no separate "set bypassed"/"set unbypassed" command - so
+    turn_on/turn_off only send it when the zone isn't already in the
+    requested state, keeping the switch's on/off semantics idempotent
+    despite the underlying toggle-only command.
+    """
+
+    _attr_entity_category = None
+    _attr_icon = "mdi:shield-off"
+
+    def __init__(
+        self, coordinator: ElkDataUpdateCoordinator, config_entry: ConfigEntry, index: int
+    ) -> None:
+        """Initialize the zone bypass switch."""
+        super().__init__(coordinator, config_entry, f"zone_{index + 1}_bypass")
+        self._index = index
+        self._attr_unique_id = f"{config_entry.entry_id}_zone_{index + 1}_bypass"
+
+    def _get_obj(self) -> Any:
+        if self.coordinator.data and self._index < len(self.coordinator.data.zones):
+            return self.coordinator.data.zones[self._index]
+        return None
+
+    @property
+    @override
+    def name(self) -> str | None:
+        """Return the panel-configured name (may arrive after entity creation), suffixed."""
+        obj = self._get_obj()
+        base_name = obj.name if obj else f"Zone {self._index + 1}"
+        return f"{base_name} Bypass"
+
+    @staticmethod
+    def _enum_value(obj: Any, default: int = 0) -> int:
+        if hasattr(obj, "value"):
+            return int(obj.value)
+        return int(obj) if isinstance(obj, (int, float)) else default
+
+    @property
+    @override
+    def is_on(self) -> bool:
+        """Return True if the zone is currently bypassed."""
+        obj = self._get_obj()
+        if not obj:
+            return False
+        # ZoneLogicalStatus.BYPASSED == 3.
+        return self._enum_value(getattr(obj, "logical_status", 0)) == 3
+
+    @override
+    async def async_turn_on(self, **kwargs: Any) -> None:
+        """Bypass the zone (no-op if already bypassed)."""
+        if not self.is_on:
+            await self.coordinator.bypass_zone(self._index + 1)
+
+    @override
+    async def async_turn_off(self, **kwargs: Any) -> None:
+        """Clear the zone's bypass (no-op if not currently bypassed)."""
+        if self.is_on:
+            await self.coordinator.bypass_zone(self._index + 1)

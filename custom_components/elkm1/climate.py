@@ -1,0 +1,190 @@
+"""Support for Elk-M1 thermostats."""
+
+from __future__ import annotations
+
+import logging
+from typing import Any, ClassVar, override
+
+from elkm1_lib.const import ThermostatFan, ThermostatMode, ThermostatSetting
+from homeassistant.components.climate import (
+    ClimateEntity,
+    ClimateEntityFeature,
+    HVACMode,
+)
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import ATTR_TEMPERATURE, UnitOfTemperature
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
+
+from .coordinator import ElkDataUpdateCoordinator
+from .entity import ElkEntity
+from .models import ElkRuntimeData
+
+_LOGGER = logging.getLogger(__name__)
+
+# Serialize writes: the panel has a single small (250-char) serial buffer
+# and no hardware flow control, so concurrent commands from the same
+# integration risk overrunning it.
+PARALLEL_UPDATES = 1
+
+FAN_AUTO = "auto"
+FAN_ON = "on"
+
+_HVAC_MODE_TO_ELK = {
+    HVACMode.OFF: ThermostatMode.OFF,
+    HVACMode.HEAT: ThermostatMode.HEAT,
+    HVACMode.COOL: ThermostatMode.COOL,
+    # Elk's AUTO mode auto-switches between the heat and cool setpoints,
+    # which is HA's HEAT_COOL semantics, not HA's own (system-decides) AUTO.
+    HVACMode.HEAT_COOL: ThermostatMode.AUTO,
+}
+_ELK_MODE_TO_HVAC = {v: k for k, v in _HVAC_MODE_TO_ELK.items()}
+# Emergency heat is exposed separately as switch.*_emergency_heat
+# (switch.py's ElkThermostatEMHeat) rather than as a climate hvac_mode, to
+# avoid two competing controls for the same underlying setting.
+_ELK_MODE_TO_HVAC[ThermostatMode.EMERGENCY_HEAT] = HVACMode.HEAT
+
+_FAN_TO_ELK = {FAN_AUTO: ThermostatFan.AUTO, FAN_ON: ThermostatFan.ON}
+_ELK_FAN_TO_HA = {v: k for k, v in _FAN_TO_ELK.items()}
+
+# Conservative bounds; the protocol manual doesn't document panel-enforced
+# min/max setpoints, so these are generic HVAC-appropriate defaults.
+MIN_TEMP = 40
+MAX_TEMP = 95
+
+
+async def async_setup_entry(
+    hass: HomeAssistant,
+    config_entry: ConfigEntry,
+    async_add_entities: AddEntitiesCallback,
+) -> None:
+    """Create the Elk-M1 climate platform."""
+    runtime_data: ElkRuntimeData = config_entry.runtime_data
+    coordinator = runtime_data.coordinator
+
+    thermostats = coordinator.data.thermostats if coordinator.data else []
+    async_add_entities(
+        ElkThermostat(coordinator, config_entry, tstat.index)
+        for tstat in thermostats
+        if tstat.configured
+    )
+
+
+class ElkThermostat(ElkEntity, ClimateEntity):
+    """Representation of an Elk-M1 thermostat."""
+
+    _attr_temperature_unit = UnitOfTemperature.FAHRENHEIT
+    _attr_min_temp = MIN_TEMP
+    _attr_max_temp = MAX_TEMP
+    _attr_hvac_modes: ClassVar[list[HVACMode]] = list(_HVAC_MODE_TO_ELK)
+    _attr_fan_modes: ClassVar[list[str]] = list(_FAN_TO_ELK)
+    _attr_supported_features = (
+        ClimateEntityFeature.TARGET_TEMPERATURE
+        | ClimateEntityFeature.TARGET_TEMPERATURE_RANGE
+        | ClimateEntityFeature.FAN_MODE
+        | ClimateEntityFeature.TURN_ON
+        | ClimateEntityFeature.TURN_OFF
+    )
+
+    def __init__(
+        self, coordinator: ElkDataUpdateCoordinator, config_entry: ConfigEntry, index: int
+    ) -> None:
+        """Initialize the thermostat."""
+        super().__init__(coordinator, config_entry, f"thermostat_{index + 1}")
+        self._index = index
+        self._attr_unique_id = f"{config_entry.entry_id}_thermostat_{index + 1}"
+
+    def _get_obj(self) -> Any:
+        if self.coordinator.data and self._index < len(self.coordinator.data.thermostats):
+            return self.coordinator.data.thermostats[self._index]
+        return None
+
+    @property
+    @override
+    def name(self) -> str | None:
+        """Return the panel-configured name, which may arrive after entity creation."""
+        obj = self._get_obj()
+        return obj.name if obj else f"Thermostat {self._index + 1}"
+
+    @staticmethod
+    def _enum_value(obj: Any, default: int = 0) -> int:
+        if hasattr(obj, "value"):
+            return int(obj.value)
+        return int(obj) if isinstance(obj, (int, float)) else default
+
+    @property
+    @override
+    def hvac_mode(self) -> HVACMode | None:
+        obj = self._get_obj()
+        if not obj or obj.mode is None:
+            return None
+        return _ELK_MODE_TO_HVAC.get(ThermostatMode(self._enum_value(obj.mode)), HVACMode.OFF)
+
+    @property
+    @override
+    def fan_mode(self) -> str | None:
+        obj = self._get_obj()
+        if not obj or obj.fan is None:
+            return None
+        return _ELK_FAN_TO_HA.get(ThermostatFan(self._enum_value(obj.fan)))
+
+    @property
+    @override
+    def current_temperature(self) -> float | None:
+        obj = self._get_obj()
+        return obj.current_temp if obj else None
+
+    @property
+    @override
+    def target_temperature(self) -> float | None:
+        obj = self._get_obj()
+        if not obj or self.hvac_mode not in (HVACMode.HEAT, HVACMode.COOL):
+            return None
+        return obj.heat_setpoint if self.hvac_mode == HVACMode.HEAT else obj.cool_setpoint
+
+    @property
+    @override
+    def target_temperature_high(self) -> float | None:
+        obj = self._get_obj()
+        if not obj or self.hvac_mode != HVACMode.HEAT_COOL:
+            return None
+        return obj.cool_setpoint
+
+    @property
+    @override
+    def target_temperature_low(self) -> float | None:
+        obj = self._get_obj()
+        if not obj or self.hvac_mode != HVACMode.HEAT_COOL:
+            return None
+        return obj.heat_setpoint
+
+    @override
+    async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
+        """Set new target hvac mode."""
+        if obj := self._get_obj():
+            obj.set(ThermostatSetting.MODE, _HVAC_MODE_TO_ELK[hvac_mode])
+
+    @override
+    async def async_set_fan_mode(self, fan_mode: str) -> None:
+        """Set new fan mode."""
+        if obj := self._get_obj():
+            obj.set(ThermostatSetting.FAN, _FAN_TO_ELK[fan_mode])
+
+    @override
+    async def async_set_temperature(self, **kwargs: Any) -> None:
+        """Set new target temperature(s)."""
+        obj = self._get_obj()
+        if not obj:
+            return
+        if (temp := kwargs.get(ATTR_TEMPERATURE)) is not None:
+            setting = (
+                ThermostatSetting.HEAT_SETPOINT
+                if self.hvac_mode == HVACMode.HEAT
+                else ThermostatSetting.COOL_SETPOINT
+            )
+            obj.set(setting, int(temp))
+            return
+        if (low := kwargs.get("target_temp_low")) is not None:
+            obj.set(ThermostatSetting.HEAT_SETPOINT, int(low))
+        if (high := kwargs.get("target_temp_high")) is not None:
+            obj.set(ThermostatSetting.COOL_SETPOINT, int(high))

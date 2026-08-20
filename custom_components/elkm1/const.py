@@ -6,7 +6,6 @@ from datetime import timedelta
 from typing import Any
 
 import voluptuous as vol
-
 from homeassistant.const import ATTR_CODE, CONF_ZONE
 
 DOMAIN = "elkm1"
@@ -22,11 +21,17 @@ CONF_PORT = "port"
 CONF_USERNAME = "username"
 CONF_PASSWORD = "password"
 CONF_PIN = "pin"
+CONF_BAUD_RATE = "baud_rate"
 
 CONNECTION_SERIAL = "serial"
 CONNECTION_NETWORK = "network"
 
 COORDINATOR_UPDATE_INTERVAL = 30
+
+CONF_POLL_INTERVAL = "poll_interval"
+DEFAULT_POLL_INTERVAL = COORDINATOR_UPDATE_INTERVAL
+MIN_POLL_INTERVAL = 5
+MAX_POLL_INTERVAL = 300
 
 CONF_AUTO_CONFIGURE = "auto_configure"
 CONF_AREA = "area"
