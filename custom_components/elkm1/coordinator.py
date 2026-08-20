@@ -12,6 +12,7 @@ from elkm1_lib import Elk
 from elkm1_lib.const import ArmLevel
 from elkm1_lib.message import MessageEncode
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.update_coordinator import (
     DataUpdateCoordinator,
     UpdateFailed,
@@ -66,13 +67,14 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator[ElkPanelData]):
         hass: HomeAssistant,
         config_entry_data: dict[str, Any],
         on_baud_detected: Callable[[int], None] | None = None,
+        poll_interval: int = COORDINATOR_UPDATE_INTERVAL,
     ) -> None:
         """Initialize the coordinator."""
         super().__init__(
             hass,
             _LOGGER,
             name="Elk-M1 Control",
-            update_interval=timedelta(seconds=COORDINATOR_UPDATE_INTERVAL),
+            update_interval=timedelta(seconds=poll_interval),
         )
 
         self._config_data = config_entry_data
@@ -166,19 +168,55 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator[ElkPanelData]):
         if elk.panel is not None:
             elk.panel.add_callback(self._handle_voice_message)
 
-        connected_event = asyncio.Event()
-        elk.add_handler("connected", lambda: connected_event.set())
+        # Wait for the "login" event, not "connected": "connected" only
+        # means the raw socket/serial link opened, not that authentication
+        # (for secure network schemes) succeeded - Elk._connected() sends
+        # credentials *after* the "connected" notify fires, and the M1XEP's
+        # reply ("Login successful" / "Username/Password not found") is what
+        # elkm1_lib decodes into the "login" event. For schemes with no auth
+        # (elk://, serial://) the same event still fires, just as soon as
+        # the panel's first `vn` sync reply arrives - so waiting on "login"
+        # uniformly both proves the panel is actually responding (stronger
+        # than a bare socket-open) and correctly distinguishes real auth
+        # failure from a generic connect timeout.
+        login_succeeded_event = asyncio.Event()
+        login_failed_event = asyncio.Event()
+
+        def _on_login(succeeded: bool) -> None:
+            if succeeded:
+                login_succeeded_event.set()
+            else:
+                login_failed_event.set()
+
+        elk.add_handler("login", _on_login)
 
         self._elk = elk
         elk.connect()
+
+        succeeded_task = asyncio.ensure_future(login_succeeded_event.wait())
+        failed_task = asyncio.ensure_future(login_failed_event.wait())
         try:
-            await asyncio.wait_for(connected_event.wait(), timeout=CONNECT_TIMEOUT)
-        except TimeoutError as err:
+            done, _pending = await asyncio.wait(
+                (succeeded_task, failed_task),
+                timeout=CONNECT_TIMEOUT,
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+        finally:
+            for task in (succeeded_task, failed_task):
+                if not task.done():
+                    task.cancel()
+
+        if failed_task in done:
+            elk.disconnect()
+            self._elk = None
+            raise ConfigEntryAuthFailed("Elk-M1 rejected the configured username/password")
+
+        if succeeded_task not in done:
             elk.disconnect()
             self._elk = None
             raise UpdateFailed(
                 f"Timed out connecting to Elk-M1 at {self._obfuscated_url()}"
-            ) from err
+            )
 
         self._register_push_callbacks()
 
@@ -429,6 +467,14 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator[ElkPanelData]):
         """Send arm vacation command for specific area."""
         return await self._execute_arm_cmd(ArmLevel.ARMED_VACATION, area_index, code)
 
+    async def async_alarm_arm_home_instant(self, area_index: int, code: int = 0) -> bool:
+        """Send arm stay-instant command for specific area (no entry delay)."""
+        return await self._execute_arm_cmd(ArmLevel.ARMED_STAY_INSTANT, area_index, code)
+
+    async def async_alarm_arm_night_instant(self, area_index: int, code: int = 0) -> bool:
+        """Send arm night-instant command for specific area (no entry delay)."""
+        return await self._execute_arm_cmd(ArmLevel.ARMED_NIGHT_INSTANT, area_index, code)
+
     async def async_alarm_arm_custom_bypass(self, area_index: int, code: int = 0) -> bool:
         """Send arm-away command for specific area (custom bypass = arm-away)."""
         return await self._execute_arm_cmd(ArmLevel.ARMED_AWAY, area_index, code)
@@ -467,6 +513,19 @@ class ElkDataUpdateCoordinator(DataUpdateCoordinator[ElkPanelData]):
         already-bypassed zone toggles it back off.
         """
         return await self.bypass_zone(zone_number, pin_code)
+
+    async def bypass_area(self, area_index: int, pin_code: str | None = None) -> bool:
+        """Toggle bypass for all zones in an area.
+
+        Like the per-zone `zb` command, the Elk protocol's all-zone bypass
+        (zone number 999) is a single toggle with no separate "set"/"clear"
+        variant - calling this again reverses it.
+        """
+        if not self._elk:
+            return False
+        active_pin = int(pin_code) if pin_code else int(self._pin or 0)
+        self._elk.areas[area_index].bypass(active_pin)
+        return True
 
     async def display_message(
         self,

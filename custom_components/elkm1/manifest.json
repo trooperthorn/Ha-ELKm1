@@ -18,5 +18,12 @@
   "quality_scale": "platinum",
   "single_config_entry": true,
   "data_entry_flow": "handler",
-  "diagnostics": true
+  "diagnostics": true,
+  "usb": [
+    {"vid": "0403", "pid": "6001"},
+    {"vid": "067B", "pid": "2303"},
+    {"vid": "10C4", "pid": "EA60"},
+    {"vid": "1A86", "pid": "7523"},
+    {"vid": "0403", "pid": "6015"}
+  ]
 }

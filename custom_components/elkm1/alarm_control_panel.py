@@ -11,11 +11,18 @@ from homeassistant.components.alarm_control_panel import (
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import entity_platform
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
+from .const import ELK_USER_CODE_SERVICE_SCHEMA
 from .coordinator import ElkDataUpdateCoordinator
 from .entity import ElkEntity
 from .models import AreaData, ElkRuntimeData
+
+SERVICE_ALARM_BYPASS = "alarm_bypass"
+SERVICE_ALARM_CLEAR_BYPASS = "alarm_clear_bypass"
+SERVICE_ALARM_ARM_HOME_INSTANT = "alarm_arm_home_instant"
+SERVICE_ALARM_ARM_NIGHT_INSTANT = "alarm_arm_night_instant"
 
 # Safe imports for optional alarm panel features/formats across HA versions
 try:
@@ -62,6 +69,26 @@ async def async_setup_entry(
     ]
 
     async_add_entities(entities)
+
+    platform = entity_platform.async_get_current_platform()
+    platform.async_register_entity_service(
+        SERVICE_ALARM_BYPASS, ELK_USER_CODE_SERVICE_SCHEMA, "async_alarm_bypass"
+    )
+    platform.async_register_entity_service(
+        SERVICE_ALARM_CLEAR_BYPASS,
+        ELK_USER_CODE_SERVICE_SCHEMA,
+        "async_alarm_clear_bypass",
+    )
+    platform.async_register_entity_service(
+        SERVICE_ALARM_ARM_HOME_INSTANT,
+        ELK_USER_CODE_SERVICE_SCHEMA,
+        "async_alarm_arm_home_instant",
+    )
+    platform.async_register_entity_service(
+        SERVICE_ALARM_ARM_NIGHT_INSTANT,
+        ELK_USER_CODE_SERVICE_SCHEMA,
+        "async_alarm_arm_night_instant",
+    )
 
 
 class ElkAlarmControlPanel(ElkEntity, AlarmControlPanelEntity):
@@ -234,3 +261,40 @@ class ElkAlarmControlPanel(ElkEntity, AlarmControlPanelEntity):
             await self.coordinator.async_alarm_trigger(self._area_index, self._get_code_val(code))
         except Exception as err:  # noqa: BLE001
             _LOGGER.error(f"Error triggering alarm area {self._area_index + 1}: {err}")
+
+    async def async_alarm_arm_home_instant(self, code: str | None = None) -> None:
+        """Arm stay-instant (no entry delay) via the elkm1.alarm_arm_home_instant service."""
+        try:
+            await self.coordinator.async_alarm_arm_home_instant(
+                self._area_index, self._get_code_val(code)
+            )
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.error(f"Error arming home instant area {self._area_index + 1}: {err}")
+
+    async def async_alarm_arm_night_instant(self, code: str | None = None) -> None:
+        """Arm night-instant (no entry delay) via the elkm1.alarm_arm_night_instant service."""
+        try:
+            await self.coordinator.async_alarm_arm_night_instant(
+                self._area_index, self._get_code_val(code)
+            )
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.error(f"Error arming night instant area {self._area_index + 1}: {err}")
+
+    async def async_alarm_bypass(self, code: str | None = None) -> None:
+        """Toggle bypass of all zones in the area via the elkm1.alarm_bypass service."""
+        try:
+            await self.coordinator.bypass_area(self._area_index, code)
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.error(f"Error bypassing area {self._area_index + 1}: {err}")
+
+    async def async_alarm_clear_bypass(self, code: str | None = None) -> None:
+        """Toggle bypass of all zones in the area via the elkm1.alarm_clear_bypass service.
+
+        The Elk protocol's all-zone bypass command is a toggle with no
+        separate "clear" variant, so this sends the same command as
+        `async_alarm_bypass` - resending it clears an active area bypass.
+        """
+        try:
+            await self.coordinator.bypass_area(self._area_index, code)
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.error(f"Error clearing area bypass {self._area_index + 1}: {err}")

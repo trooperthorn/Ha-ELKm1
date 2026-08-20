@@ -18,8 +18,10 @@ from .const import (
     CONF_AUTO_CONFIGURE,
     CONF_BAUD_RATE,
     CONF_CONNECTION_TYPE,
+    CONF_POLL_INTERVAL,
     CONNECTION_NETWORK,
     CONNECTION_SERIAL,
+    DEFAULT_POLL_INTERVAL,
 )
 from .coordinator import ElkDataUpdateCoordinator
 from .discovery import (
@@ -59,7 +61,7 @@ def hostname_from_url(url: str) -> str:
 
 async def async_setup(hass: HomeAssistant, _hass_config: dict[str, Any]) -> bool:
     """Set up the Elk-M1 integration (services only; no YAML config import)."""
-    async_setup_services(hass)
+    await async_setup_services(hass)
     return True
 
 
@@ -96,8 +98,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ElkM1ConfigEntry) -> boo
                 entry, data={**entry.data, CONF_BAUD_RATE: baud}
             )
 
+    poll_interval = entry.options.get(CONF_POLL_INTERVAL, DEFAULT_POLL_INTERVAL)
+
     coordinator = ElkDataUpdateCoordinator(
-        hass, conf, on_baud_detected=_on_baud_detected
+        hass, conf, on_baud_detected=_on_baud_detected, poll_interval=poll_interval
     )
 
     try:
@@ -139,10 +143,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: ElkM1ConfigEntry) -> boo
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
+    entry.async_on_unload(entry.add_update_listener(_async_update_listener))
+
     if async_setup_alarmo_auto_config is not None:
         await async_setup_alarmo_auto_config(hass)
 
     return True
+
+
+async def _async_update_listener(hass: HomeAssistant, entry: ElkM1ConfigEntry) -> None:
+    """Reload the config entry when its options change."""
+    await hass.config_entries.async_reload(entry.entry_id)
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ElkM1ConfigEntry) -> bool:

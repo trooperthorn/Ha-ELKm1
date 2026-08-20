@@ -62,41 +62,35 @@ alarm_arm_night_instant:
       selector:
         text:
 
-alarm_arm_vacation:
-  name: Alarm arm vacation
-  description: Arms the Elk-M1 in vacation mode.
-  target:
-    entity:
-      integration: elkm1
-      domain: alarm_control_panel
+display_message:
+  name: Display message
+  description: Displays a message on all of the Elk-M1 keypads for an area.
   fields:
-    code:
-      name: Code
-      description: Alarm code to arm the alarm control panel.
-      required: true
-      example: 1234
+    prefix:
+      name: Prefix
+      description: Prefix to identify panel when multiple panels configured.
+      example: gatehouse
       selector:
         text:
-
-alarm_display_message:
-  name: Alarm display message
-  description: Displays a message on all of the Elk-M1 keypads for an area.
-  target:
-    entity:
-      integration: elkm1
-      domain: alarm_control_panel
-  fields:
+    area:
+      name: Area
+      description: Area number (1-8) whose keypads should display the message.
+      default: 1
+      selector:
+        number:
+          min: 1
+          max: 8
     clear:
       name: Clear
       description: 0=clear message, 1=clear message with * key, 2=Display until timeout.
-      default: 2
+      default: 0
       selector:
         number:
           min: 0
           max: 2
     beep:
       name: Beep
-      description: 0=no beep, 1=beep.
+      description: Whether to beep when the message is displayed.
       default: false
       selector:
         boolean:
@@ -1131,7 +1125,7 @@ sensor_counter_refresh:
   target:
     entity:
       integration: elkm1
-      domain: sensor
+      domain: number
 
 sensor_counter_set:
   name: Sensor counter set
@@ -1139,7 +1133,7 @@ sensor_counter_set:
   target:
     entity:
       integration: elkm1
-      domain: sensor
+      domain: number
   fields:
     value:
       name: Value
@@ -1148,7 +1142,7 @@ sensor_counter_set:
       selector:
         number:
           min: 0
-          max: 65536
+          max: 65535
 
 sensor_zone_bypass:
   name: Sensor zone bypass

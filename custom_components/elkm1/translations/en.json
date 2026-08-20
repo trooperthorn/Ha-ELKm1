@@ -1,402 +1,276 @@
 {
   "config": {
-    "step": {
-      "user": {
-        "title": "Connect to Elk-M1",
-        "description": "How would you like to connect to your Elk-M1 panel?",
-        "data": {
-          "connection_type": "Connection Type"
-        }
-      },
-      "serial": {
-        "title": "Serial/USB Connection",
-        "description": "Found {discovered} serial ports. Select your Elk-M1 panel's port.",
-        "data": {
-          "serial_port": "Serial Port",
-          "pin": "PIN (for command authorization, e.g., 1234)",
-          "verify_device": "Verify device is Elk-M1 (recommended)"
-        }
-      },
-      "network": {
-        "title": "Network Connection",
-        "description": "Connect to Elk-M1 via Elk M1XEP gateway or network device",
-        "data": {
-          "host": "IP Address or Hostname",
-          "port": "Port (default 2101)",
-          "username": "M1XEP Username",
-          "password": "M1XEP Password",
-          "pin": "PIN (optional override for commands)"
-        }
-      },
-      "reconfigure": {
-        "title": "Reconfigure Elk-M1 Connection",
-        "description": "Update connection settings"
-      }
+    "abort": {
+      "address_already_configured": "An Elk-M1 with this address is already configured",
+      "already_configured": "An Elk-M1 with this prefix is already configured",
+      "already_in_progress": "[%key:common::config_flow::abort::already_in_progress%]",
+      "cannot_connect": "[%key:common::config_flow::error::cannot_connect%]",
+      "invalid_auth": "[%key:common::config_flow::error::invalid_auth%]",
+      "reauth_successful": "[%key:common::config_flow::abort::reauth_successful%]",
+      "reauth_unsupported": "Reauthentication is not applicable to serial connections, which have no username/password.",
+      "reconfigure_successful": "Successfully reconfigured Elk-M1 integration",
+      "unique_id_mismatch": "Reconfigure should be used for the same device not a new one",
+      "unknown": "[%key:common::config_flow::error::unknown%]"
     },
     "error": {
-      "cannot_connect": "Failed to connect to device. Check port, IP address, and credentials.",
-      "no_elk_device": "No Elk-M1 device detected on this port. Verify the serial connection.",
-      "already_configured": "Elk-M1 integration is already configured",
-      "invalid_host": "Invalid IP address or hostname",
-      "invalid_port": "Invalid port number",
-      "invalid_credentials": "Invalid M1XEP username or password",
-      "connection_timeout": "Connection timeout. Check if device is powered on.",
-      "device_offline": "Device is not responding. Check network/serial connection."
+      "cannot_connect": "[%key:common::config_flow::error::cannot_connect%]",
+      "invalid_auth": "[%key:common::config_flow::error::invalid_auth%]",
+      "unknown": "[%key:common::config_flow::error::unknown%]"
     },
-    "abort": {
-      "already_configured": "Elk-M1 integration is already configured",
-      "reconfigure_failed": "Reconfiguration failed",
-      "reconfigure_successful": "Connection updated successfully",
-      "user_action_required": "Please complete the configuration flow"
+    "flow_title": "{mac_address} ({host})",
+    "step": {
+      "discovered_connection": {
+        "data": {
+          "password": "[%key:common::config_flow::data::password%]",
+          "protocol": "[%key:component::elkm1::config::step::manual_connection::data::protocol%]",
+          "temperature_unit": "[%key:component::elkm1::config::step::manual_connection::data::temperature_unit%]",
+          "username": "[%key:common::config_flow::data::username%]"
+        },
+        "description": "Connect to the discovered system: {mac_address} ({host})",
+        "title": "[%key:component::elkm1::config::step::user::title%]"
+      },
+      "manual_connection": {
+        "data": {
+          "address": "The IP address or domain or serial port if connecting via serial.",
+          "password": "[%key:common::config_flow::data::password%]",
+          "prefix": "A unique prefix (leave blank if you only have one Elk-M1).",
+          "protocol": "Protocol",
+          "temperature_unit": "The temperature unit Elk-M1 uses.",
+          "username": "[%key:common::config_flow::data::username%]"
+        },
+        "description": "The address string must be in the form 'address[:port]' for 'secure' and 'non-secure'. Example: '192.168.1.1'. The port is optional and defaults to 2101 for 'non-secure' and 2601 for 'secure'. For the serial protocol, the address must be in the form 'tty[:baud]'. Example: '/dev/ttyS1'. The baud is optional and defaults to 115200.",
+        "title": "[%key:component::elkm1::config::step::user::title%]"
+      },
+      "serial": {
+        "data": {
+          "serial_port": "USB / Serial Port",
+          "prefix": "[%key:component::elkm1::config::step::manual_connection::data::prefix%]",
+          "pin": "PIN code (optional, only needed if your panel requires one for this action).",
+          "verify_device": "Verify an Elk-M1 responds on this port before saving (recommended)."
+        },
+        "description": "Select the discovered USB/Serial port where your ELK-M1 is connected. The baud rate is detected automatically. {discovered} port(s) found.",
+        "title": "Connect via USB / Serial"
+      },
+      "usb_confirm": {
+        "description": "An Elk-M1 was found responding on {port}. Add it now?",
+        "title": "Elk-M1 discovered via USB"
+      },
+      "reconfigure": {
+        "data": {
+          "address": "[%key:component::elkm1::config::step::manual_connection::data::address%]",
+          "password": "[%key:common::config_flow::data::password%]",
+          "protocol": "[%key:component::elkm1::config::step::manual_connection::data::protocol%]",
+          "username": "[%key:common::config_flow::data::username%]"
+        },
+        "description": "[%key:component::elkm1::config::step::manual_connection::description%]",
+        "title": "Reconfigure Elk-M1 Control"
+      },
+      "reconfigure_serial": {
+        "data": {
+          "serial_port": "[%key:component::elkm1::config::step::serial::data::serial_port%]",
+          "prefix": "[%key:component::elkm1::config::step::manual_connection::data::prefix%]",
+          "pin": "[%key:component::elkm1::config::step::serial::data::pin%]"
+        },
+        "description": "[%key:component::elkm1::config::step::serial::description%]",
+        "title": "Reconfigure Elk-M1 Control"
+      },
+      "reauth_confirm": {
+        "data": {
+          "password": "[%key:common::config_flow::data::password%]",
+          "username": "[%key:common::config_flow::data::username%]"
+        },
+        "description": "The Elk-M1 at {host} rejected the configured username/password. Enter the correct credentials to reconnect.",
+        "title": "Reauthenticate Elk-M1 Control"
+      },
+      "user": {
+        "data": {
+          "device": "[%key:common::config_flow::data::device%]"
+        },
+        "description": "Choose a discovered system, select 'Manual Network Entry', or use 'USB / Serial Port Discovery'.",
+        "title": "Connect to Elk-M1 Control"
+      }
     }
   },
   "options": {
     "step": {
       "init": {
-        "title": "Elk-M1 Options",
-        "description": "Configure Elk-M1 integration options",
         "data": {
-          "poll_interval": "Poll Interval (seconds)",
-          "command_delay": "Command Delay (milliseconds)",
-          "scan_interval": "Scan Interval (seconds)"
-        }
-      }
-    }
-  },
-  "entity": {
-    "alarm_control_panel": {
-      "elkm1": {
-        "name": "Elk-M1",
-        "state_attributes": {
-          "armed": "Armed",
-          "armed_mode": "Armed Mode",
-          "entry_delay_active": "Entry Delay Active",
-          "exit_delay_active": "Exit Delay Active",
-          "last_user": "Last User",
-          "last_user_name": "Last User Name",
-          "zones_faulted": "Faulted Zones",
-          "zones_faulted_count": "Faulted Zone Count",
-          "faulted_zone_names": "Faulted Zone Names",
-          "outputs_active": "Active Outputs",
-          "outputs_active_count": "Active Output Count",
-          "panel_temperature": "Panel Temperature",
-          "battery_status": "Battery Status",
-          "trouble_status": "Trouble Status",
-          "fire_alarm": "Fire Alarm",
-          "panic_alarm": "Panic Alarm",
-          "bypassed_zones": "Bypassed Zones",
-          "connection_status": "Connection Status",
-          "system_trouble_status": "System Trouble Status"
-        }
-      }
-    },
-    "binary_sensor": {
-      "elkm1_zone": {
-        "name": "Zone"
-      }
-    },
-    "climate": {
-      "elkm1_thermostat": {
-        "name": "Thermostat"
-      }
-    },
-    "light": {
-      "elkm1_light": {
-        "name": "Light"
-      }
-    },
-    "number": {
-      "elkm1_doors_open": {
-        "name": "Doors Open"
-      }
-    },
-    "scene": {
-      "elkm1_task": {
-        "name": "Task"
-      }
-    },
-    "sensor": {
-      "elkm1_panel": {
-        "name": "Elk-M1 Panel",
-        "state_attributes": {
-          "armed": "Armed",
-          "mode": "Mode",
-          "system_trouble_status": "System Trouble Status",
-          "temperature": "Temperature",
-          "battery": "Battery Voltage"
-        }
-      },
-      "elkm1_door_counter": {
-        "name": "Door Counter"
-      },
-      "elkm1_media": {
-        "name": "Media"
-      }
-    },
-    "switch": {
-      "elkm1_output": {
-        "name": "Output"
-      }
-    },
-    "time": {
-      "elkm1_schedule": {
-        "name": "Schedule"
-      }
-    }
-  },
-  "services": {
-    "disarm": {
-      "name": "Disarm",
-      "description": "Disarm the Elk-M1 panel"
-    },
-    "arm_stay": {
-      "name": "Arm Stay",
-      "description": "Arm the panel in stay mode"
-    },
-    "arm_away": {
-      "name": "Arm Away",
-      "description": "Arm the panel in away mode"
-    },
-    "arm_night": {
-      "name": "Arm Night",
-      "description": "Arm the panel in night mode"
-    },
-    "force_arm_away": {
-      "name": "Force Arm Away",
-      "description": "Force arm the system into away mode bypassing faulted zones",
-      "fields": {
-        "area": {
-          "name": "Area",
-          "description": "Area partition number (1-8)"
-        }
-      }
-    },
-    "bypass_zone": {
-      "name": "Bypass Zone",
-      "description": "Bypass a zone to prevent triggering the alarm",
-      "fields": {
-        "zone": {
-          "name": "Zone",
-          "description": "Zone number (1-208)"
-        }
-      }
-    },
-    "unbypass_zone": {
-      "name": "Unbypass Zone",
-      "description": "Unbypass a zone",
-      "fields": {
-        "zone": {
-          "name": "Zone",
-          "description": "Zone number (1-208)"
-        }
-      }
-    },
-    "panic_alarm": {
-      "name": "Panic Alarm",
-      "description": "Trigger a panic alarm on the panel"
-    },
-    "speak_phrase": {
-      "name": "Speak Phrase",
-      "description": "Command the Elk-M1 panel to speak a vocabulary word or phrase ID",
-      "fields": {
-        "phrase_number": {
-          "name": "Phrase Number",
-          "description": "Vocabulary ROM ID number (0-500)"
-        }
-      }
-    },
-    "trigger_zone": {
-      "name": "Trigger Zone",
-      "description": "Trigger a virtual zone violation on the panel",
-      "fields": {
-        "zone_number": {
-          "name": "Zone Number",
-          "description": "Zone number (1-208)"
-        }
-      }
-    },
-    "display_message": {
-      "name": "Display Message",
-      "description": "Display a custom message on physical keypads",
-      "fields": {
-        "area": {
-          "name": "Area",
-          "description": "Area partition number (1-8)"
+          "poll_interval": "Polling fallback interval (seconds)"
         },
-        "clear_type": {
-          "name": "Clear Type",
-          "description": "Display/clear behavior mode (0-5)"
-        },
-        "beep": {
-          "name": "Beep",
-          "description": "Enable keypad buzzer alert"
-        },
-        "timeout": {
-          "name": "Timeout",
-          "description": "Display timeout in seconds"
-        },
-        "line1": {
-          "name": "Line 1",
-          "description": "First line text (16 chars max)"
-        },
-        "line2": {
-          "name": "Line 2",
-          "description": "Second line text (16 chars max)"
-        }
+        "description": "Elk-M1 normally pushes state changes as they happen. This interval only matters as a fallback poll rate for panels with broadcast categories disabled in Global Programming."
       }
-    },
-    "get_security_summary": {
-      "name": "Get Security Summary",
-      "description": "Returns structured security readiness and faulted zone diagnostics"
-    },
-    "set_temperature": {
-      "name": "Set Temperature",
-      "description": "Set thermostat temperature",
-      "fields": {
-        "thermostat_id": {
-          "name": "Thermostat ID",
-          "description": "Thermostat ID number"
-        },
-        "temperature": {
-          "name": "Temperature",
-          "description": "Temperature in degrees"
-        }
-      }
-    },
-    "activate_task": {
-      "name": "Activate Task",
-      "description": "Activate an automation task",
-      "fields": {
-        "task_number": {
-          "name": "Task Number",
-          "description": "Task number (1-32)"
-        }
-      }
-    },
-    "alarmo_auto_setup": {
-      "name": "Auto Setup Alarmo",
-      "description": "Automatically create Alarmo entities from Elk-M1 zones"
     }
   },
   "issues": {
-    "settings_not_configured": {
-      "title": "ELK-M1 Global Settings Not Configured",
-      "description": "Global Settings 35-40 are not fully enabled on your ELK-M1 panel. This may affect feature functionality. Enable these settings in your panel's configuration menu:\n\n- Setting 35: Transmit Event Log (required for user tracking)\n- Setting 36: Transmit Zone Changes (required for zone updates)\n- Setting 37: Transmit Output Changes (required for output updates)\n- Setting 38: Transmit Automation Task Changes (required for task updates)\n- Setting 39: Transmit Light Changes (required for light updates)\n- Setting 40: Transmit Keypad Changes (required for alarm state tracking)\n\nSee the Elk-M1 manual for instructions on enabling these settings."
+    "deprecated_sensor": {
+      "description": "The sensor {entity_name} (`{entity_id}`) is deprecated because it has been replaced with `{replacement_entity_id}`.\n\nUpdate your dashboards, templates, automations and scripts to use the replacement entity, then disable the deprecated sensor to have it removed after the next restart.",
+      "title": "Deprecated sensor detected"
     },
-    "version_not_supported": {
-      "title": "ELK-M1 Version Not Fully Supported",
-      "description": "Your ELK-M1 panel version {version} may have limited feature support. Recommended versions are:\n\n- Version 4.6.8\n- Version 5.2.0 or higher\n\nForce arm/away/stay are available in 5.3.0 or higher.\n\nCheck the ELK-M1 RS232 Protocol manual for version-specific feature support."
-    },
-    "connection_lost": {
-      "title": "ELK-M1 Connection Lost",
-      "description": "The connection to your ELK-M1 panel has been lost. Check:\n\n- Serial: USB cable is connected and device is powered on\n- Network: IP address is correct and device is online\n- Credentials: Username/password are correct"
-    },
-    "invalid_serial_port": {
-      "title": "Invalid Serial Port",
-      "description": "The configured serial port is no longer available. Reconfigure the integration with a valid port."
-    },
-    "zones_not_found": {
-      "title": "No Zones Found",
-      "description": "No zones were detected on your ELK-M1 panel. Configure zones in your panel settings."
+    "deprecated_sensor_scripts": {
+      "description": "The sensor {entity_name} (`{entity_id}`) is deprecated because it has been replaced with `{replacement_entity_id}`.\n\nThe sensor was used in the following automations or scripts:\n{items}\n\nUpdate the above automations or scripts to use the replacement entity, then disable the deprecated sensor to have it removed after the next restart.",
+      "title": "[%key:component::elkm1::issues::deprecated_sensor::title%]"
     }
   },
-  "exceptions": {
-    "cannot_connect": {
-      "message": "Cannot connect to ELK-M1: {error}"
-    },
-    "no_device": {
-      "message": "No ELK-M1 device found on {port}"
-    },
-    "timeout": {
-      "message": "Connection timeout: {error}"
-    }
-  },
-  "state_attributes": {
-    "alarm_control_panel": {
-      "armed_mode": {
-        "state": {
-          "disarmed": "Disarmed",
-          "armed_away": "Armed Away",
-          "armed_stay": "Armed Stay",
-          "armed_night": "Armed Night",
-          "armed_vacation": "Armed Vacation"
+  "services": {
+    "alarm_arm_home_instant": {
+      "description": "Arms the Elk-M1 in home instant mode.",
+      "fields": {
+        "code": {
+          "description": "Alarm code to arm the alarm control panel.",
+          "name": "Code"
         }
       },
-      "connection_status": {
-        "state": {
-          "connected": "Connected",
-          "disconnected": "Disconnected",
-          "connecting": "Connecting",
-          "error": "Error"
-        }
-      }
+      "name": "Alarm arm home instant"
     },
-    "binary_sensor": {
-      "zone_type": {
-        "state": {
-          "contact": "Contact",
-          "motion": "Motion",
-          "smoke": "Smoke",
-          "co": "Carbon Monoxide",
-          "water": "Water",
-          "fire": "Fire",
-          "temperature": "Temperature",
-          "glass_break": "Glass Break",
-          "vibration": "Vibration",
-          "door": "Door",
-          "window": "Window",
-          "other": "Other"
+    "alarm_arm_night_instant": {
+      "description": "Arms the Elk-M1 in night instant mode.",
+      "fields": {
+        "code": {
+          "description": "[%key:component::elkm1::services::alarm_arm_home_instant::fields::code::description%]",
+          "name": "Code"
         }
-      }
-    }
-  },
-  "device_automation": {
-    "trigger_type": {
-      "zone_opened": "Zone opened",
-      "zone_closed": "Zone closed",
-      "panel_armed": "Panel armed",
-      "panel_disarmed": "Panel disarmed",
-      "panel_alarm": "Alarm triggered",
-      "output_activated": "Output activated",
-      "output_deactivated": "Output deactivated"
+      },
+      "name": "Alarm arm night instant"
     },
-    "action_type": {
-      "arm_stay": "Arm stay",
-      "arm_away": "Arm away",
-      "arm_night": "Arm night",
-      "disarm": "Disarm",
-      "bypass_zone": "Bypass zone",
-      "unbypass_zone": "Unbypass zone",
-      "activate_task": "Activate task"
+    "alarm_bypass": {
+      "description": "Bypasses all zones for the area.",
+      "fields": {
+        "code": {
+          "description": "Alarm code to authorize the bypass of the alarm control panel.",
+          "name": "Code"
+        }
+      },
+      "name": "Alarm bypass"
+    },
+    "alarm_clear_bypass": {
+      "description": "Removes bypass on all zones for the area.",
+      "fields": {
+        "code": {
+          "description": "Alarm code to authorize the bypass clear of the alarm control panel.",
+          "name": "Code"
+        }
+      },
+      "name": "Alarm clear bypass"
+    },
+    "display_message": {
+      "description": "Displays a message on all of the Elk-M1 keypads for an area.",
+      "fields": {
+        "area": {
+          "description": "Area number (1-8) whose keypads should display the message.",
+          "name": "Area"
+        },
+        "beep": {
+          "description": "Whether to beep when the message is displayed.",
+          "name": "Beep"
+        },
+        "clear": {
+          "description": "0=clear message, 1=clear message with * key, 2=Display until timeout.",
+          "name": "Clear"
+        },
+        "line1": {
+          "description": "Up to 16 characters of text (truncated if too long).",
+          "name": "Line 1"
+        },
+        "line2": {
+          "description": "[%key:component::elkm1::services::display_message::fields::line1::description%]",
+          "name": "Line 2"
+        },
+        "prefix": {
+          "description": "[%key:component::elkm1::services::set_time::fields::prefix::description%]",
+          "name": "[%key:component::elkm1::services::set_time::fields::prefix::name%]"
+        },
+        "timeout": {
+          "description": "Time to display message, 0=forever, max 65535.",
+          "name": "Timeout"
+        }
+      },
+      "name": "Display message"
+    },
+    "sensor_counter_refresh": {
+      "description": "Refreshes the value of a counter from the panel.",
+      "name": "Sensor counter refresh"
+    },
+    "sensor_counter_set": {
+      "description": "Sets the value of a counter on the panel.",
+      "fields": {
+        "value": {
+          "description": "Value to set the counter to.",
+          "name": "Value"
+        }
+      },
+      "name": "Sensor counter set"
+    },
+    "sensor_zone_bypass": {
+      "description": "Bypasses zone.",
+      "fields": {
+        "code": {
+          "description": "Alarm code to authorize the bypass of the zone.",
+          "name": "Code"
+        }
+      },
+      "name": "Sensor zone bypass"
+    },
+    "sensor_zone_trigger": {
+      "description": "Triggers zone.",
+      "name": "Sensor zone trigger"
+    },
+    "set_time": {
+      "description": "Sets the time for the panel.",
+      "fields": {
+        "prefix": {
+          "description": "Prefix for the panel.",
+          "name": "Prefix"
+        }
+      },
+      "name": "Set time"
+    },
+    "speak_phrase": {
+      "description": "Speaks a phrase. See list of phrases in Elk-M1 ASCII Protocol documentation.",
+      "fields": {
+        "number": {
+          "description": "Phrase number to speak.",
+          "name": "Phrase number"
+        },
+        "prefix": {
+          "description": "Prefix to identify panel when multiple panels configured.",
+          "name": "[%key:component::elkm1::services::set_time::fields::prefix::name%]"
+        }
+      },
+      "name": "Speak phrase"
+    },
+    "speak_word": {
+      "description": "Speaks a word. See list of words in Elk-M1 ASCII Protocol documentation.",
+      "fields": {
+        "number": {
+          "description": "Word number to speak.",
+          "name": "Word number"
+        },
+        "prefix": {
+          "description": "[%key:component::elkm1::services::speak_phrase::fields::prefix::description%]",
+          "name": "[%key:component::elkm1::services::set_time::fields::prefix::name%]"
+        }
+      },
+      "name": "Speak word"
+    },
+    "switch_output_turn_on_for": {
+      "description": "Turns on an output for a specified length of time.",
+      "fields": {
+        "duration": {
+          "description": "Length of time to turn the output on for.",
+          "name": "Duration"
+        }
+      },
+      "name": "Switch output turn on for"
+    },
+    "get_security_summary": {
+      "description": "Returns live security data (faulted zones, ready to arm status) to an automation or script.",
+      "fields": {
+        "prefix": {
+          "description": "[%key:component::elkm1::services::set_time::fields::prefix::description%]",
+          "name": "[%key:component::elkm1::services::set_time::fields::prefix::name%]"
+        }
+      },
+      "name": "Get security summary"
     }
-  },
-  "system_health": {
-    "trouble_status": {
-      "ac_fail": "AC Power Failure",
-      "box_tamper": "Enclosure Tamper",
-      "fail_to_communicate": "Failed to Communicate",
-      "eeprom_error": "EEPROM Memory Error",
-      "low_battery": "Low Battery (Control Panel)",
-      "transmitter_low_battery": "Low Battery (Transmitter)",
-      "over_current": "Over Current",
-      "telephone_fault": "Telephone Fault",
-      "output_2": "Output 2 Fault",
-      "missing_keypad": "Missing Keypad",
-      "zone_expander": "Zone Expander Fault",
-      "output_expander": "Output Expander Fault",
-      "elkrp_remote_access": "ELKRP Remote Access Fault",
-      "common_area_not_armed": "Common Area Not Armed",
-      "flash_memory_error": "Flash Memory Error",
-      "security_alert": "Security Alert",
-      "serial_port_expander": "Serial Port Expander Fault",
-      "lost_transmitter": "Lost Transmitter",
-      "ge_smoke_cleanme": "GE Smoke Clean Required",
-      "ethernet": "Ethernet Fault",
-      "display_message_keypad_1": "Display Message (Keypad Line 1)",
-      "display_message_keypad_2": "Display Message (Keypad Line 2)",
-      "fire": "Fire Alarm"
-    }
-  },
-  "title": "Elk-M1 Control",
-  "description": "Platinum-tier Home Assistant integration for Elk-M1 security panels. Supports both direct serial/USB connections and network connections via Elk M1XEP gateway."
+  }
 }

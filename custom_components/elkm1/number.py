@@ -5,10 +5,13 @@ from __future__ import annotations
 import logging
 from typing import Any, override
 
+import voluptuous as vol
 from elkm1_lib.const import SettingFormat
 from homeassistant.components.number import NumberEntity, NumberMode
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers import entity_platform
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .coordinator import ElkDataUpdateCoordinator
@@ -18,6 +21,13 @@ from .models import ElkRuntimeData
 _LOGGER = logging.getLogger(__name__)
 
 PARALLEL_UPDATES = 1
+
+SERVICE_SENSOR_COUNTER_REFRESH = "sensor_counter_refresh"
+SERVICE_SENSOR_COUNTER_SET = "sensor_counter_set"
+
+COUNTER_SET_SERVICE_SCHEMA = {
+    vol.Required("value"): vol.All(vol.Coerce(int), vol.Range(min=0, max=65535)),
+}
 
 
 def _enum_value(obj: Any, default: int = 0) -> int:
@@ -59,6 +69,16 @@ async def async_setup_entry(
         and _enum_value(setting.value_format) in (SettingFormat.NUMBER.value, SettingFormat.TIMER.value)
     )
     async_add_entities(entities)
+
+    platform = entity_platform.async_get_current_platform()
+    platform.async_register_entity_service(
+        SERVICE_SENSOR_COUNTER_REFRESH, None, "async_counter_refresh"
+    )
+    platform.async_register_entity_service(
+        SERVICE_SENSOR_COUNTER_SET,
+        COUNTER_SET_SERVICE_SCHEMA,
+        "async_counter_set",
+    )
 
 
 class ElkCounter(ElkEntity, NumberEntity):
@@ -102,6 +122,16 @@ class ElkCounter(ElkEntity, NumberEntity):
         if obj := self._get_obj():
             obj.set(int(value))
 
+    async def async_counter_refresh(self) -> None:
+        """Request the panel resend this counter's current value."""
+        if obj := self._get_obj():
+            obj.get()
+
+    async def async_counter_set(self, value: int) -> None:
+        """Set the counter value via the elkm1.sensor_counter_set service."""
+        if obj := self._get_obj():
+            obj.set(value)
+
 
 class ElkCustomValue(ElkEntity, NumberEntity):
     """Representation of a numeric (Number or Timer format) Elk-M1 custom value."""
@@ -144,3 +174,11 @@ class ElkCustomValue(ElkEntity, NumberEntity):
         """Set the custom value."""
         if obj := self._get_obj():
             obj.set(int(value))
+
+    async def async_counter_refresh(self) -> None:
+        """Not supported for custom values."""
+        raise HomeAssistantError("supported only on ElkM1 counter entities")
+
+    async def async_counter_set(self, value: int) -> None:
+        """Not supported for custom values."""
+        raise HomeAssistantError("supported only on ElkM1 counter entities")
